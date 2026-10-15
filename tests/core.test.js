@@ -1642,7 +1642,8 @@ test('scanner context includes mentioned/recent NPC details but not the whole ro
     const prompt = buildScannerPrompt({ transcript: 'Marris hands Aris the registration form.', existingNpcs: roster });
     assert.match(prompt, /MARRIS_VISUAL/);
     assert.doesNotMatch(prompt, /UNIQUE_VISUAL_1_/);
-    assert.ok(prompt.length < 11000, `scanner prompt should stay compact, got ${prompt.length} chars`);
+    // fadust fork: +~500 chars for the knowledge-ledger rule and its JSON example.
+    assert.ok(prompt.length < 11300, `scanner prompt should stay compact, got ${prompt.length} chars`);
 });
 
 test('existing scanner deltas may use dossier id without repeating name or unchanged profile fields', () => {
@@ -1823,7 +1824,8 @@ test('routine scanner prompt has bounded overhead and delta/profile tiers', () =
     const prompt = buildScannerPrompt({ transcript, existingNpcs: [toris, myla], userName: 'Aris', charName: 'Narrator' });
     const overhead = prompt.length - transcript.length;
     // 1.0.99 adds the user-authorized "if no named forms" qualifier to the Appearance rule.
-    assert.ok(overhead < 7600, `routine scanner overhead should stay below 7600 chars after the bounded Appearance clarifications, got ${overhead}`);
+    // fadust fork: +~460 chars for the knowledge-ledger rule and its JSON example.
+    assert.ok(overhead < 8100, `routine scanner overhead should stay below 8100 chars after the bounded Appearance clarifications and knowledge rule, got ${overhead}`);
     assert.match(prompt, /Return compact JSON deltas/i);
     assert.match(prompt, /Existing relationship delta example/i);
     assert.match(prompt, /Relevant live context \(dynamic fields only\)/i);

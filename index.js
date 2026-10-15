@@ -90,6 +90,15 @@ import {
 } from './core.js';
 import { applyNpcBirthdayUpdate, normalizeBirthDate } from './birthday.js';
 import {
+    knowledgeToEditorText,
+    knowledgeFromEditorText,
+    knowledgePassTargets,
+    buildKnowledgePassPrompt,
+    parseKnowledgePass,
+    applyKnowledgeDecisions,
+    KNOWLEDGE_PASS_SYSTEM_PROMPT,
+} from './knowledge.js';
+import {
     encodeNpcStateBundle,
     mergeImportedDossierState,
 } from './bundle.js';
@@ -2793,6 +2802,7 @@ function syncOpenNpcEditorFields(npc) {
     set('npc_state_delta_edit_goal', npc.goal || '');
     set('npc_state_delta_edit_status', npc.status || '');
     set('npc_state_delta_edit_memories', (npc.memories || []).join('\n'));
+    set('npc_state_delta_edit_knowledge', knowledgeToEditorText(npc.knowledge));
     set('npc_state_delta_edit_trust', relationshipNumber(npc.relationship?.trust));
     set('npc_state_delta_edit_affection', relationshipNumber(npc.relationship?.affection));
     set('npc_state_delta_edit_desire', relationshipNumber(npc.relationship?.desire));
@@ -2802,7 +2812,7 @@ function syncOpenNpcEditorFields(npc) {
 }
 
 function refreshChangedFields(before, after) {
-    const fields = ['name','role','species','gender','homeBase','age','apparentAge','appearance','personality','speech','behaviorProfile','background','keyRelationships','relationshipSummary','mood','location','goal','status','lifeState','mannerisms','memories'];
+    const fields = ['name','role','species','gender','homeBase','age','apparentAge','appearance','personality','speech','behaviorProfile','background','keyRelationships','relationshipSummary','mood','location','goal','status','lifeState','mannerisms','memories','knowledge'];
     return fields.filter(field => JSON.stringify(before?.[field] ?? null) !== JSON.stringify(after?.[field] ?? null));
 }
 
@@ -3029,6 +3039,7 @@ async function refreshNpcFromChat(npcId) {
 const SCAN_RESPONSE_LENGTH = 1800;
 const FULL_SCAN_RESPONSE_LENGTH = 3200;
 const RELATIONSHIP_RESPONSE_LENGTH = 900;
+const KNOWLEDGE_RESPONSE_LENGTH = 900;
 const BACKFILL_RESPONSE_LENGTH = 3200;
 const BACKFILL_MAX_ATTEMPTS = 3;
 const BACKFILL_RETRY_COOLDOWN_MS = 60 * 1000;
@@ -3362,6 +3373,28 @@ function hasCompletePrimaryRelationshipDecision(raw, transcript = '') {
         if (typeof summary !== 'string' || !summary.trim()) return false;
     }
     return true;
+}
+
+// Information flow (who knows what) gets its own small request: the broad scanner rarely fills
+// optional fields, and a misplaced secret leaks into injection. Skipped unless the exchange carries
+// information-flow signals and names a dossier; a failure never blocks the dossier scan.
+async function runFocusedKnowledgePass(ctx, existingNpcs, transcript, options = {}) {
+    const targets = knowledgePassTargets(existingNpcs, transcript);
+    if (!targets.length) return { decisions: new Map(), used: false, responseChars: 0, targetCount: 0 };
+    try {
+        const { parsed, raw } = await generateParsedNpcJson(ctx, {
+            systemPrompt: KNOWLEDGE_PASS_SYSTEM_PROMPT,
+            prompt: buildKnowledgePassPrompt({ transcript, targets, userName: ctx.name1 || 'User' }),
+            responseLength: KNOWLEDGE_RESPONSE_LENGTH,
+            label: 'knowledge pass',
+            requestScope: options.requestScope,
+        });
+        return { decisions: parseKnowledgePass(parsed, targets), used: true, responseChars: String(raw ?? '').length, targetCount: targets.length };
+    } catch (error) {
+        if (isScannerRoutingError(error)) throw error;
+        console.warn('[NPC State Delta] focused knowledge pass failed; the dossier scan continues without it.', error);
+        return { decisions: new Map(), used: true, responseChars: 0, targetCount: targets.length };
+    }
 }
 
 async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript, settings, options = {}) {
@@ -3722,6 +3755,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             settings,
             { currentExchangeOnly: manual || fullWindowScan, requestScope: operation.requestScope },
         );
+        const knowledgePass = await runFocusedKnowledgePass(ctx, state.npcs, currentTranscript || transcript, { requestScope: operation.requestScope });
         const scanFinishedAt = performance.now?.() ?? Date.now();
         lastScanMetrics = {
             label: manual ? 'manual' : (fullWindowScan ? 'automatic-full' : 'automatic'),
@@ -3733,6 +3767,9 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             relationshipTargets: relationshipPass.targetCount,
             relationshipResponseChars: relationshipPass.responseChars,
             relationshipRetried: relationshipPass.retried,
+            knowledgePass: knowledgePass.used,
+            knowledgeTargets: knowledgePass.targetCount,
+            knowledgeResponseChars: knowledgePass.responseChars,
             newNpcRelationshipTargets: 0,
             newNpcRelationshipResponseChars: 0,
             relationshipEdges: relationshipEdgeCount,
@@ -3832,6 +3869,12 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             console.info('[NPC State Delta] dossier scan metrics', lastScanMetrics);
         }
         applyFocusedRelationshipDecisions(merged.state, relationshipPass.decisions, settings.relationshipCaps, targetMessageId, merged.report);
+        if (knowledgePass.decisions.size) {
+            const knowledgeApplied = applyKnowledgeDecisions(merged.state.npcs, knowledgePass.decisions, { sourceMessageId: targetMessageId, turn: state.turn });
+            merged.state.npcs = knowledgeApplied.npcs;
+            merged.report.knowledgeGuard = [...(merged.report.knowledgeGuard || []), ...knowledgeApplied.changes];
+            if (lastScanMetrics) lastScanMetrics.knowledgeApplied = knowledgeApplied.applied;
+        }
         const postCleanup = applyStaleLifecycleAfterScan(merged.state, parsedForMerge, currentTranscript || transcript, settings);
         const staleArchived = [...preCleanup.archived, ...postCleanup.archived]
             .filter((entry, index, all) => all.findIndex(other => other.id === entry.id) === index);
@@ -5011,6 +5054,7 @@ function openNpcEditor(npcId) {
         <label>Goal<input id="npc_state_delta_edit_goal" class="text_pole" value="${editorValue(npc.goal)}"></label>
         <label>Condition / Activity<input id="npc_state_delta_edit_status" class="text_pole" value="${editorValue(npc.status)}"></label>
         <label class="npc-state-delta-editor-wide">Important memories <small>Max 5 · one per line</small><textarea id="npc_state_delta_edit_memories" class="text_pole" rows="5">${editorValue((npc.memories || []).join('\n'))}</textarea></label>
+        <label class="npc-state-delta-editor-wide">Knowledge <small>One per line · knows: learned on-page · secret: knows and conceals · unaware: must not know</small><textarea id="npc_state_delta_edit_knowledge" class="text_pole" rows="5">${editorValue(knowledgeToEditorText(npc.knowledge))}</textarea></label>
       </div>
       <div class="npc-state-delta-editor-stats">
         <label>Trust<input id="npc_state_delta_edit_trust" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.trust)}"></label>
@@ -5411,6 +5455,7 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     next.goal = String(editorField('npc_state_delta_edit_goal')).trim().slice(0, 500);
     next.status = String(editorField('npc_state_delta_edit_status')).trim().slice(0, 300);
     next.memories = cleanEditorList(editorField('npc_state_delta_edit_memories'), IMPORTANT_MEMORY_LIMIT);
+    next.knowledge = knowledgeFromEditorText(editorField('npc_state_delta_edit_knowledge'), current.knowledge);
     next.relationship = {
         trust: clampEditorRelationshipStat('npc_state_delta_edit_trust'),
         affection: clampEditorRelationshipStat('npc_state_delta_edit_affection'),
@@ -5438,11 +5483,11 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
             turn: Number.isFinite(Number(state.turn)) ? Number(state.turn) : null,
         };
     }
-    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships'];
+    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge'];
     if (document.getElementById('npc_state_delta_edit_lock_profile')?.checked) {
         const locks = new Set(current.manualProfileFields || []);
         for (const key of stableKeys) {
-            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships';
+            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge';
             const before = listField ? JSON.stringify(current[key] || []) : String(current[key] || '');
             const after = listField ? JSON.stringify(next[key] || []) : String(next[key] || '');
             if (before !== after) locks.add(key);

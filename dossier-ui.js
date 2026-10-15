@@ -1,6 +1,9 @@
 /* NPC State Delta dossier surface: bounded presentation of canonical state. */
 import { appearanceFingerprint, currentPresentationText, normalizeAppearanceModel, resolveNpcAppearance } from './appearance.js';
 import { formatBirthDate } from './birthday.js';
+import { normalizeKnowledge } from './knowledge.js';
+
+const KNOWLEDGE_LABELS = Object.freeze({ knows: 'Knows', secret: 'Secret', unaware: 'Does not know' });
 
 const ROOT_ID = 'npc_state_delta_dossier_root';
 const OPEN_REQUEST_GUARD = '__npcStateDeltaOpenDossierRequests';
@@ -150,6 +153,7 @@ export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortr
         mannerisms: stringList(npc?.mannerisms, 10),
         background: plain(npc?.background),
         memories: stringList(npc?.memories, 8),
+        knowledge: normalizeKnowledge(npc?.knowledge).map(entry => `${KNOWLEDGE_LABELS[entry.kind]}: ${entry.fact}${entry.from ? ` (from ${entry.from})` : ''}`),
         keyRelationships: stringList(npc?.keyRelationships, 12),
         relationshipSummary: plain(npc?.relationshipSummary),
         lastRelationshipChange: relationshipChangeProjection(npc?.lastRelationshipChange),
@@ -890,6 +894,9 @@ class DeltaDossierUi {
             <section class="delta-section delta-two-column" data-delta-section="bonds">
                 <div><h3>Important bonds${changedMark(selected, 'keyRelationships')}</h3>${listHtml(selected.keyRelationships, 'No key relationships established yet.')}</div>
                 <div><h3>Important memories${changedMark(selected, 'memories')}</h3>${listHtml(selected.memories, 'No important memories established yet.')}</div>
+            </section>
+            <section class="delta-section" data-delta-section="knowledge">
+                <h3>Knowledge${changedMark(selected, 'knowledge')}</h3>${listHtml(selected.knowledge, 'No tracked knowledge yet.')}
             </section>
             <section class="delta-section" data-delta-section="history">
                 <h3>Background / History${changedMark(selected, 'background')}</h3>${proseHtml(selected.background, 'No background established yet.')}
