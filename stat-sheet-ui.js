@@ -5,6 +5,7 @@
    do not lock the sheet, so story updates keep landing on top. The world schema (S2.13) supplies
    the attribute and pool names when the world defines them. */
 import { normalizeSheet } from './sheet.js';
+import { statusStateText } from './status.js';
 
 function escapeHtml(value) {
     return String(value ?? '')
@@ -49,8 +50,9 @@ function poolRow(name, pool) {
 
 function table(key, rows) {
     const spec = STAT_TABLES[key];
-    const head = spec.columns.map(([label]) => `<th>${escapeHtml(label)}</th>`).join('') + '<th aria-label="Remove"></th>';
-    const body = rows.map((row, index) => `<tr>${spec.columns.map(([label, field]) => `<td>${input(`${key}:${index}:${field}`, row[field], { label, placeholder: field === spec.columns[0][1] ? '' : '—' })}</td>`).join('')}<td><button type="button" class="delta-stat-remove" data-stat-remove="${key}:${index}" aria-label="Remove ${escapeHtml(row[spec.columns[0][1]])}" title="Remove">×</button></td></tr>`).join('');
+    const state = key === 'conditions';
+    const head = spec.columns.map(([label]) => `<th>${escapeHtml(label)}</th>`).join('') + (state ? '<th>State</th>' : '') + '<th aria-label="Remove"></th>';
+    const body = rows.map((row, index) => `<tr>${spec.columns.map(([label, field]) => `<td>${input(`${key}:${index}:${field}`, row[field], { label, placeholder: field === spec.columns[0][1] ? '' : '—' })}</td>`).join('')}${state ? `<td class="delta-stat-state">${escapeHtml(statusStateText(row))}</td>` : ''}<td><button type="button" class="delta-stat-remove" data-stat-remove="${key}:${index}" aria-label="Remove ${escapeHtml(row[spec.columns[0][1]])}" title="Remove">×</button></td></tr>`).join('');
     return `<section class="delta-stat-card" data-stat-table="${key}">
         <header>${icon(spec.icon)}<h3>${escapeHtml(spec.title)}</h3><button type="button" class="delta-stat-add" data-stat-add="${key}">＋ ${escapeHtml(spec.add)}</button></header>
         <table class="delta-stat-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
@@ -75,7 +77,9 @@ export function statPaneHtml(npc, { schema = null } = {}) {
     const level = `<div class="delta-stat-cell delta-stat-level">${icon('level')}<span class="delta-stat-label">Level</span>${input('rank', sheet.rank, { label: 'Level or rank', placeholder: schema?.ranks?.length ? schema.ranks.join(' < ') : '—' }).replace('<input ', rankList ? `<input list="delta-stat-ranks-${escapeHtml(npc.id)}" ` : '<input ')}${rankList}</div>`;
     const pools = poolNames.map(name => poolRow(name, sheet.pools.find(pool => sameName(pool.name, name)))).join('');
     const attributes = attributeNames.map(name => `<div class="delta-stat-cell">${icon(name)}<span class="delta-stat-label">${escapeHtml(name)}</span>${input(`attr:${name}`, sheet.attributes.find(item => sameName(item.name, name))?.value, { label: name })}</div>`).join('');
-    const core = `<section class="delta-stat-card delta-stat-core"><header>${icon('level')}<h3>Core Attributes</h3>${schema ? '<small class="delta-stat-schema">world schema</small>' : ''}</header>
+    const derived = sheet.derivation ? `derived: ${[sheet.derivation.race + (sheet.derivation.assumedRace ? ' (assumed)' : ''), sheet.derivation.profession, sheet.derivation.rank && `rank ${sheet.derivation.rank}`].filter(Boolean).join(' · ')}` : '';
+    const limits = (sheet.restrictions || []).map(item => `<span class="delta-stat-chip">${escapeHtml(item)}</span>`).join('');
+    const core = `<section class="delta-stat-card delta-stat-core"><header>${icon('level')}<h3>Core Attributes</h3>${limits}${schema ? '<small class="delta-stat-schema">world schema</small>' : (derived ? `<small class="delta-stat-schema">${escapeHtml(derived)}</small>` : '')}</header>
         <div class="delta-stat-core-grid"><div class="delta-stat-core-left">${level}${pools}</div><div class="delta-stat-core-attrs">${attributes}</div></div></section>`;
 
     const log = sheet.itemLog.slice(-6).reverse().map(item => `<li><span class="delta-stat-tag">${escapeHtml(item.op)}</span> ${escapeHtml(item.item)}${Number.isInteger(item.since) ? ` <small>turn ${item.since}</small>` : ''}</li>`).join('');
@@ -168,6 +172,7 @@ ${r} .delta-stat-remove { width:22px; height:22px; padding:0; border:1px solid t
 ${r} .delta-stat-empty, ${r} .delta-stat-empty-pane { margin:10px 0 2px; text-align:center; color:var(--delta-muted); font-size:.85rem; }
 ${r} .delta-stat-log ul { margin:0; padding-left:18px; display:grid; gap:3px; font-size:.84rem; }
 ${r} .delta-stat-log small { color:var(--delta-muted); }
+${r} .delta-stat-state { color:var(--delta-muted); font-size:.78rem; }
 ${r} .delta-stat-tag { display:inline-block; padding:0 6px; border-radius:6px; font-size:.72rem; background:rgba(216,188,120,.16); color:var(--delta-accent-soft); }
 @media (max-width: 760px) { ${r} .delta-stat-core-grid { grid-template-columns:1fr; } ${r} .delta-stat-columns { grid-template-columns:1fr; } }
 `;
