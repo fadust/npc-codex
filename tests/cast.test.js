@@ -211,3 +211,11 @@ test('cast prompt states the resolution order and carries candidates, canon and 
     const keys = resolveKnowledgeKeys(new Map([['name:rennick', [{ fact: 'x', kind: 'knows' }]], ['npc_a', [{ fact: 'y', kind: 'knows' }]]]), [{ id: 'npc_r', name: 'Rennick' }]);
     assert.deepEqual([...keys.keys()].sort(), ['npc_a', 'npc_r']);
 });
+
+test('a reference late in a long reply is still found (no 400-char cap on the exchange)', async () => {
+    const { castDecisionsToScan } = await import('../cast.js');
+    const transcript = `${'The hall is loud and bright and full of candles. '.repeat(12)}A Ravenclaw prefect with a silver badge, Priya Nair, leans down to you.`;
+    const out = castDecisionsToScan({ people: [{ ref: 'A Ravenclaw prefect with a silver badge, Priya Nair', is: 'new', name: 'Priya Nair', present: true, sheet: { items: [{ op: 'equipped', item: 'silver badge', slot: 'badge' }] } }] }, { transcript });
+    assert.equal(out.report.rejected.length, 0);
+    assert.equal(out.npcs[0].sheetDelta.items[0].item, 'silver badge');
+});

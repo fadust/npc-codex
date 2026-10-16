@@ -155,6 +155,8 @@ export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortr
         background: plain(npc?.background),
         memories: stringList(npc?.memories, 8),
         sheet: normalizeSheet(npc?.sheet),
+        canonSeed: npc?.canonSeed && typeof npc.canonSeed === 'object' ? { entry: plain(npc.canonSeed.entry), source: npc.canonSeed.world === 'card' ? 'card' : 'lorebook', fields: stringList(npc.canonSeed.fields, 10) } : null,
+        canonLocked: stringList(npc?.canonLocked, 10),
         knowledge: normalizeKnowledge(npc?.knowledge).map(entry => `${KNOWLEDGE_LABELS[entry.kind]}: ${entry.fact}${entry.from ? ` (from ${entry.from})` : ''}`),
         keyRelationships: stringList(npc?.keyRelationships, 12),
         relationshipSummary: plain(npc?.relationshipSummary),
@@ -902,6 +904,7 @@ class DeltaDossierUi {
             </section>
             <section class="delta-section" data-delta-section="history">
                 <h3>Background / History${changedMark(selected, 'background')}</h3>${proseHtml(selected.background, 'No background established yet.')}
+                ${selected.canonSeed ? `<p class="delta-muted">Seeded from ${selected.canonSeed.source} canon${selected.canonSeed.entry ? ` (${escapeHtml(selected.canonSeed.entry)})` : ''}: ${escapeHtml(selected.canonSeed.fields.join(', ') || 'nothing')}.${selected.canonLocked.length ? ` Canon-locked: ${escapeHtml(selected.canonLocked.join(', '))}.` : ''}</p>` : ''}
             </section>`, documentPane.dataset.npcId !== selected.id);
         documentPane.dataset.npcId = selected.id;
         documentPane.scrollTop = documentScroll;

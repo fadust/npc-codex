@@ -9,6 +9,7 @@ import {
 } from './knowledge.js';
 import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
 import { emptySheet, normalizeSheet, readSheetDelta, sheetDeltaIsEmpty, applySheetDelta, sheetIsEmpty, renderSheetInjection } from './sheet.js';
+import { normalizeCanonSeed, normalizeCanonLocked, enforceCanonLocks } from './canon-seed.js';
 import {
     reconcileSocialState,
     remapSocialGraphNpcId,
@@ -3724,6 +3725,8 @@ export function normalizeNpcRecord(raw = {}) {
     npc.roles = normalizeRoles(raw.roles);
     npc.canonRef = normalizeCanonRef(raw.canonRef);
     npc.sheet = normalizeSheet(raw.sheet);
+    npc.canonSeed = normalizeCanonSeed(raw.canonSeed);
+    npc.canonLocked = normalizeCanonLocked(raw.canonLocked);
     npc.mannerisms = locked.has('mannerisms')
         ? cleanList(raw.mannerisms, 8, 320)
         : normalizeMannerisms(raw.mannerisms);
@@ -3822,6 +3825,8 @@ export function createNpcRecord(name, existingIds = [], baseline = DEFAULT_RELAT
         roles: [],
         canonRef: null,
         sheet: emptySheet(),
+        canonSeed: null,
+        canonLocked: [],
         mannerisms: [],
         behaviorProfile: [],
         keyRelationships: [],
@@ -5506,6 +5511,10 @@ export function mergeScanResult(state, scanResult, options = {}) {
     const roleTransfer = transferExclusiveRoles(next.npcs, { turn });
     next.npcs = roleTransfer.npcs.map(npc => (npc ? stripTitleAliases(npc) : npc));
     report.roleTransfers = roleTransfer.changes;
+    // S7.2: canon-seeded fields only grow, or change on an explicit event / time skip.
+    const canonLock = enforceCanonLocks(state?.npcs, next.npcs, scanResult);
+    next.npcs = canonLock.npcs;
+    report.canonLockReverted = canonLock.reverted;
     for (const change of knowledgeGuard.changes) if (!report.updated.includes(change.npcId)) report.updated.push(change.npcId);
 
     next.npcs.sort((a, b) => Number(b.lastSeenTurn || 0) - Number(a.lastSeenTurn || 0));

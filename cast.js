@@ -34,6 +34,11 @@ function norm(value) {
     return cleanText(value, 400).toLowerCase();
 }
 
+// For whole exchanges and canon entries: same normalization, no length cap.
+function normAll(value) {
+    return String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 /* ---------- Roles: a title held in an organization, possibly exclusive, possibly former. ---------- */
 
 const EXCLUSIVE_TITLE = /\b(head ?master|head ?mistress|headman|principal|dean|chancellor|king|queen|emperor|empress|president|mayor|chief|captain|commander|guild ?master|grand ?master|abbot|abbess|high priest(?:ess)?|matriarch|patriarch|ceo|director|warden|sheriff|governor|regent|pope|archbishop)\b/i;
@@ -167,7 +172,7 @@ const TIE_QUALIFIERS = '(?:(?:old|new|late|former|ex|first|second|third|fourth|l
 const TIE_PHRASE = new RegExp(`\\b((?:[A-Z][\\p{L}'’-]+(?:\\s+[A-Z][\\p{L}'’-]+){0,2})(?:'s|’s)|her|his|their|my|your|our)\\s+${TIE_QUALIFIERS}(?:${TIE_WORDS})\\b`, 'gu');
 const TITLE_PHRASE = /\bthe\s+(?:(?:old|new|former|current|late|young|acting)\s+)?(deputy(?:\s+head(?:\s?master|\s?mistress)?)?|head of house|head ?master|head ?mistress|principal|dean|captain|king|queen|prince|princess|mayor|chief|commander|innkeeper|barkeep|bartender|barista|watchman|guard|priest(?:ess)?|abbot|abbess|lord|lady|duke|duchess|baron|baroness|count|countess|knight|healer|smith|blacksmith|merchant|steward|chancellor|emperor|empress|professor|teacher|librarian|caretaker|keeper|landlord|landlady|owner|boss|manager|director|sheriff|warden|governor|regent|magistrate|elder|matron)\b(?:\s+of\s+(?:the\s+)?([A-Z][\p{L}'’-]+(?:\s+[A-Z][\p{L}'’-]+)*))?/giu;
 // Item, injury, spell and rank events: the stat sheet needs the cast pass even without new names.
-const SHEET_SIGNAL = /\b(gave|gives|handed|hands|took|takes|stole|stolen|lost|dropped|broke|broken|shattered|bought|sold|found|picked up|pocketed|equipped|wielded|drew|draws|sheathed|wore|wears|donned|armou?r|sword|blade|dagger|bow|staff|wand|ring|amulet|necklace|key|compass|potion|scroll|wounded|injured|bleeding|bled|poisoned|cursed|fever|sick|bandaged|healed|exhausted|cast|casts|spell|cantrip|learned|mastered|skill|promoted|demoted|rank|level(?:ed)? up|hp|mana|stamina)\b/i;
+const SHEET_SIGNAL = /\b(gave|gives|handed|hands|took|takes|stole|stolen|lost|dropped|broke|broken|shattered|bought|sold|found|picked up|pocketed|equipped|wielded|drew|draws|sheathed|wore|wears|wearing|donned|holds|holding|held|carries|carrying|clutch(?:es|ing)?|badge|insignia|crest|hat|armou?r|sword|blade|dagger|bow|staff|wand|ring|amulet|necklace|key|compass|potion|scroll|wounded|injured|bleeding|bled|poisoned|cursed|fever|sick|bandaged|healed|exhausted|cast|casts|spell|cantrip|learned|mastered|skill|promoted|demoted|rank|level(?:ed)? up|hp|mana|stamina)\b/i;
 
 const NAME_RUN = /(?<![\p{L}\p{N}'’])([A-Z][\p{Ll}'’-]+(?:\s+[A-Z][\p{Ll}'’-]+){0,2})(?![\p{L}\p{N}])/gu;
 const NOT_NAMES = new Set(['the', 'a', 'an', 'i', 'he', 'she', 'they', 'we', 'you', 'it', 'his', 'her', 'their', 'my', 'your', 'our', 'its',
@@ -220,7 +225,7 @@ function tieCounterpartNames(npc) {
 }
 
 function tokens(text) {
-    return new Set(norm(text).split(/[^\p{L}\p{N}]+/u).filter(token => token.length > 2));
+    return new Set(normAll(text).split(/[^\p{L}\p{N}]+/u).filter(token => token.length > 2));
 }
 
 export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation = '', baibaiNpcs = [], limit = SHORTLIST_LIMIT } = {}) {
@@ -286,7 +291,7 @@ const CANON_STOP = new Set(['that', 'this', 'with', 'from', 'have', 'will', 'you
     'where', 'which', 'would', 'could', 'should', 'about', 'into', 'were', 'been', 'just', 'like', 'only', 'then', 'than', 'over', 'also']);
 
 function contentTokens(text) {
-    return new Set(norm(text).split(/[^\p{L}\p{N}]+/u).filter(token => token.length > 3 && !CANON_STOP.has(token)));
+    return new Set(normAll(text).split(/[^\p{L}\p{N}]+/u).filter(token => token.length > 3 && !CANON_STOP.has(token)));
 }
 
 export const CARD_CANON_WORLD = 'card';
@@ -396,7 +401,7 @@ TASK A - CAST. List each individual person the CURRENT EXCHANGE refers to by nam
 A reference is a query: anchor + tie or title + qualifiers. "Martha's older daughter" = Martha's child, female, the older one; "his first student" = the earliest of his students; "her ex-wife" = her former spouse; "Tomas's younger brother" = Tomas's sibling, male, younger than Tomas; "the headmaster of Hogwarts" = the CURRENT holder of that title in this story. Decide with the candidates' ties, roles, gender, ages, life state and locations. If two candidates fit equally, use "new" with the reference as the name instead of guessing.
 Per person: {"ref":"exact words from the exchange","is":"canon:<id>|<dossier id>|new","name":"proper name if known","gender":"female|male|","present":true|false,"roles":[{"title":"","org":"","exclusive":true,"status":"current|former"}],"ties":[{"is":"older daughter","of":"Martha"}]}
 Only roles/ties stated in this exchange or the canon entry. A promotion or new post: the new title "current", the replaced one "former". "ties" reads "<this person> IS <tie> OF <other>". A newly revealed proper name for a dossier: "is":"<that id>","name":"<new name>".
-TASK C (in each person object) - SHEET: only what THIS exchange states about that person: "sheet":{"items":[{"op":"gained|lost|equipped|unequipped","item":"","slot":"","significance":""}],"conditions":[{"op":"add|clear","name":"","kind":"injury|illness|buff|debuff|curse|status","severity":"","until":""}],"spells":[{"op":"learned|lost","name":"","school":"","tier":""}],"skills":[{"name":"","proficiency":""}],"rank":"","class":"","pools":[{"name":"HP","current":0,"max":0}],"attributes":[{"name":"","value":""}]}. Items: only items that matter later (weapons, armour, keys, heirlooms, quest objects), not food or coins. Stolen/given away/broken/used up => "lost". "rank" = the person's standing on the world's scale (guild rank, level, belt, grade) when this exchange sets or reveals it, e.g. a promotion to Bronze => "rank":"Bronze". A tie or job title alone is not a rank. Omit "sheet" when nothing changed.
+TASK C (in each person object) - SHEET: only what THIS exchange states about that person: "sheet":{"items":[{"op":"gained|lost|equipped|unequipped","item":"","slot":"","significance":""}],"conditions":[{"op":"add|clear","name":"","kind":"injury|illness|buff|debuff|curse|status","severity":"","until":""}],"spells":[{"op":"learned|lost","name":"","school":"","tier":""}],"skills":[{"name":"","proficiency":""}],"rank":"","class":"","pools":[{"name":"HP","current":0,"max":0}],"attributes":[{"name":"","value":""}]}. Items: things that identify the person or matter later (weapons, wands, armour, badges/insignia, keys, heirlooms, quest objects, notable artefacts), not food, coins or furniture. An item the text shows them already holding or carrying => "gained"; wearing or wielding => "equipped" with a slot. Stolen/given away/broken/used up => "lost". "rank" = the person's standing on the world's scale (guild rank, level, belt, grade) when this exchange sets or reveals it, e.g. a promotion to Bronze => "rank":"Bronze". A tie or job title alone is not a rank. Omit "sheet" when the exchange states none of this.
 TASK B - KNOWLEDGE. For people in the exchange, durable facts they now know, keep secret, or explicitly do NOT know (hidden from them, said while they were absent). Never give a fact to someone who could not have learned it. Max ${KNOWLEDGE_NEW_PER_SCAN} per person; skip existingKnowledge.
 JSON only: {"people":[...],"knowledge":[{"who":"<dossier id or name>","fact":"","kind":"knows|secret|unaware","source":"witnessed|told|deduced","from":""}]}
 Example: {"people":[{"ref":"the headmaster","is":"canon:HP#3","name":"Albus Dumbledore","gender":"male","present":true,"roles":[{"title":"Headmaster","org":"Hogwarts","exclusive":true,"status":"current"}],"ties":[]},{"ref":"Martha's older daughter","is":"new","name":"Martha's older daughter","gender":"female","present":false,"roles":[],"ties":[{"is":"older daughter","of":"Martha"}],"sheet":{"items":[{"op":"gained","item":"bread basket","significance":""}]}}],"knowledge":[]}
@@ -424,7 +429,8 @@ function impliedGender(text) {
 }
 
 function appearsIn(text, fragment) {
-    const haystack = norm(text).replace(/[’]/g, "'");
+    // The whole exchange: norm() caps at 400 chars, which dropped references late in a long reply.
+    const haystack = normAll(text).replace(/[’]/g, "'");
     const needle = norm(fragment).replace(/[’]/g, "'");
     return Boolean(needle) && haystack.includes(needle);
 }
