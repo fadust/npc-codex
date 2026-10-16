@@ -108,7 +108,9 @@ export function rankTier(rank, schemaRanks = []) {
 // Returns { attributes:[{name,value}], pools:[...], restrictions:[], derivation }.
 export function deriveSheet({ race = null, profession = null, tier = '', emphasis = {}, raceName = '', professionName = '', previousPools = [] } = {}) {
     const base = race || HUMAN_PROFILE;
-    const values = { ...base.attributes };
+    // Training (profession, emphasis, rank) is shaped on the human scale, where the rank bands hold;
+    // the race's difference from a human is added after, so an orc stays stronger at every rank.
+    const values = { ...HUMAN_PROFILE.attributes };
     for (const [attr, delta] of Object.entries(profession?.modifiers || {})) values[attr] = (values[attr] ?? HUMAN_BASELINE) + delta;
     const dominant = (emphasis.dominant || []).map(attrKey).filter(Boolean);
     const weak = (emphasis.weak || []).map(attrKey).filter(Boolean);
@@ -137,7 +139,10 @@ export function deriveSheet({ race = null, profession = null, tier = '', emphasi
             values[top] = target;
         }
     }
-    const attributes = ATTRIBUTES.map(attr => ({ name: attr, value: String(clamp(values[attr], 1, 100)) }));
+    if (race) for (const attr of ATTRIBUTES) values[attr] += (race.attributes[attr] ?? HUMAN_BASELINE) - HUMAN_BASELINE;
+    // Flavour, not math: a derived human starts within 100, other races may pass it; the story and
+    // edits may push anyone further.
+    const attributes = ATTRIBUTES.map(attr => ({ name: attr, value: String(clamp(values[attr], 1, race ? 999 : 100)) }));
     const get = attr => Number(attributes.find(item => item.name === attr).value);
     const tierIndex = tier ? RANKS.indexOf(tier) + 1 : 0;
     const magic = profession?.magic === 'none' ? 'none' : base.magic;

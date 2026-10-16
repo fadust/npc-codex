@@ -115,9 +115,20 @@ test('rank bands: a ranked character peaks inside its band (S 85-100 ... E 30-39
     const orc = parseRaceProfile({ attributes: { Strength: 48, Endurance: 45, Agility: 28, Intelligence: 22, Wisdom: 24, Charisma: 16, Luck: 30 } });
     const sword = parseProfessionProfile({ modifiers: { Strength: 6, Agility: 6 }, focus: ['Strength', 'Agility'] });
     for (const tier of RANKS) {
-        for (const input of [{}, { race: orc }, { profession: sword, emphasis: { dominant: ['Agility'] } }]) {
+        for (const input of [{}, { profession: sword, emphasis: { dominant: ['Agility'] } }]) {
             const peak = Math.max(...deriveSheet({ ...input, tier }).attributes.map(item => Number(item.value)));
             assert.ok(peak >= RANK_BANDS[tier][0] && peak <= RANK_BANDS[tier][1], `${tier}: ${peak}`);
         }
+        // Other races sit on top of the human band: an orc is stronger than a human of the same rank.
+        const strength = sheet => value(sheet, 'Strength');
+        assert.equal(strength(deriveSheet({ race: orc, tier })) - strength(deriveSheet({ tier })), 18, tier);
     }
+});
+
+test('humans cap at 100; other races may pass it', () => {
+    const orc = parseRaceProfile({ attributes: { Strength: 55, Endurance: 50, Agility: 28, Intelligence: 22, Wisdom: 24, Charisma: 16, Luck: 30 } });
+    const human = deriveSheet({ tier: 'S', emphasis: { dominant: ['Strength'] } });
+    const big = deriveSheet({ race: orc, tier: 'S', emphasis: { dominant: ['Strength'] } });
+    assert.ok(value(human, 'Strength') <= 100);
+    assert.ok(value(big, 'Strength') > 100, String(value(big, 'Strength')));
 });
