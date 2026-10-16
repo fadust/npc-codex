@@ -91,6 +91,8 @@ import {
 import { applyNpcBirthdayUpdate, normalizeBirthDate } from './birthday.js';
 import { knowledgeToEditorText, knowledgeFromEditorText, applyKnowledgeDecisions } from './knowledge.js';
 import { sheetToEditor, sheetFromEditor, SHEET_EDITOR_FIELDS } from './sheet.js';
+import { episodesToEditorText, episodesFromEditorText, intentionsToEditorText, intentionsFromEditorText, applyEventDecisions } from './memory.js';
+import { RECALL_DEFAULTS, normalizeRecallSettings, syncRecallIndex, queryRecallScores, resetRecallSession } from './recall-index.js';
 import { canonSeedTargets, canonTextFor, buildCanonSeedPrompt, parseCanonSeed, applyCanonSeed, CANON_SEED_SYSTEM_PROMPT } from './canon-seed.js';
 import {
     castSignals,
@@ -483,6 +485,10 @@ const DEFAULTS = Object.freeze({
     staleDeleteAfter: 50,
     admissionMode: 'conservative',
     inject: true,
+    recallEnabled: false,
+    recallModel: RECALL_DEFAULTS.model,
+    recallApiUrl: RECALL_DEFAULTS.apiUrl,
+    recallQdrantUrl: RECALL_DEFAULTS.qdrantUrl,
     injectDepth: 1,
     injectLimit: 3,
     injectBudgetTokens: 4000,
@@ -558,6 +564,10 @@ function getSettings() {
     // 1.0.70 raised the default budget from 1800 to 4000 tokens. An install still on the old default
     // is moved once; any value the player chose, including a later deliberate 1800, is kept.
     const legacyDefaultBudget = settings.injectBudgetDefaultUpgraded !== true && Number(settings.injectBudgetTokens) === 1800;
+    assign('recallEnabled', settings.recallEnabled === true);
+    assign('recallModel', typeof settings.recallModel === 'string' && settings.recallModel.trim() ? settings.recallModel.trim() : RECALL_DEFAULTS.model);
+    assign('recallApiUrl', typeof settings.recallApiUrl === 'string' && settings.recallApiUrl.trim() ? settings.recallApiUrl.trim() : RECALL_DEFAULTS.apiUrl);
+    assign('recallQdrantUrl', typeof settings.recallQdrantUrl === 'string' && settings.recallQdrantUrl.trim() ? settings.recallQdrantUrl.trim() : RECALL_DEFAULTS.qdrantUrl);
     assign('injectBudgetTokens', legacyDefaultBudget ? 4000 : Math.max(512, Math.min(6000, Math.round(Number(settings.injectBudgetTokens) || 4000))));
     assign('injectBudgetDefaultUpgraded', true);
     assign('fullScanEveryTurn', settings.fullScanEveryTurn === true);
@@ -2377,6 +2387,46 @@ function namedByPlayerNpcIds(state) {
         .map(npc => npc.id);
 }
 
+// Vector recall (memory Phase B2): scores refresh in the background and the injection is rebuilt
+// when they arrive; until then, and whenever Similharity/Qdrant is unavailable, recall is by keyword.
+let recallCache = { chatKey: '', scores: new Map(), sig: '' };
+let recallBusy = false;
+const recallTransport = { fetch: (...args) => fetch(...args), headers: () => getRequestHeaders() };
+
+function recallConfig(settings) {
+    return normalizeRecallSettings({ enabled: settings.recallEnabled, model: settings.recallModel, apiUrl: settings.recallApiUrl, qdrantUrl: settings.recallQdrantUrl });
+}
+
+function scheduleRecallRefresh(state, sceneText, chatKey) {
+    const cfg = recallConfig(getSettings());
+    if (!cfg.enabled || recallBusy) return;
+    const episodes = (state?.npcs || []).reduce((sum, npc) => sum + (npc?.episodes?.length || 0), 0);
+    const sig = `${chatKey}|${cfg.model}|${state?.turn}|${episodes}|${sceneText.length}|${sceneText.slice(-80)}`;
+    if (recallCache.sig === sig || Date.now() < (recallCache.retryAt || 0)) return;
+    recallBusy = true;
+    (async () => {
+        try {
+            const synced = await syncRecallIndex(state.npcs, chatKey, cfg, recallTransport);
+            const scores = await queryRecallScores(state.npcs, chatKey, sceneText, cfg, recallTransport);
+            recallCache = { chatKey, scores, sig, synced, at: Date.now() };
+        } catch (error) {
+            // No signature on failure: retry after a short backoff instead of never.
+            recallCache = { chatKey, scores: new Map(), sig: '', retryAt: Date.now() + 30000, error: String(error?.message || error), at: Date.now() };
+            console.warn('[NPC Codex] vector recall unavailable; keyword recall continues.', error);
+        } finally {
+            recallBusy = false;
+        }
+        if (getChatKey() === chatKey) updateInjection();
+    })();
+}
+
+// A new model or server needs a fresh connection and a full re-index.
+function recallSettingsChanged() {
+    resetRecallSession();
+    recallCache = { chatKey: '', scores: new Map(), sig: '' };
+    updateInjection();
+}
+
 function updateInjection() {
     const settings = getSettings();
     const ctx = getContext();
@@ -2394,7 +2444,10 @@ function updateInjection() {
     if (!settings.inject) return clear('"Inject present NPC state" is off.');
     const state = getChatState();
     const namedNpcIds = namedByPlayerNpcIds(state);
-    const prompt = buildInjection(state.npcs, recentTranscript(4), state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds });
+    const sceneText = recentTranscript(4);
+    const recallScores = recallCache.chatKey === injectionKey ? recallCache.scores : null;
+    const prompt = buildInjection(state.npcs, sceneText, state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds, recallScores });
+    scheduleRecallRefresh(state, sceneText, injectionKey);
     const present = (state.npcs || []).filter(npc => npc?.present && !npc?.archived);
     const depth = Math.max(0, Math.min(20, Number(settings.injectDepth) || 1));
     lastInjection = {
@@ -2806,7 +2859,8 @@ function syncOpenNpcEditorFields(npc) {
     set('npc_state_delta_edit_location', npc.location || '');
     set('npc_state_delta_edit_goal', npc.goal || '');
     set('npc_state_delta_edit_status', npc.status || '');
-    set('npc_state_delta_edit_memories', (npc.memories || []).join('\n'));
+    set('npc_state_delta_edit_memories', episodesToEditorText(npc));
+    set('npc_state_delta_edit_intentions', intentionsToEditorText(npc));
     set('npc_state_delta_edit_knowledge', knowledgeToEditorText(npc.knowledge));
     {
         const sheetFields = sheetToEditor(npc.sheet);
@@ -3953,6 +4007,12 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             merged.report.canonSeeded = seededReport;
             if (lastScanMetrics) lastScanMetrics.canonSeeded = seededReport.length;
         }
+        if (castPass.cast?.events && (castPass.cast.events.events.length || castPass.cast.events.told.length)) {
+            const remembered = applyEventDecisions(merged.state.npcs, castPass.cast.events, { turn: state.turn, sourceMessageId: targetMessageId, userName: ctx.name1 || '' });
+            merged.state.npcs = remembered.npcs;
+            merged.report.events = remembered.applied;
+            if (lastScanMetrics) lastScanMetrics.eventsApplied = remembered.applied.length;
+        }
         const castKnowledge = castPass.cast ? resolveKnowledgeKeys(castPass.cast.knowledge, merged.state.npcs) : new Map();
         if (castKnowledge.size) {
             const knowledgeApplied = applyKnowledgeDecisions(merged.state.npcs, castKnowledge, { sourceMessageId: targetMessageId, turn: state.turn });
@@ -4116,6 +4176,11 @@ function buildSettingsHtml() {
         <h4 class="delta-settings-subhead">Generation injection</h4>
         ${settingRow('npc_state_delta_inject', 'Inject present NPC state', '<input id="npc_state_delta_inject" type="checkbox">', 'Only active NPCs present in the latest scanned scene are injected into generation.')}
         ${settingRow('npc_state_delta_inject_budget', 'Injection budget', numberControl('npc_state_delta_inject_budget', 512, 6000, 'tokens', { step: 100, prefix: '<small>~</small>' }), 'Upper limit; only what the present NPCs need is used. The default 4000 lets detailed dossiers reach the roleplay model in full. When it runs short, lower-priority fields, then lower-ranked NPCs, are trimmed first.')}
+        <h4 class="delta-settings-subhead">Vector memory recall</h4>
+        ${settingRow('npc_state_delta_recall_enabled', 'Recall memories by meaning', '<input id="npc_state_delta_recall_enabled" type="checkbox">', 'Uses the Similharity server plugin + Qdrant. Falls back to keyword recall when unavailable.')}
+        ${settingRow('npc_state_delta_recall_model', 'Embedding model', '<input id="npc_state_delta_recall_model" type="text" class="text_pole">', 'Model id on the embedding server, e.g. text-embedding-embeddinggemma-2.')}
+        ${settingRow('npc_state_delta_recall_api', 'Embedding server', '<input id="npc_state_delta_recall_api" type="text" class="text_pole">', 'OpenAI-compatible URL (LM Studio: http://127.0.0.1:1234).')}
+        ${settingRow('npc_state_delta_recall_qdrant', 'Qdrant URL', '<input id="npc_state_delta_recall_qdrant" type="text" class="text_pole">', '')}
         ${settingsSlot('relationship-map')}
         <h4 class="delta-settings-subhead">Roster lifecycle</h4>
         ${settingRow('npc_state_delta_max', 'Maximum active NPCs', numberControl('npc_state_delta_max', 1, 100), 'Archived dossiers do not use an active slot.')}
@@ -4292,6 +4357,10 @@ function syncSettingsControls() {
     $('#npc_state_delta_stale_archive_after').val(s.staleArchiveAfter);
     $('#npc_state_delta_stale_delete_after').val(s.staleDeleteAfter);
     $('#npc_state_delta_inject').prop('checked', !!s.inject);
+    $('#npc_state_delta_recall_enabled').prop('checked', !!s.recallEnabled);
+    $('#npc_state_delta_recall_model').val(s.recallModel || '');
+    $('#npc_state_delta_recall_api').val(s.recallApiUrl || '');
+    $('#npc_state_delta_recall_qdrant').val(s.recallQdrantUrl || '');
     $('#npc_state_delta_inject_budget').val(s.injectBudgetTokens);
     $('#npc_state_delta_archive_deaths').prop('checked', s.autoArchiveDeaths !== false);
     $('#npc_state_delta_reactivate_archived').prop('checked', s.autoReactivateArchived !== false);
@@ -5138,7 +5207,7 @@ function openNpcEditor(npcId) {
         <label>Location<input id="npc_state_delta_edit_location" class="text_pole" value="${editorValue(npc.location)}"></label>
         <label>Goal<input id="npc_state_delta_edit_goal" class="text_pole" value="${editorValue(npc.goal)}"></label>
         <label>Condition / Activity<input id="npc_state_delta_edit_status" class="text_pole" value="${editorValue(npc.status)}"></label>
-        <label class="npc-state-delta-editor-wide">Important memories <small>Max 5 · one per line</small><textarea id="npc_state_delta_edit_memories" class="text_pole" rows="5">${editorValue((npc.memories || []).join('\n'))}</textarea></label>
+        <label class="npc-state-delta-editor-wide">Lived memories <small>One per line · level: event =&gt; effect · levels defining / significant / minor · start with * to pin</small><textarea id="npc_state_delta_edit_memories" class="text_pole" rows="6">${editorValue(episodesToEditorText(npc))}</textarea></label><label class="npc-state-delta-editor-wide">Intentions <small>Open plans, promises, unresolved problems · one per line · what | due</small><textarea id="npc_state_delta_edit_intentions" class="text_pole" rows="3">${editorValue(intentionsToEditorText(npc))}</textarea></label>
         <label class="npc-state-delta-editor-wide">Knowledge <small>One per line · knows: learned on-page · secret: knows and conceals · unaware: must not know</small><textarea id="npc_state_delta_edit_knowledge" class="text_pole" rows="5">${editorValue(knowledgeToEditorText(npc.knowledge))}</textarea></label>
         ${(() => { const sheetFields = sheetToEditor(npc.sheet); return `<h4 class="npc-state-delta-editor-wide">Stat sheet <small>Shown on the Stat tab. One entry per line.</small></h4><label>Class / archetype<input id="npc_state_delta_edit_sheet_archetype" class="text_pole" value="${editorValue(sheetFields.archetype)}"></label><label>Rank / level<input id="npc_state_delta_edit_sheet_rank" class="text_pole" value="${editorValue(sheetFields.rank)}"></label>${SHEET_EDITOR_FIELDS.map(field => `<label class="npc-state-delta-editor-wide">${field.label} <small>${field.hint}</small><textarea id="npc_state_delta_edit_sheet_${field.key}" class="text_pole" rows="3">${editorValue(sheetFields[field.key])}</textarea></label>`).join('')}`; })()}
       </div>
@@ -5540,7 +5609,9 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     next.location = String(editorField('npc_state_delta_edit_location')).trim().slice(0, 300);
     next.goal = String(editorField('npc_state_delta_edit_goal')).trim().slice(0, 500);
     next.status = String(editorField('npc_state_delta_edit_status')).trim().slice(0, 300);
-    next.memories = cleanEditorList(editorField('npc_state_delta_edit_memories'), IMPORTANT_MEMORY_LIMIT);
+    next.episodes = episodesFromEditorText(editorField('npc_state_delta_edit_memories'), current.episodes);
+    next.intentions = intentionsFromEditorText(editorField('npc_state_delta_edit_intentions'), current.intentions);
+    next.memories = next.episodes.map(item => item.event).slice(-IMPORTANT_MEMORY_LIMIT);
     next.knowledge = knowledgeFromEditorText(editorField('npc_state_delta_edit_knowledge'), current.knowledge);
     next.sheet = sheetFromEditor({
         archetype: editorField('npc_state_delta_edit_sheet_archetype'),
@@ -5576,11 +5647,11 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
             turn: Number.isFinite(Number(state.turn)) ? Number(state.turn) : null,
         };
     }
-    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge', 'sheet'];
+    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge', 'sheet', 'episodes', 'intentions'];
     if (document.getElementById('npc_state_delta_edit_lock_profile')?.checked) {
         const locks = new Set(current.manualProfileFields || []);
         for (const key of stableKeys) {
-            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge' || key === 'sheet';
+            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge' || key === 'sheet' || key === 'episodes' || key === 'intentions';
             const before = listField ? JSON.stringify(current[key] || []) : String(current[key] || '');
             const after = listField ? JSON.stringify(next[key] || []) : String(next[key] || '');
             if (before !== after) locks.add(key);
@@ -6250,6 +6321,10 @@ function bindUi() {
     });
     bindSettingsCheckbox('#npc_state_delta_full_scan_every_turn', 'fullScanEveryTurn');
     bindSettingsCheckbox('#npc_state_delta_inject', 'inject', updateInjection);
+    bindSettingsCheckbox('#npc_state_delta_recall_enabled', 'recallEnabled', updateInjection);
+    bindSettingsText('#npc_state_delta_recall_model', 'recallModel', recallSettingsChanged);
+    bindSettingsText('#npc_state_delta_recall_api', 'recallApiUrl', recallSettingsChanged);
+    bindSettingsText('#npc_state_delta_recall_qdrant', 'recallQdrantUrl', recallSettingsChanged);
     bindSettingsNumber('#npc_state_delta_inject_budget', 'injectBudgetTokens', 512, 6000, 4000, updateInjection);
     bindSettingsCheckbox('#npc_state_delta_archive_deaths', 'autoArchiveDeaths');
     bindSettingsCheckbox('#npc_state_delta_reactivate_archived', 'autoReactivateArchived');
@@ -7025,6 +7100,7 @@ window.NPCStateDelta = Object.freeze({
         scanBusyForChat: isScanBusy(getChatKey()),
         scanOperation: scanOperations.status(getChatKey()),
         scannerRouting: scannerRoutingMetrics(),
+        vectorRecall: { enabled: Boolean(getSettings().recallEnabled), busy: recallBusy, chatKey: recallCache.chatKey, scored: recallCache.scores?.size || 0, synced: recallCache.synced || null, error: recallCache.error || null, at: recallCache.at || null },
         inlineEntries: chatHydrationStatus(getChatKey()) === 'ready' ? (getChatState().inlineCards?.length || 0) : 0,
         mountedInlineAnchors: document.querySelectorAll?.('.npc-state-delta-inline-anchor')?.length || 0,
         integratedMeguminBlocks: document.querySelectorAll?.('.npc-state-delta-megumin-pane')?.length || 0,

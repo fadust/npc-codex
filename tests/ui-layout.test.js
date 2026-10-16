@@ -77,8 +77,8 @@ test('important memory criteria are editable and resettable from settings', () =
     assert.match(index, /npc_state_delta_reset_memory_rules/);
     assert.match(index, /Reset memory criteria/);
     assert.match(index, /Existing memories are shown to the scanner/i);
-    assert.match(index, /Important memories <small>Max 5/i);
-    assert.match(index, /cleanEditorList\(editorField\('npc_state_delta_edit_memories'\), IMPORTANT_MEMORY_LIMIT\)/);
+    assert.match(index, /Lived memories <small>One per line/i);
+    assert.match(index, /episodesFromEditorText\(editorField\('npc_state_delta_edit_memories'\), current\.episodes\)/);
 });
 
 
