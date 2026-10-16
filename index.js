@@ -91,6 +91,7 @@ import {
 import { applyNpcBirthdayUpdate, normalizeBirthDate } from './birthday.js';
 import { knowledgeToEditorText, knowledgeFromEditorText, applyKnowledgeDecisions } from './knowledge.js';
 import { sheetToEditor, sheetFromEditor, SHEET_EDITOR_FIELDS } from './sheet.js';
+import { episodesToEditorText, episodesFromEditorText, intentionsToEditorText, intentionsFromEditorText } from './memory.js';
 import { canonSeedTargets, canonTextFor, buildCanonSeedPrompt, parseCanonSeed, applyCanonSeed, CANON_SEED_SYSTEM_PROMPT } from './canon-seed.js';
 import {
     castSignals,
@@ -2806,7 +2807,8 @@ function syncOpenNpcEditorFields(npc) {
     set('npc_state_delta_edit_location', npc.location || '');
     set('npc_state_delta_edit_goal', npc.goal || '');
     set('npc_state_delta_edit_status', npc.status || '');
-    set('npc_state_delta_edit_memories', (npc.memories || []).join('\n'));
+    set('npc_state_delta_edit_memories', episodesToEditorText(npc));
+    set('npc_state_delta_edit_intentions', intentionsToEditorText(npc));
     set('npc_state_delta_edit_knowledge', knowledgeToEditorText(npc.knowledge));
     {
         const sheetFields = sheetToEditor(npc.sheet);
@@ -5138,7 +5140,7 @@ function openNpcEditor(npcId) {
         <label>Location<input id="npc_state_delta_edit_location" class="text_pole" value="${editorValue(npc.location)}"></label>
         <label>Goal<input id="npc_state_delta_edit_goal" class="text_pole" value="${editorValue(npc.goal)}"></label>
         <label>Condition / Activity<input id="npc_state_delta_edit_status" class="text_pole" value="${editorValue(npc.status)}"></label>
-        <label class="npc-state-delta-editor-wide">Important memories <small>Max 5 · one per line</small><textarea id="npc_state_delta_edit_memories" class="text_pole" rows="5">${editorValue((npc.memories || []).join('\n'))}</textarea></label>
+        <label class="npc-state-delta-editor-wide">Lived memories <small>One per line · level: event =&gt; effect · levels defining / significant / minor · start with * to pin</small><textarea id="npc_state_delta_edit_memories" class="text_pole" rows="6">${editorValue(episodesToEditorText(npc))}</textarea></label><label class="npc-state-delta-editor-wide">Intentions <small>Open plans, promises, unresolved problems · one per line · what | due</small><textarea id="npc_state_delta_edit_intentions" class="text_pole" rows="3">${editorValue(intentionsToEditorText(npc))}</textarea></label>
         <label class="npc-state-delta-editor-wide">Knowledge <small>One per line · knows: learned on-page · secret: knows and conceals · unaware: must not know</small><textarea id="npc_state_delta_edit_knowledge" class="text_pole" rows="5">${editorValue(knowledgeToEditorText(npc.knowledge))}</textarea></label>
         ${(() => { const sheetFields = sheetToEditor(npc.sheet); return `<h4 class="npc-state-delta-editor-wide">Stat sheet <small>Shown on the Stat tab. One entry per line.</small></h4><label>Class / archetype<input id="npc_state_delta_edit_sheet_archetype" class="text_pole" value="${editorValue(sheetFields.archetype)}"></label><label>Rank / level<input id="npc_state_delta_edit_sheet_rank" class="text_pole" value="${editorValue(sheetFields.rank)}"></label>${SHEET_EDITOR_FIELDS.map(field => `<label class="npc-state-delta-editor-wide">${field.label} <small>${field.hint}</small><textarea id="npc_state_delta_edit_sheet_${field.key}" class="text_pole" rows="3">${editorValue(sheetFields[field.key])}</textarea></label>`).join('')}`; })()}
       </div>
@@ -5540,7 +5542,9 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     next.location = String(editorField('npc_state_delta_edit_location')).trim().slice(0, 300);
     next.goal = String(editorField('npc_state_delta_edit_goal')).trim().slice(0, 500);
     next.status = String(editorField('npc_state_delta_edit_status')).trim().slice(0, 300);
-    next.memories = cleanEditorList(editorField('npc_state_delta_edit_memories'), IMPORTANT_MEMORY_LIMIT);
+    next.episodes = episodesFromEditorText(editorField('npc_state_delta_edit_memories'), current.episodes);
+    next.intentions = intentionsFromEditorText(editorField('npc_state_delta_edit_intentions'), current.intentions);
+    next.memories = next.episodes.map(item => item.event).slice(-IMPORTANT_MEMORY_LIMIT);
     next.knowledge = knowledgeFromEditorText(editorField('npc_state_delta_edit_knowledge'), current.knowledge);
     next.sheet = sheetFromEditor({
         archetype: editorField('npc_state_delta_edit_sheet_archetype'),
@@ -5576,11 +5580,11 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
             turn: Number.isFinite(Number(state.turn)) ? Number(state.turn) : null,
         };
     }
-    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge', 'sheet'];
+    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge', 'sheet', 'episodes', 'intentions'];
     if (document.getElementById('npc_state_delta_edit_lock_profile')?.checked) {
         const locks = new Set(current.manualProfileFields || []);
         for (const key of stableKeys) {
-            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge' || key === 'sheet';
+            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge' || key === 'sheet' || key === 'episodes' || key === 'intentions';
             const before = listField ? JSON.stringify(current[key] || []) : String(current[key] || '');
             const after = listField ? JSON.stringify(next[key] || []) : String(next[key] || '');
             if (before !== after) locks.add(key);

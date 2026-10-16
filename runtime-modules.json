@@ -13,6 +13,7 @@
     { "path": "core.js", "role": "core-facade", "required": true },
     { "path": "core-mechanics.js", "role": "core-mechanics", "required": true },
     { "path": "knowledge.js", "role": "knowledge-ledger-and-gating", "required": true },
+    { "path": "memory.js", "role": "episodic-memory-and-intentions", "required": true },
     { "path": "cast.js", "role": "cast-resolution-roles-and-canon", "required": true },
     { "path": "sheet.js", "role": "stat-sheet-items-and-conditions", "required": true },
     { "path": "canon-seed.js", "role": "canon-field-seeding-and-locks", "required": true },

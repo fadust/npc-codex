@@ -7,6 +7,7 @@ import {
     renderKnowledgeGate,
     scannerKnowledgeContext,
 } from './knowledge.js';
+import { normalizeEpisodes, normalizeIntentions, applyMemoryDecision, renderMemoryInjection } from './memory.js';
 import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
 import { emptySheet, normalizeSheet, readSheetDelta, sheetDeltaIsEmpty, applySheetDelta, sheetIsEmpty, renderSheetInjection } from './sheet.js';
 import { normalizeCanonSeed, normalizeCanonLocked, enforceCanonLocks } from './canon-seed.js';
@@ -3205,6 +3206,7 @@ export function normalizeScanNpc(raw = {}, options = {}) {
         memories: semanticDedupeItems(cleanList(raw.memories, Math.max(6, memoryInputLimit * 2), DURABLE_PROFILE_LIMITS.memory), { maxItems: memoryInputLimit, maxChars: DURABLE_PROFILE_LIMITS.memory, similarity: 0.58 }),
         memoryRetention: semanticDedupeItems(cleanList(raw.memoryRetention ?? raw.memory_retention, IMPORTANT_MEMORY_LIMIT * 2, DURABLE_PROFILE_LIMITS.memory), { maxItems: IMPORTANT_MEMORY_LIMIT, maxChars: DURABLE_PROFILE_LIMITS.memory, similarity: 0.58 }),
         knowledge: readScanKnowledge(raw),
+        ...(raw.memoryDecision && typeof raw.memoryDecision === 'object' ? { memoryDecision: raw.memoryDecision } : {}),
         roles: normalizeRoles(raw.roles),
         canonRef: normalizeCanonRef(raw.canonRef ?? raw.canon_ref),
         sheetDelta: readSheetDelta(raw.sheetDelta ?? raw.sheet_delta),
@@ -3721,6 +3723,8 @@ export function normalizeNpcRecord(raw = {}) {
     npc.portraitSeed = normalizePortraitSeed(raw.portraitSeed ?? raw.portrait_seed);
     npc.aliases = cleanList(raw.aliases, 8, 120);
     npc.memories = normalizeStoredMemories(raw.memories);
+    npc.episodes = normalizeEpisodes(raw.episodes, npc.memories);
+    npc.intentions = normalizeIntentions(raw.intentions);
     npc.knowledge = normalizeKnowledge(raw.knowledge);
     npc.roles = normalizeRoles(raw.roles);
     npc.canonRef = normalizeCanonRef(raw.canonRef);
@@ -3822,6 +3826,8 @@ export function createNpcRecord(name, existingIds = [], baseline = DEFAULT_RELAT
         status: '',
         memories: [],
         knowledge: [],
+        episodes: [],
+        intentions: [],
         roles: [],
         canonRef: null,
         sheet: emptySheet(),
@@ -4208,6 +4214,11 @@ function applyIncoming(existing, incoming, turn, relationshipCaps = DEFAULT_RELA
         merged.identityKind = inferNpcIdentityKind(merged.name, incoming.identityKind);
     }
     merged.memories = mergeImportantMemories(existing.memories, incoming.memories, incoming.memoryRetention, lifecycleOptions.memoryInputLimit || 3);
+    if (incoming.memoryDecision && !manualFields.has('memories')) {
+        const remembered = applyMemoryDecision(merged, incoming.memoryDecision, { turn, sourceMessageId });
+        merged.episodes = remembered.npc.episodes;
+        merged.intentions = remembered.npc.intentions;
+    }
     merged.knowledge = manualFields.has('knowledge')
         ? normalizeKnowledge(existing.knowledge)
         : mergeKnowledge(existing.knowledge, incoming.knowledge, { sourceMessageId, turn });
@@ -5257,6 +5268,8 @@ function mergeAliasLinkedNpcPair(a, b) {
     }
     merged.memories = normalizeStoredMemories([...(a.memories || []), ...(b.memories || [])]);
     merged.knowledge = normalizeKnowledge([...(a.knowledge || []), ...(b.knowledge || [])]);
+    merged.episodes = normalizeEpisodes([...normalizeEpisodes(a.episodes, a.memories), ...normalizeEpisodes(b.episodes, b.memories)].map(({ id, ...rest }) => rest));
+    merged.intentions = normalizeIntentions([...normalizeIntentions(a.intentions), ...normalizeIntentions(b.intentions)].map(({ id, ...rest }) => rest));
     merged.roles = normalizeRoles([...(a.roles || []), ...(b.roles || [])]);
     merged.canonRef = normalizeCanonRef(a.canonRef) || normalizeCanonRef(b.canonRef);
     merged.sheet = sheetIsEmpty(a.sheet) ? normalizeSheet(b.sheet) : normalizeSheet(a.sheet);
@@ -5830,13 +5843,16 @@ function clauseBoundedInjection(text, room) {
     return boundary >= labelEnd + 20 ? cut.slice(0, boundary) : '';
 }
 
-function injectionOptionalFields(npc, includeAppearance = false) {
-    const importantMemories = cleanList(npc.memories, IMPORTANT_MEMORY_LIMIT, 220);
+function injectionOptionalFields(npc, includeAppearance = false, turn = null) {
+    // Episodes replace the old flat memory list; dossiers without episodes keep the old line.
+    const livedMemories = renderMemoryInjection(npc, { turn });
+    const importantMemories = livedMemories ? [] : cleanList(npc.memories, IMPORTANT_MEMORY_LIMIT, 220);
     const appearanceVariants = includeAppearance ? injectionAppearanceVariants(npc) : [];
     return [
         appearanceVariants.length && appearanceVariants,
         includeAppearance && !npc.appearance && (npc.currentForm || npc.currentFormUnknown) && 'Current visible appearance is not established; do not infer anatomy from species or another form.',
         renderSheetInjection(npc.sheet),
+        livedMemories,
         importantMemories.length && `important memories: ${importantMemories.join(' | ')}`,
         npc.species && `species/race: ${npc.species}`,
         npc.gender && `gender: ${normalizeGender(npc.gender)}`,
@@ -5931,7 +5947,7 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
     // starve another. Relationship summary is deliberately late: live identity/state already won priority.
     // Resolved appearance uses the same optional budget as other continuity. It must not
     // shrink the essential identity/agency budget or be spliced ahead of characterization.
-    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance));
+    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null));
     const enriched = essentialBlocks.slice();
     const maxPriority = Math.max(0, ...optionalByNpc.map(fields => fields.length));
     for (let priority = 0; priority < maxPriority; priority++) {

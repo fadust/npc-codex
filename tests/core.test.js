@@ -1527,7 +1527,7 @@ test('generation injection includes the retained Important Memories as high-prio
         'Myla discovered the guildmaster forged the quota ledger.',
     ];
     const injection = buildInjection([npc], 'Myla Fenn enters the room.', 10, 1, 'CUSTOM BEHAVIOR RUBRIC', 1800);
-    assert.match(injection, /important memories:/i);
+    assert.match(injection, /lived memories \(let them colour behaviour; never recite\):/i);
     for (const memory of npc.memories) assert.ok(injection.includes(memory), `missing injected memory: ${memory}`);
 });
 
