@@ -1,6 +1,10 @@
 /* NPC State Delta dossier surface: bounded presentation of canonical state. */
 import { appearanceFingerprint, currentPresentationText, normalizeAppearanceModel, resolveNpcAppearance } from './appearance.js';
 import { formatBirthDate } from './birthday.js';
+import { normalizeKnowledge } from './knowledge.js';
+import { normalizeSheet } from './sheet.js';
+
+const KNOWLEDGE_LABELS = Object.freeze({ knows: 'Knows', secret: 'Secret', unaware: 'Does not know' });
 
 const ROOT_ID = 'npc_state_delta_dossier_root';
 const OPEN_REQUEST_GUARD = '__npcStateDeltaOpenDossierRequests';
@@ -150,6 +154,10 @@ export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortr
         mannerisms: stringList(npc?.mannerisms, 10),
         background: plain(npc?.background),
         memories: stringList(npc?.memories, 8),
+        sheet: normalizeSheet(npc?.sheet),
+        canonSeed: npc?.canonSeed && typeof npc.canonSeed === 'object' ? { entry: plain(npc.canonSeed.entry), source: npc.canonSeed.world === 'card' ? 'card' : 'lorebook', fields: stringList(npc.canonSeed.fields, 10) } : null,
+        canonLocked: stringList(npc?.canonLocked, 10),
+        knowledge: normalizeKnowledge(npc?.knowledge).map(entry => `${KNOWLEDGE_LABELS[entry.kind]}: ${entry.fact}${entry.from ? ` (from ${entry.from})` : ''}`),
         keyRelationships: stringList(npc?.keyRelationships, 12),
         relationshipSummary: plain(npc?.relationshipSummary),
         lastRelationshipChange: relationshipChangeProjection(npc?.lastRelationshipChange),
@@ -481,7 +489,7 @@ class DeltaDossierUi {
             </button>
             <section class="delta-panel" role="dialog" aria-modal="true" aria-label="NPC State Delta dossiers" tabindex="-1" hidden>
                 <header class="delta-topbar">
-                    <div class="delta-brand"><span class="delta-kicker">NPC DOSSIER</span><strong>NPC State Delta</strong><span class="delta-chat-state"></span></div>
+                    <div class="delta-brand"><span class="delta-kicker">NPC DOSSIER</span><strong>NPC Codex</strong><span class="delta-chat-state"></span></div>
                     <div class="delta-top-actions">
                         <button type="button" class="delta-btn delta-open-settings">Settings</button>
                         <button type="button" class="delta-btn delta-close" aria-label="Close NPC dossiers">Close</button>
@@ -891,8 +899,12 @@ class DeltaDossierUi {
                 <div><h3>Important bonds${changedMark(selected, 'keyRelationships')}</h3>${listHtml(selected.keyRelationships, 'No key relationships established yet.')}</div>
                 <div><h3>Important memories${changedMark(selected, 'memories')}</h3>${listHtml(selected.memories, 'No important memories established yet.')}</div>
             </section>
+            <section class="delta-section" data-delta-section="knowledge">
+                <h3>Knowledge${changedMark(selected, 'knowledge')}</h3>${listHtml(selected.knowledge, 'No tracked knowledge yet.')}
+            </section>
             <section class="delta-section" data-delta-section="history">
                 <h3>Background / History${changedMark(selected, 'background')}</h3>${proseHtml(selected.background, 'No background established yet.')}
+                ${selected.canonSeed ? `<p class="delta-muted">Seeded from ${selected.canonSeed.source} canon${selected.canonSeed.entry ? ` (${escapeHtml(selected.canonSeed.entry)})` : ''}: ${escapeHtml(selected.canonSeed.fields.join(', ') || 'nothing')}.${selected.canonLocked.length ? ` Canon-locked: ${escapeHtml(selected.canonLocked.join(', '))}.` : ''}</p>` : ''}
             </section>`, documentPane.dataset.npcId !== selected.id);
         documentPane.dataset.npcId = selected.id;
         documentPane.scrollTop = documentScroll;

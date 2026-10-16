@@ -269,7 +269,7 @@ function birthdayUpdateRow(ordinaryRow, profileRow) {
 const CHANGE_TRACKED_FIELDS = Object.freeze([
     'mood', 'location', 'goal', 'status', 'homeBase', 'age', 'apparentAge', 'lifeState',
     'personality', 'speech', 'behaviorProfile', 'mannerisms', 'appearance',
-    'relationship', 'relationshipSummary', 'background', 'keyRelationships', 'memories', 'birthDate',
+    'relationship', 'relationshipSummary', 'background', 'keyRelationships', 'memories', 'knowledge', 'sheet', 'birthDate',
 ]);
 
 export function normalizeFieldChanges(value) {

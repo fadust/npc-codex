@@ -268,7 +268,29 @@ export function inverseSocialRelation(value) {
     return inverseSingleRelation(text);
 }
 
+// fadust fork: qualifiers that describe the tie itself survive the mirror. A former tie is former
+// from both sides ("ex-wife" -> "ex-spouse", not a current "spouse"), and sibling seniority flips
+// ("younger brother" -> "older sibling"). Ordinals ("first student") and "late" describe one side
+// only, so they are not mirrored.
+const MIRRORED_STATUS = /\b(ex|former|estranged|divorced|separated|one-time|onetime)\b/i;
+const SENIORITY_FLIP = [[/\b(?:older|oldest|elder|eldest|big)\b/i, 'younger'], [/\b(?:younger|youngest|little|baby|kid)\b/i, 'older']];
+
 function inverseSingleRelation(value) {
+    const base = inverseSingleRelationBase(value);
+    if (!base) return '';
+    const rel = clean(value, 180);
+    const family = socialRelationFamily(rel);
+    let out = base;
+    if (family === 'sibling' && !/\btwin\b/i.test(rel)) {
+        const flip = SENIORITY_FLIP.find(([pattern]) => pattern.test(rel));
+        if (flip && !new RegExp(`\\b${flip[1]}\\b`, 'i').test(out)) out = `${flip[1]} ${out}`;
+    }
+    const status = rel.match(MIRRORED_STATUS)?.[1]?.toLowerCase();
+    if (status && !new RegExp(`\\b${status}\\b`, 'i').test(out)) out = status === 'ex' ? `ex-${out}` : `${status} ${out}`;
+    return out;
+}
+
+function inverseSingleRelationBase(value) {
     const rel = clean(value, 180);
     const family = socialRelationFamily(rel);
     if (!family) return '';
@@ -705,6 +727,26 @@ function edgeDirectionGrounded(a, b, aToB, bToA, text = '') {
     return givenScore - swappedScore;
 }
 
+// Comparable age in years from chronological age, else apparent age ("~44"); null when unknown.
+function comparableAge(npc) {
+    for (const value of [npc?.age, npc?.apparentAge]) {
+        const match = String(value ?? '').match(/\d{1,3}/);
+        if (match) return Number(match[0]);
+    }
+    return null;
+}
+
+// fadust fork: a parent is older than their child. When both ages are known and the stated
+// direction says otherwise (scanners often swap the "b's role to a" convention), flip it.
+function edgeDirectionContradictsAges(a, b, aToB) {
+    const family = socialRelationFamily(aToB);
+    if (!['child', 'parent', 'grandchild', 'grandparent'].includes(family)) return false;
+    const ageA = comparableAge(a), ageB = comparableAge(b);
+    if (ageA == null || ageB == null || Math.abs(ageA - ageB) < 12) return false;
+    const bIsElder = family === 'parent' || family === 'grandparent';
+    return bIsElder ? ageB < ageA : ageB > ageA;
+}
+
 function parseScanEdges(scanResult = {}, npcs = [], meta = {}) {
     const raw = scanResult?.keyRelationshipEdges ?? scanResult?.key_relationship_edges ?? scanResult?.socialRelationships ?? scanResult?.social_relationships ?? [];
     const out = [];
@@ -726,6 +768,12 @@ function parseScanEdges(scanResult = {}, npcs = [], meta = {}) {
         const reasonText = clean(item?.reason ?? item?.evidence, 300);
         const edgeGrounded = edgeDirectionGrounded(a, b, aToB, bToA, reasonText || meta.developmentContext || '');
         if (swapped > asGiven && edgeGrounded <= 0) {
+            [aToB, bToA] = [bToA, aToB];
+            [aDynamic, bDynamic] = [bDynamic, aDynamic];
+        }
+        // Known ages outrank earlier scanner-written relations (which may carry the same swap);
+        // only narration that states the direction outright wins over them.
+        if (edgeGrounded <= 0 && bToA && edgeDirectionContradictsAges(a, b, aToB)) {
             [aToB, bToA] = [bToA, aToB];
             [aDynamic, bDynamic] = [bDynamic, aDynamic];
         }

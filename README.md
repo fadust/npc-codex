@@ -1,4 +1,19 @@
-# NPC State Delta v1.1.5
+# NPC Codex v1.1.5
+
+**NPC Codex is a fork of [NPC State Delta](https://github.com/kohz87/npc_state_delta) by kohz87**, extended by fadust. It keeps NPC State Delta's dossiers, evidence rules and swipe-safe rollback, and adds:
+
+- **Knowledge ledger and gating.** Each NPC records what they know, keep secret, or must not know. The injection starts each NPC's line with a hard knowledge gate.
+- **Cast resolution.** References such as "the headmaster", "Martha's older daughter" or "her ex-wife" are resolved canon-first (the card's own canon, then lorebooks), else to an existing dossier, else to a new one. Roles carry an organization and exclusivity.
+- **Stat sheet** (in progress). Class and rank, attributes, pools, conditions, spells, skills, equipment and key items, on a Stat tab beside Dossier and Map.
+
+Licensed under GPL-3.0, like the original. Storage keys and data files keep the original `npc_state_delta` / `npc-state-delta-*` names, so existing dossiers carry over.
+
+The original documentation follows.
+
+---
+
+## About NPC State Delta (original)
+
 
 A SillyTavern extension that keeps a living dossier for every NPC in your roleplay: who they are, how they look, how they talk and behave, what they remember, and how they feel about you. After each reply it scans the story, updates the dossiers carefully, and feeds the present NPCs back to the roleplay model so they stay in character.
 

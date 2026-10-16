@@ -89,6 +89,20 @@ import {
     normalizeFormPortraitAssets,
 } from './core.js';
 import { applyNpcBirthdayUpdate, normalizeBirthDate } from './birthday.js';
+import { knowledgeToEditorText, knowledgeFromEditorText, applyKnowledgeDecisions } from './knowledge.js';
+import { sheetToEditor, sheetFromEditor, SHEET_EDITOR_FIELDS } from './sheet.js';
+import { canonSeedTargets, canonTextFor, buildCanonSeedPrompt, parseCanonSeed, applyCanonSeed, CANON_SEED_SYSTEM_PROMPT } from './canon-seed.js';
+import {
+    castSignals,
+    buildCastShortlist,
+    rankCanonEntries,
+    cardCanonEntries,
+    buildCastPassPrompt,
+    castDecisionsToScan,
+    mergeCastIntoScan,
+    resolveKnowledgeKeys,
+    CAST_PASS_SYSTEM_PROMPT,
+} from './cast.js';
 import {
     encodeNpcStateBundle,
     mergeImportedDossierState,
@@ -2793,6 +2807,13 @@ function syncOpenNpcEditorFields(npc) {
     set('npc_state_delta_edit_goal', npc.goal || '');
     set('npc_state_delta_edit_status', npc.status || '');
     set('npc_state_delta_edit_memories', (npc.memories || []).join('\n'));
+    set('npc_state_delta_edit_knowledge', knowledgeToEditorText(npc.knowledge));
+    {
+        const sheetFields = sheetToEditor(npc.sheet);
+        set('npc_state_delta_edit_sheet_archetype', sheetFields.archetype);
+        set('npc_state_delta_edit_sheet_rank', sheetFields.rank);
+        for (const field of SHEET_EDITOR_FIELDS) set(`npc_state_delta_edit_sheet_${field.key}`, sheetFields[field.key]);
+    }
     set('npc_state_delta_edit_trust', relationshipNumber(npc.relationship?.trust));
     set('npc_state_delta_edit_affection', relationshipNumber(npc.relationship?.affection));
     set('npc_state_delta_edit_desire', relationshipNumber(npc.relationship?.desire));
@@ -2802,7 +2823,7 @@ function syncOpenNpcEditorFields(npc) {
 }
 
 function refreshChangedFields(before, after) {
-    const fields = ['name','role','species','gender','homeBase','age','apparentAge','appearance','personality','speech','behaviorProfile','background','keyRelationships','relationshipSummary','mood','location','goal','status','lifeState','mannerisms','memories'];
+    const fields = ['name','role','species','gender','homeBase','age','apparentAge','appearance','personality','speech','behaviorProfile','background','keyRelationships','relationshipSummary','mood','location','goal','status','lifeState','mannerisms','memories','knowledge','sheet'];
     return fields.filter(field => JSON.stringify(before?.[field] ?? null) !== JSON.stringify(after?.[field] ?? null));
 }
 
@@ -3029,6 +3050,8 @@ async function refreshNpcFromChat(npcId) {
 const SCAN_RESPONSE_LENGTH = 1800;
 const FULL_SCAN_RESPONSE_LENGTH = 3200;
 const RELATIONSHIP_RESPONSE_LENGTH = 900;
+const CAST_RESPONSE_LENGTH = 1400;
+const CANON_SEED_RESPONSE_LENGTH = 700;
 const BACKFILL_RESPONSE_LENGTH = 3200;
 const BACKFILL_MAX_ATTEMPTS = 3;
 const BACKFILL_RETRY_COOLDOWN_MS = 60 * 1000;
@@ -3362,6 +3385,83 @@ function hasCompletePrimaryRelationshipDecision(raw, transcript = '') {
         if (typeof summary !== 'string' || !summary.trim()) return false;
     }
     return true;
+}
+
+// Cast resolution + information flow share one focused request (fadust fork). The broad scanner
+// rarely fills optional fields and misses NPCs referred to by title or tie ("the headmaster",
+// "Martha's older daughter"). Code narrows candidates (names, 1-hop ties, roles, scene location,
+// canon lorebook entries); the model resolves canon entry -> dossier -> new; code validates.
+// Skipped when the exchange carries no cast or information signal; a failure never blocks the scan.
+async function readCanonEntries() {
+    try {
+        const { getSortedEntries } = await import('../../../world-info.js');
+        return typeof getSortedEntries === 'function' ? await getSortedEntries() : [];
+    } catch { return []; }
+}
+
+async function readBaiBaiCast() {
+    try {
+        const snapshot = await globalThis.STBaiBaiBook?.getSnapshot?.();
+        return { location: String(snapshot?.state?.location || ''), npcs: Array.isArray(snapshot?.npcs) ? snapshot.npcs : [] };
+    } catch { return { location: '', npcs: [] }; }
+}
+
+// Canon field seeding (S7.1): the first time a dossier is linked to a canon entry, its base fields
+// are extracted from the full canon text (one small request per newly linked NPC, at most three
+// per scan). The seeds are applied after the merge; a failure never blocks the scan.
+async function runCanonSeeds(ctx, castPass, existingNpcs, options = {}) {
+    const targets = castPass?.cast ? canonSeedTargets(castPass.cast.npcs, existingNpcs) : [];
+    const seeds = [];
+    for (const target of targets) {
+        const canonText = canonTextFor(target.canonRef, castPass.canonSources || {});
+        if (!canonText) continue;
+        try {
+            const { parsed } = await generateParsedNpcJson(ctx, {
+                systemPrompt: CANON_SEED_SYSTEM_PROMPT,
+                prompt: buildCanonSeedPrompt({ name: target.name, canonText }),
+                responseLength: CANON_SEED_RESPONSE_LENGTH,
+                label: 'canon seed',
+                requestScope: options.requestScope,
+            });
+            const { fields, rejected } = parseCanonSeed(parsed, canonText);
+            if (Object.keys(fields).length) seeds.push({ ...target, fields, rejected });
+        } catch (error) {
+            if (isScannerRoutingError(error)) throw error;
+            console.warn('[NPC Codex] canon seed failed; the dossier keeps story-derived fields.', error);
+        }
+    }
+    return seeds;
+}
+
+async function runCastPass(ctx, existingNpcs, transcript, options = {}) {
+    const empty = { cast: null, used: false, responseChars: 0, shortlist: 0, canon: 0 };
+    const npcs = Array.isArray(existingNpcs) ? existingNpcs : [];
+    const knownLabels = npcs.flatMap(npc => [npc?.name, ...(npc?.aliases || [])]).filter(Boolean);
+    const signals = castSignals(transcript, { knownLabels, userName: ctx.name1 || '', charName: ctx.name2 || '' });
+    if (!signals.any) return empty;
+    const [baibai, entries] = await Promise.all([readBaiBaiCast(), readCanonEntries()]);
+    const shortlist = buildCastShortlist({ npcs, transcript, sceneLocation: baibai.location, baibaiNpcs: baibai.npcs });
+    // Card canon (this story's own definitions, possibly an AU) ranks ahead of lorebook canon.
+    const card = Number.isInteger(Number(ctx.characterId)) ? ctx.characters?.[ctx.characterId] : null;
+    const cardText = [card?.description, card?.scenario].filter(Boolean).join('\n');
+    const cardEntries = cardCanonEntries(cardText);
+    const canon = rankCanonEntries([...cardEntries, ...entries], transcript, { npcs, exclude: [ctx.name1, ctx.name2] });
+    if (!shortlist.length && !canon.length && !signals.unknownNames.length && !signals.tiePhrases.length && !signals.titlePhrases.length) return empty;
+    try {
+        const { parsed, raw } = await generateParsedNpcJson(ctx, {
+            systemPrompt: CAST_PASS_SYSTEM_PROMPT,
+            prompt: buildCastPassPrompt({ transcript, shortlist, canon, signals, userName: ctx.name1 || 'User', charName: ctx.name2 || 'Character' }),
+            responseLength: CAST_RESPONSE_LENGTH,
+            label: 'cast pass',
+            requestScope: options.requestScope,
+        });
+        const cast = castDecisionsToScan(parsed, { transcript, npcs, canon, userName: ctx.name1 || '', charName: ctx.name2 || '' });
+        return { cast, used: true, responseChars: String(raw ?? '').length, shortlist: shortlist.length, canon: canon.length, canonSources: { entries, cardEntries } };
+    } catch (error) {
+        if (isScannerRoutingError(error)) throw error;
+        console.warn('[NPC State Delta] cast pass failed; the dossier scan continues without it.', error);
+        return { ...empty, used: true, shortlist: shortlist.length, canon: canon.length };
+    }
 }
 
 async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript, settings, options = {}) {
@@ -3722,6 +3822,8 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             settings,
             { currentExchangeOnly: manual || fullWindowScan, requestScope: operation.requestScope },
         );
+        const castPass = await runCastPass(ctx, state.npcs, currentTranscript || transcript, { requestScope: operation.requestScope });
+        const canonSeeds = await runCanonSeeds(ctx, castPass, state.npcs, { requestScope: operation.requestScope });
         const scanFinishedAt = performance.now?.() ?? Date.now();
         lastScanMetrics = {
             label: manual ? 'manual' : (fullWindowScan ? 'automatic-full' : 'automatic'),
@@ -3733,6 +3835,12 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             relationshipTargets: relationshipPass.targetCount,
             relationshipResponseChars: relationshipPass.responseChars,
             relationshipRetried: relationshipPass.retried,
+            castPass: castPass.used,
+            castShortlist: castPass.shortlist,
+            castCanon: castPass.canon,
+            castResponseChars: castPass.responseChars,
+            castAccepted: castPass.cast?.report?.accepted?.length || 0,
+            castRejected: castPass.cast?.report?.rejected?.length || 0,
             newNpcRelationshipTargets: 0,
             newNpcRelationshipResponseChars: 0,
             relationshipEdges: relationshipEdgeCount,
@@ -3761,7 +3869,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             npc.present = false;
             if (!compactWorldStateTurn) npc.worldActive = false;
         }
-        const merged = mergeScanResult(mergeBaseState, parsedForMerge, {
+        const merged = mergeScanResult(mergeBaseState, castPass.cast ? mergeCastIntoScan(parsedForMerge, castPass.cast) : parsedForMerge, {
             maxNpcs: settings.maxNpcs,
             excludeNames: [...currentExclusions(), ...(state.dismissed || [])],
             turn: state.turn,
@@ -3832,6 +3940,26 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             console.info('[NPC State Delta] dossier scan metrics', lastScanMetrics);
         }
         applyFocusedRelationshipDecisions(merged.state, relationshipPass.decisions, settings.relationshipCaps, targetMessageId, merged.report);
+        if (canonSeeds.length) {
+            const priorIds = new Set((state.npcs || []).map(npc => npc?.id));
+            const seededReport = [];
+            merged.state.npcs = merged.state.npcs.map(npc => {
+                const seed = canonSeeds.find(item => (item.id && item.id === npc?.id) || (!item.id && String(npc?.name || '').toLowerCase() === String(item.name || '').toLowerCase()));
+                if (!npc || !seed || npc.canonSeed) return npc;
+                const applied = applyCanonSeed(npc, seed.fields, { canonRef: npc.canonRef || seed.canonRef, turn: state.turn, isNew: !priorIds.has(npc.id) });
+                if (applied.seeded.length || applied.dropped.length) seededReport.push({ npcId: npc.id, fields: applied.seeded, ...(applied.dropped.length ? { dropped: applied.dropped } : {}) });
+                return applied.npc;
+            });
+            merged.report.canonSeeded = seededReport;
+            if (lastScanMetrics) lastScanMetrics.canonSeeded = seededReport.length;
+        }
+        const castKnowledge = castPass.cast ? resolveKnowledgeKeys(castPass.cast.knowledge, merged.state.npcs) : new Map();
+        if (castKnowledge.size) {
+            const knowledgeApplied = applyKnowledgeDecisions(merged.state.npcs, castKnowledge, { sourceMessageId: targetMessageId, turn: state.turn });
+            merged.state.npcs = knowledgeApplied.npcs;
+            merged.report.knowledgeGuard = [...(merged.report.knowledgeGuard || []), ...knowledgeApplied.changes];
+            if (lastScanMetrics) lastScanMetrics.knowledgeApplied = knowledgeApplied.applied;
+        }
         const postCleanup = applyStaleLifecycleAfterScan(merged.state, parsedForMerge, currentTranscript || transcript, settings);
         const staleArchived = [...preCleanup.archived, ...postCleanup.archived]
             .filter((entry, index, all) => all.findIndex(other => other.id === entry.id) === index);
@@ -4086,7 +4214,7 @@ function buildSettingsHtml() {
     <div id="${UI_ID}" class="extension_container npc-state-delta-extension">
       <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
-          <b>NPC State Delta <span class="npc-state-delta-version">v${NPC_STATE_VERSION}</span></b>
+          <b>NPC Codex <span class="npc-state-delta-version">v${NPC_STATE_VERSION}</span></b>
           <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content npc-state-delta-drawer">
@@ -5011,6 +5139,8 @@ function openNpcEditor(npcId) {
         <label>Goal<input id="npc_state_delta_edit_goal" class="text_pole" value="${editorValue(npc.goal)}"></label>
         <label>Condition / Activity<input id="npc_state_delta_edit_status" class="text_pole" value="${editorValue(npc.status)}"></label>
         <label class="npc-state-delta-editor-wide">Important memories <small>Max 5 · one per line</small><textarea id="npc_state_delta_edit_memories" class="text_pole" rows="5">${editorValue((npc.memories || []).join('\n'))}</textarea></label>
+        <label class="npc-state-delta-editor-wide">Knowledge <small>One per line · knows: learned on-page · secret: knows and conceals · unaware: must not know</small><textarea id="npc_state_delta_edit_knowledge" class="text_pole" rows="5">${editorValue(knowledgeToEditorText(npc.knowledge))}</textarea></label>
+        ${(() => { const sheetFields = sheetToEditor(npc.sheet); return `<h4 class="npc-state-delta-editor-wide">Stat sheet <small>Shown on the Stat tab. One entry per line.</small></h4><label>Class / archetype<input id="npc_state_delta_edit_sheet_archetype" class="text_pole" value="${editorValue(sheetFields.archetype)}"></label><label>Rank / level<input id="npc_state_delta_edit_sheet_rank" class="text_pole" value="${editorValue(sheetFields.rank)}"></label>${SHEET_EDITOR_FIELDS.map(field => `<label class="npc-state-delta-editor-wide">${field.label} <small>${field.hint}</small><textarea id="npc_state_delta_edit_sheet_${field.key}" class="text_pole" rows="3">${editorValue(sheetFields[field.key])}</textarea></label>`).join('')}`; })()}
       </div>
       <div class="npc-state-delta-editor-stats">
         <label>Trust<input id="npc_state_delta_edit_trust" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.trust)}"></label>
@@ -5411,6 +5541,14 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     next.goal = String(editorField('npc_state_delta_edit_goal')).trim().slice(0, 500);
     next.status = String(editorField('npc_state_delta_edit_status')).trim().slice(0, 300);
     next.memories = cleanEditorList(editorField('npc_state_delta_edit_memories'), IMPORTANT_MEMORY_LIMIT);
+    next.knowledge = knowledgeFromEditorText(editorField('npc_state_delta_edit_knowledge'), current.knowledge);
+    next.sheet = sheetFromEditor({
+        archetype: editorField('npc_state_delta_edit_sheet_archetype'),
+        rank: editorField('npc_state_delta_edit_sheet_rank'),
+        ...Object.fromEntries(SHEET_EDITOR_FIELDS.map(field => [field.key, editorField(`npc_state_delta_edit_sheet_${field.key}`)])),
+    }, current.sheet);
+    // A manual edit takes a canon-locked field over: the player's own lock decides from then on.
+    next.canonLocked = (Array.isArray(current.canonLocked) ? current.canonLocked : []).filter(key => JSON.stringify(current[key] ?? '') === JSON.stringify(next[key] ?? ''));
     next.relationship = {
         trust: clampEditorRelationshipStat('npc_state_delta_edit_trust'),
         affection: clampEditorRelationshipStat('npc_state_delta_edit_affection'),
@@ -5438,11 +5576,11 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
             turn: Number.isFinite(Number(state.turn)) ? Number(state.turn) : null,
         };
     }
-    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships'];
+    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge', 'sheet'];
     if (document.getElementById('npc_state_delta_edit_lock_profile')?.checked) {
         const locks = new Set(current.manualProfileFields || []);
         for (const key of stableKeys) {
-            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships';
+            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge' || key === 'sheet';
             const before = listField ? JSON.stringify(current[key] || []) : String(current[key] || '');
             const after = listField ? JSON.stringify(next[key] || []) : String(next[key] || '');
             if (before !== after) locks.add(key);
