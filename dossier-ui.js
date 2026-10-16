@@ -154,6 +154,9 @@ export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortr
         mannerisms: stringList(npc?.mannerisms, 10),
         background: plain(npc?.background),
         memories: (Array.isArray(npc?.episodes) && npc.episodes.length ? npc.episodes.map(item => `${item.pinned ? '📌 ' : ''}${item.level === 'defining' ? '★ ' : ''}${plain(item.event)}${item.effect ? ` → ${plain(item.effect)}` : ''}`) : stringList(npc?.memories, 8)).slice(-12),
+        beliefs: (Array.isArray(npc?.beliefs) ? npc.beliefs : []).map(item => `${item.about && item.about !== 'world' ? `about ${plain(item.about)}: ` : ''}${plain(item.belief)}`),
+        likes: stringList(npc?.likes, 8),
+        dislikes: stringList(npc?.dislikes, 8),
         intentions: (Array.isArray(npc?.intentions) ? npc.intentions : []).filter(item => item?.status === 'open').map(item => `${plain(item.what)}${item.due ? ` (by ${plain(item.due)})` : ''}`),
         sheet: normalizeSheet(npc?.sheet),
         canonSeed: npc?.canonSeed && typeof npc.canonSeed === 'object' ? { entry: plain(npc.canonSeed.entry), source: npc.canonSeed.world === 'card' ? 'card' : 'lorebook', fields: stringList(npc.canonSeed.fields, 10) } : null,
@@ -898,7 +901,7 @@ class DeltaDossierUi {
             </section>
             <section class="delta-section delta-two-column" data-delta-section="bonds">
                 <div><h3>Important bonds${changedMark(selected, 'keyRelationships')}</h3>${listHtml(selected.keyRelationships, 'No key relationships established yet.')}</div>
-                <div><h3>Important memories${changedMark(selected, 'memories')}</h3>${listHtml(selected.memories, 'No lived memories yet.')}${selected.intentions?.length ? `<h3>Intentions</h3>${listHtml(selected.intentions, '')}` : ''}</div>
+                <div><h3>Important memories${changedMark(selected, 'memories')}</h3>${listHtml(selected.memories, 'No lived memories yet.')}${selected.intentions?.length ? `<h3>Intentions</h3>${listHtml(selected.intentions, '')}` : ''}${selected.beliefs?.length ? `<h3>Beliefs</h3>${listHtml(selected.beliefs, '')}` : ''}${selected.likes?.length ? `<h3>Likes</h3>${listHtml(selected.likes, '')}` : ''}${selected.dislikes?.length ? `<h3>Dislikes</h3>${listHtml(selected.dislikes, '')}` : ''}</div>
             </section>
             <section class="delta-section" data-delta-section="knowledge">
                 <h3>Knowledge${changedMark(selected, 'knowledge')}</h3>${listHtml(selected.knowledge, 'No tracked knowledge yet.')}

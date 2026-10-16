@@ -13,10 +13,10 @@ import { CARD_CANON_WORLD } from './cast.js';
 import { groundedIn } from './sheet.js';
 
 export const CANON_SEED_SYSTEM_PROMPT = "You are NPC Codex's isolated canon extractor. Use only the supplied canon text. Return only the requested JSON object.";
-export const CANON_SEED_FIELDS = Object.freeze(['species', 'gender', 'age', 'apparentAge', 'overallAppearance', 'personality', 'speech', 'background']);
+export const CANON_SEED_FIELDS = Object.freeze(['species', 'gender', 'age', 'apparentAge', 'overallAppearance', 'personality', 'speech', 'background', 'likes', 'dislikes']);
 // Fields that stay canon-locked after seeding. Gender/age/species are identity anchors as well.
 export const CANON_LOCKABLE = Object.freeze(['species', 'gender', 'overallAppearance', 'personality', 'speech', 'background']);
-const LIMITS = { species: 120, gender: 10, age: 40, apparentAge: 20, overallAppearance: 500, personality: 280, speech: 240, background: 320 };
+const LIMITS = { species: 120, gender: 10, age: 40, apparentAge: 20, overallAppearance: 500, personality: 280, speech: 240, background: 320, likes: 200, dislikes: 200 };
 const CANON_TEXT_MAX = 2500;
 export const CANON_SEED_PER_SCAN = 3;
 
@@ -70,8 +70,8 @@ export function canonSeedTargets(castRows, npcs, limit = CANON_SEED_PER_SCAN) {
 export function buildCanonSeedPrompt({ name, canonText }) {
     return `Private canon extractor.
 From the CANON TEXT only, extract base dossier fields for ${name}. Copy wording from the text where possible. Leave a field "" when the text does not state it; never infer from race, name or genre. Describe ${name} only: never give them a title or trait the text gives someone else.
-Fields: species (literal), gender (male|female only if explicit), age (chronological, as stated), apparentAge (visual age cue like ~40, only if stated), overallAppearance (enduring body: build, hair, eyes, marks; not clothing), personality (established traits), speech (how they talk), background (role, history, affiliations; max 320 chars).
-JSON only: {"species":"","gender":"","age":"","apparentAge":"","overallAppearance":"","personality":"","speech":"","background":""}
+Fields: species (literal), gender (male|female only if explicit), age (chronological, as stated), apparentAge (visual age cue like ~40, only if stated), overallAppearance (enduring body: build, hair, eyes, marks; not clothing), personality (established traits), speech (how they talk), background (role, history, affiliations; max 320 chars), likes / dislikes (stated preferences, separated by ;).
+JSON only: {"species":"","gender":"","age":"","apparentAge":"","overallAppearance":"","personality":"","speech":"","background":"","likes":"","dislikes":""}
 
 CANON TEXT:
 ${String(canonText || '').trim()}`;
@@ -134,7 +134,7 @@ export function applyCanonSeed(npc, fields, { canonRef = null, turn = null, isNe
         if (key !== 'gender' && titleContradictsGender(value, gender)) { dropped.push(key); continue; }
         const current = String(next[key] ?? '').trim();
         if (current && !isNew) continue;
-        next[key] = value;
+        next[key] = key === 'likes' || key === 'dislikes' ? value.split(/[;,]/).map(item => item.trim()).filter(Boolean).slice(0, 8) : value;
         seeded.push(key);
     }
     // The current outfit is story state; it only borrows canon's look while nothing else is known.

@@ -15,7 +15,7 @@ export const RECALL_DEFAULTS = Object.freeze({
     source: 'vllm',
     model: 'text-embedding-embeddinggemma-2',
     topK: 24,
-    minScore: 0.45,
+    minScore: 0.3,
     timeoutMs: 8000,
 });
 const BASE = '/api/plugins/similharity';
@@ -127,7 +127,23 @@ export async function syncRecallIndex(npcs, chatKey, cfg, transport) {
     return { inserted: items.length, deleted: stale.length };
 }
 
-// Similarity of each memory key to the scene: Map key -> score (only scores >= minScore).
+// Embedding models score everything in one story close together (embeddinggemma, measured live:
+// 0.60-0.80 for every memory, an unrelated scene still reaching 0.68). The signal is how far a
+// memory stands ABOVE the rest for this scene: relevant ones sat +0.08..0.10 over the median,
+// unrelated scenes' best only +0.03..0.04. Relevance = (score - median - margin) / span, 0..1.
+export const RELATIVE_MARGIN = 0.03;
+export const RELATIVE_SPAN = 0.07;
+const SMALL_POOL_BASELINE = 0.65;
+
+export function relativeRelevance(scores) {
+    const list = scores.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!list.length) return () => 0;
+    const mid = Math.floor(list.length / 2);
+    const median = list.length >= 3 ? (list.length % 2 ? list[mid] : (list[mid - 1] + list[mid]) / 2) : SMALL_POOL_BASELINE;
+    return score => Math.max(0, Math.min(1, (score - median - RELATIVE_MARGIN) / RELATIVE_SPAN));
+}
+
+// Relevance of each memory key to the scene: Map key -> 0..1 (only keys above the pack).
 export async function queryRecallScores(npcs, chatKey, sceneText, cfg, transport) {
     if (!cfg?.enabled || !chatKey || !String(sceneText || '').trim()) return new Map();
     await ensureBackend(transport, cfg);
@@ -140,10 +156,14 @@ export async function queryRecallScores(npcs, chatKey, sceneText, cfg, transport
         threshold: cfg.minScore,
         filters: { chatId: chatKey },
     }, cfg.timeoutMs);
+    const hits = (Array.isArray(result?.results) ? result.results : [])
+        .map(hit => ({ point: want.get(Number(hit?.hash)), score: Number(hit?.score) }))
+        .filter(hit => hit.point && Number.isFinite(hit.score) && hit.score >= cfg.minScore);
+    const relevance = relativeRelevance(hits.map(hit => hit.score));
     const scores = new Map();
-    for (const hit of Array.isArray(result?.results) ? result.results : []) {
-        const point = want.get(Number(hit?.hash));
-        if (point && Number(hit?.score) >= cfg.minScore) scores.set(point.key, Math.max(scores.get(point.key) || 0, Number(hit.score)));
+    for (const hit of hits) {
+        const value = relevance(hit.score);
+        if (value > 0) scores.set(hit.point.key, Math.max(scores.get(hit.point.key) || 0, value));
     }
     return scores;
 }

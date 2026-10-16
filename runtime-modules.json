@@ -15,6 +15,7 @@
     { "path": "knowledge.js", "role": "knowledge-ledger-and-gating", "required": true },
     { "path": "memory.js", "role": "episodic-memory-and-intentions", "required": true },
     { "path": "recall-index.js", "role": "vector-memory-recall", "required": true },
+    { "path": "reflection.js", "role": "memory-reflection-beliefs-preferences", "required": true },
     { "path": "cast.js", "role": "cast-resolution-roles-and-canon", "required": true },
     { "path": "sheet.js", "role": "stat-sheet-items-and-conditions", "required": true },
     { "path": "canon-seed.js", "role": "canon-field-seeding-and-locks", "required": true },
