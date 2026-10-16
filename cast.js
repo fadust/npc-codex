@@ -23,6 +23,7 @@ import { memoryContext, readMemoryDecision, readEventDecisions } from './memory.
 import { readStanceDecisions } from './stance.js';
 import { applySchemaToDelta, schemaPromptLine } from './schema.js';
 import { capPoolChanges } from './trust.js';
+import { renderFlorisReadout } from './floris.js';
 
 export const CAST_PASS_SYSTEM_PROMPT = "You are NPC State Delta's isolated cast and knowledge evaluator. Use only the supplied candidates, canon entries and current exchange. Return only the requested JSON object.";
 export const ROLE_LIMIT = 6;
@@ -288,6 +289,7 @@ export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation =
                 ...(npc.lifeState && npc.lifeState !== 'unknown' ? { lifeState: npc.lifeState } : {}),
                 ...(npc.canonRef ? { canon: `canon:${npc.canonRef.world}#${npc.canonRef.uid}` } : {}),
                 ...(npc.canonSeed ? { seeded: true } : {}),
+                ...(renderFlorisReadout(npc) ? { floris: renderFlorisReadout(npc) } : {}),
                 ...(normalizeKnowledge(npc.knowledge).length ? { existingKnowledge: scannerKnowledgeContext(npc, 6) } : {}),
                 ...(sheetContext(npc.sheet) ? { sheet: sheetContext(npc.sheet) } : {}),
                 ...memoryContext(npc),

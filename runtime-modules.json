@@ -19,6 +19,7 @@
     { "path": "stance.js", "role": "temperament-and-npc-stances", "required": true },
     { "path": "schema.js", "role": "per-world-stat-schema", "required": true },
     { "path": "trust.js", "role": "provenance-presence-and-caps", "required": true },
+    { "path": "floris.js", "role": "floris-readout-ingest", "required": true },
     { "path": "cast.js", "role": "cast-resolution-roles-and-canon", "required": true },
     { "path": "sheet.js", "role": "stat-sheet-items-and-conditions", "required": true },
     { "path": "canon-seed.js", "role": "canon-field-seeding-and-locks", "required": true },
