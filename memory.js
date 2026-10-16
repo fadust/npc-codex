@@ -56,6 +56,7 @@ export function normalizeEpisode(raw) {
         ...(Array.isArray(raw.witnesses) && raw.witnesses.length ? { witnesses: [...new Set(raw.witnesses.map(item => cleanText(item, LIMITS.with)).filter(Boolean))].slice(0, 8) } : {}),
         ...(cleanText(raw.toldBy, LIMITS.with) ? { toldBy: cleanText(raw.toldBy, LIMITS.with) } : {}),
         ...(raw.secret === true ? { secret: true } : {}),
+        ...(raw.reflected === true ? { reflected: true } : {}),
         ...(Number.isInteger(raw.turn) ? { turn: raw.turn } : {}),
         ...(Number.isInteger(raw.sourceMessageId) ? { sourceMessageId: raw.sourceMessageId } : {}),
         ...(raw.pinned === true ? { pinned: true } : {}),
@@ -412,7 +413,10 @@ export function renderMemoryInjection(npc, { turn = null, limit = 5, text = '', 
     const similar = item => (vector instanceof Map ? Number(vector.get(item.eventId || `${npc?.id}:${item.id}`)) || 0 : 0);
     const score = item => weight(item, turn) * (1 + relevance(item, scene) + 4 * similar(item));
     const defining = episodes.filter(item => item.level === 'defining' || item.pinned);
-    const rest = episodes.filter(item => !defining.includes(item)).sort((a, b) => score(b) - score(a));
+    // Reflected minor episodes are carried by a belief now: they return only when the scene calls.
+    const rest = episodes.filter(item => !defining.includes(item))
+        .filter(item => !(item.reflected && item.level === 'minor') || relevance(item, scene) > 0 || similar(item) > 0)
+        .sort((a, b) => score(b) - score(a));
     const chosen = [...defining.slice(-3), ...rest].slice(0, Math.max(limit, Math.min(defining.length, 3)));
     const lines = chosen.map(item => {
         const when = relativeTime(turn, item.turn);

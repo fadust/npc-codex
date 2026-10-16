@@ -8,6 +8,7 @@ import {
     scannerKnowledgeContext,
 } from './knowledge.js';
 import { normalizeEpisodes, normalizeIntentions, applyMemoryDecision, renderMemoryInjection } from './memory.js';
+import { normalizeBeliefs, normalizePreferences, renderReflectionInjection } from './reflection.js';
 import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
 import { emptySheet, normalizeSheet, readSheetDelta, sheetDeltaIsEmpty, applySheetDelta, sheetIsEmpty, renderSheetInjection } from './sheet.js';
 import { normalizeCanonSeed, normalizeCanonLocked, enforceCanonLocks } from './canon-seed.js';
@@ -3725,6 +3726,9 @@ export function normalizeNpcRecord(raw = {}) {
     npc.memories = normalizeStoredMemories(raw.memories);
     npc.episodes = normalizeEpisodes(raw.episodes, npc.memories);
     npc.intentions = normalizeIntentions(raw.intentions);
+    npc.beliefs = normalizeBeliefs(raw.beliefs);
+    npc.likes = normalizePreferences(raw.likes);
+    npc.dislikes = normalizePreferences(raw.dislikes);
     npc.knowledge = normalizeKnowledge(raw.knowledge);
     npc.roles = normalizeRoles(raw.roles);
     npc.canonRef = normalizeCanonRef(raw.canonRef);
@@ -3828,6 +3832,9 @@ export function createNpcRecord(name, existingIds = [], baseline = DEFAULT_RELAT
         knowledge: [],
         episodes: [],
         intentions: [],
+        beliefs: [],
+        likes: [],
+        dislikes: [],
         roles: [],
         canonRef: null,
         sheet: emptySheet(),
@@ -5270,6 +5277,9 @@ function mergeAliasLinkedNpcPair(a, b) {
     merged.knowledge = normalizeKnowledge([...(a.knowledge || []), ...(b.knowledge || [])]);
     merged.episodes = normalizeEpisodes([...normalizeEpisodes(a.episodes, a.memories), ...normalizeEpisodes(b.episodes, b.memories)].map(({ id, ...rest }) => rest));
     merged.intentions = normalizeIntentions([...normalizeIntentions(a.intentions), ...normalizeIntentions(b.intentions)].map(({ id, ...rest }) => rest));
+    merged.beliefs = normalizeBeliefs([...normalizeBeliefs(a.beliefs), ...normalizeBeliefs(b.beliefs)].map(({ id, ...rest }) => rest));
+    merged.likes = normalizePreferences([...normalizePreferences(a.likes), ...normalizePreferences(b.likes)]);
+    merged.dislikes = normalizePreferences([...normalizePreferences(a.dislikes), ...normalizePreferences(b.dislikes)]);
     merged.roles = normalizeRoles([...(a.roles || []), ...(b.roles || [])]);
     merged.canonRef = normalizeCanonRef(a.canonRef) || normalizeCanonRef(b.canonRef);
     merged.sheet = sheetIsEmpty(a.sheet) ? normalizeSheet(b.sheet) : normalizeSheet(a.sheet);
@@ -5852,6 +5862,7 @@ function injectionOptionalFields(npc, includeAppearance = false, turn = null, sc
         appearanceVariants.length && appearanceVariants,
         includeAppearance && !npc.appearance && (npc.currentForm || npc.currentFormUnknown) && 'Current visible appearance is not established; do not infer anatomy from species or another form.',
         renderSheetInjection(npc.sheet),
+        renderReflectionInjection(npc, { text: sceneText }),
         livedMemories,
         importantMemories.length && `important memories: ${importantMemories.join(' | ')}`,
         npc.species && `species/race: ${npc.species}`,

@@ -9,6 +9,7 @@ import {
     pointId,
     queryRecallScores,
     recallCollection,
+    relativeRelevance,
     resetRecallSession,
     syncRecallIndex,
 } from '../recall-index.js';
@@ -72,7 +73,7 @@ test('sync writes only new/changed memories and deletes rolled-back ones; query 
 
     transport.hits = [{ hash: pointId('chat:A', 'e1'), score: 0.81 }, { hash: 12345, score: 0.9 }, { hash: pointId('chat:A', 'e1'), score: 0.3 }];
     const scores = await queryRecallScores(cast, 'chat:A', 'the guard at the gate', cfg, transport);
-    assert.deepEqual([...scores], [['e1', 0.81]], 'unknown points are ignored');
+    assert.deepEqual([...scores], [['e1', 1]], 'unknown points are ignored; small pools use the fixed baseline');
 });
 
 test('disabled or empty scene: no requests at all', async () => {
@@ -91,4 +92,16 @@ test('vector similarity surfaces a memory the keywords miss', () => {
     const scene = 'That smelly animal is chewing the tablecloth again.';
     assert.doesNotMatch(renderMemoryInjection(npc, { turn: 35, text: scene }), /goat/);
     assert.match(renderMemoryInjection(npc, { turn: 35, text: scene, vector: new Map([[`${npc.id}:m1`, 0.72]]) }), /goat/);
+});
+
+test('relative relevance, calibrated on live embeddinggemma scores', () => {
+    // Real scores for 7 memories: a badge scene, and an unrelated dragon scene.
+    const badge = [0.757, 0.709, 0.667, 0.661, 0.657, 0.645, 0.635];
+    const dragon = [0.677, 0.672, 0.661, 0.635, 0.633, 0.606, 0.597];
+    const forBadge = relativeRelevance(badge);
+    const forDragon = relativeRelevance(dragon);
+    assert.ok(forBadge(0.757) > 0.9, 'the badge memory stands out');
+    assert.ok(forBadge(0.709) > 0.15 && forBadge(0.709) < 0.5, 'a loosely related memory gets a partial lift');
+    assert.equal(forBadge(0.661), 0, 'the pack gets nothing');
+    assert.ok(forDragon(0.677) < 0.2, 'an unrelated scene lifts nothing much');
 });
