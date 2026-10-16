@@ -18,6 +18,7 @@ import {
     scannerKnowledgeContext,
     KNOWLEDGE_NEW_PER_SCAN,
 } from './knowledge.js';
+import { groundSheetDelta, sheetContext, sheetDeltaIsEmpty } from './sheet.js';
 
 export const CAST_PASS_SYSTEM_PROMPT = "You are NPC State Delta's isolated cast and knowledge evaluator. Use only the supplied candidates, canon entries and current exchange. Return only the requested JSON object.";
 export const ROLE_LIMIT = 6;
@@ -165,6 +166,9 @@ const TIE_WORDS = 'daughters?|sons?|child(?:ren)?|kids?|wi(?:fe|ves)|husbands?|s
 const TIE_QUALIFIERS = '(?:(?:old|new|late|former|ex|first|second|third|fourth|last|\\d+(?:st|nd|rd|th)|eldest|oldest|youngest|older|younger|elder|little|big|baby|twin|half|step|favou?rite|only|best|sworn|estranged|current)[\\s-]+)*';
 const TIE_PHRASE = new RegExp(`\\b((?:[A-Z][\\p{L}'’-]+(?:\\s+[A-Z][\\p{L}'’-]+){0,2})(?:'s|’s)|her|his|their|my|your|our)\\s+${TIE_QUALIFIERS}(?:${TIE_WORDS})\\b`, 'gu');
 const TITLE_PHRASE = /\bthe\s+(?:(?:old|new|former|current|late|young|acting)\s+)?(deputy(?:\s+head(?:\s?master|\s?mistress)?)?|head of house|head ?master|head ?mistress|principal|dean|captain|king|queen|prince|princess|mayor|chief|commander|innkeeper|barkeep|bartender|barista|watchman|guard|priest(?:ess)?|abbot|abbess|lord|lady|duke|duchess|baron|baroness|count|countess|knight|healer|smith|blacksmith|merchant|steward|chancellor|emperor|empress|professor|teacher|librarian|caretaker|keeper|landlord|landlady|owner|boss|manager|director|sheriff|warden|governor|regent|magistrate|elder|matron)\b(?:\s+of\s+(?:the\s+)?([A-Z][\p{L}'’-]+(?:\s+[A-Z][\p{L}'’-]+)*))?/giu;
+// Item, injury, spell and rank events: the stat sheet needs the cast pass even without new names.
+const SHEET_SIGNAL = /\b(gave|gives|handed|hands|took|takes|stole|stolen|lost|dropped|broke|broken|shattered|bought|sold|found|picked up|pocketed|equipped|wielded|drew|draws|sheathed|wore|wears|donned|armou?r|sword|blade|dagger|bow|staff|wand|ring|amulet|necklace|key|compass|potion|scroll|wounded|injured|bleeding|bled|poisoned|cursed|fever|sick|bandaged|healed|exhausted|cast|casts|spell|cantrip|learned|mastered|skill|promoted|demoted|rank|level(?:ed)? up|hp|mana|stamina)\b/i;
+
 const NAME_RUN = /(?<![\p{L}\p{N}'’])([A-Z][\p{Ll}'’-]+(?:\s+[A-Z][\p{Ll}'’-]+){0,2})(?![\p{L}\p{N}])/gu;
 const NOT_NAMES = new Set(['the', 'a', 'an', 'i', 'he', 'she', 'they', 'we', 'you', 'it', 'his', 'her', 'their', 'my', 'your', 'our', 'its',
     'this', 'that', 'these', 'those', 'there', 'then', 'when', 'what', 'who', 'why', 'how', 'where', 'and', 'but', 'or', 'so', 'if', 'yes',
@@ -193,12 +197,14 @@ export function castSignals(transcript, { knownLabels = [], userName = '', charN
     const tiePhrases = [...text.matchAll(TIE_PHRASE)].map(match => cleanText(match[0], 120));
     const titlePhrases = [...text.matchAll(TITLE_PHRASE)].map(match => cleanText(match[0], 120));
     const information = knowledgePassRelevant(text);
+    const sheet = SHEET_SIGNAL.test(text);
     return {
         unknownNames: unknownNames.slice(0, 12),
         tiePhrases: [...new Set(tiePhrases)].slice(0, 12),
         titlePhrases: [...new Set(titlePhrases)].slice(0, 12),
         information,
-        any: Boolean(unknownNames.length || tiePhrases.length || titlePhrases.length || information),
+        sheet,
+        any: Boolean(unknownNames.length || tiePhrases.length || titlePhrases.length || information || sheet),
     };
 }
 
@@ -269,6 +275,7 @@ export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation =
                 ...(npc.lifeState && npc.lifeState !== 'unknown' ? { lifeState: npc.lifeState } : {}),
                 ...(npc.canonRef ? { canon: `canon:${npc.canonRef.world}#${npc.canonRef.uid}` } : {}),
                 ...(normalizeKnowledge(npc.knowledge).length ? { existingKnowledge: scannerKnowledgeContext(npc, 6) } : {}),
+                ...(sheetContext(npc.sheet) ? { sheet: sheetContext(npc.sheet) } : {}),
             };
         });
 }
@@ -388,10 +395,11 @@ TASK A - CAST. List each individual person the CURRENT EXCHANGE refers to by nam
  3. "is":"new".
 A reference is a query: anchor + tie or title + qualifiers. "Martha's older daughter" = Martha's child, female, the older one; "his first student" = the earliest of his students; "her ex-wife" = her former spouse; "Tomas's younger brother" = Tomas's sibling, male, younger than Tomas; "the headmaster of Hogwarts" = the CURRENT holder of that title in this story. Decide with the candidates' ties, roles, gender, ages, life state and locations. If two candidates fit equally, use "new" with the reference as the name instead of guessing.
 Per person: {"ref":"exact words from the exchange","is":"canon:<id>|<dossier id>|new","name":"proper name if known","gender":"female|male|","present":true|false,"roles":[{"title":"","org":"","exclusive":true,"status":"current|former"}],"ties":[{"is":"older daughter","of":"Martha"}]}
-Only roles/ties stated in this exchange or the canon entry. "ties" reads "<this person> IS <tie> OF <other>". A newly revealed proper name for a dossier: "is":"<that id>","name":"<new name>".
+Only roles/ties stated in this exchange or the canon entry. A promotion or new post: the new title "current", the replaced one "former". "ties" reads "<this person> IS <tie> OF <other>". A newly revealed proper name for a dossier: "is":"<that id>","name":"<new name>".
+TASK C (in each person object) - SHEET: only what THIS exchange states about that person: "sheet":{"items":[{"op":"gained|lost|equipped|unequipped","item":"","slot":"","significance":""}],"conditions":[{"op":"add|clear","name":"","kind":"injury|illness|buff|debuff|curse|status","severity":"","until":""}],"spells":[{"op":"learned|lost","name":"","school":"","tier":""}],"skills":[{"name":"","proficiency":""}],"rank":"","class":"","pools":[{"name":"HP","current":0,"max":0}],"attributes":[{"name":"","value":""}]}. Items: only items that matter later (weapons, armour, keys, heirlooms, quest objects), not food or coins. Stolen/given away/broken/used up => "lost". "rank" = the person's standing on the world's scale (guild rank, level, belt, grade) when this exchange sets or reveals it, e.g. a promotion to Bronze => "rank":"Bronze". A tie or job title alone is not a rank. Omit "sheet" when nothing changed.
 TASK B - KNOWLEDGE. For people in the exchange, durable facts they now know, keep secret, or explicitly do NOT know (hidden from them, said while they were absent). Never give a fact to someone who could not have learned it. Max ${KNOWLEDGE_NEW_PER_SCAN} per person; skip existingKnowledge.
 JSON only: {"people":[...],"knowledge":[{"who":"<dossier id or name>","fact":"","kind":"knows|secret|unaware","source":"witnessed|told|deduced","from":""}]}
-Example: {"people":[{"ref":"the headmaster","is":"canon:HP#3","name":"Albus Dumbledore","gender":"male","present":true,"roles":[{"title":"Headmaster","org":"Hogwarts","exclusive":true,"status":"current"}],"ties":[]},{"ref":"Martha's older daughter","is":"new","name":"Martha's older daughter","gender":"female","present":false,"roles":[],"ties":[{"is":"older daughter","of":"Martha"}]}],"knowledge":[]}
+Example: {"people":[{"ref":"the headmaster","is":"canon:HP#3","name":"Albus Dumbledore","gender":"male","present":true,"roles":[{"title":"Headmaster","org":"Hogwarts","exclusive":true,"status":"current"}],"ties":[]},{"ref":"Martha's older daughter","is":"new","name":"Martha's older daughter","gender":"female","present":false,"roles":[],"ties":[{"is":"older daughter","of":"Martha"}],"sheet":{"items":[{"op":"gained","item":"bread basket","significance":""}]}}],"knowledge":[]}
 
 DOSSIER CANDIDATES:
 ${JSON.stringify(shortlist)}
@@ -472,6 +480,11 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
         if (gender && !(row.id && live.find(npc => npc.id === row.id)?.gender)) row.gender = gender;
         if (person?.present === true) row.present = true;
         if (roles.length) row.roles = roles;
+        if (person?.sheet && typeof person.sheet === 'object') {
+            const grounded = groundSheetDelta(person.sheet, transcript);
+            for (const label of grounded.rejected) report.rejected.push({ ref, reason: `sheet ${label} not in exchange` });
+            if (!sheetDeltaIsEmpty(grounded.delta)) row.sheetDelta = grounded.delta;
+        }
         row.matchLabels = [...new Set([...(row.matchLabels || []), stripArticle(ref), ...(name ? [name] : [])])];
         rows.push(row);
         nameOf.set(norm(ref), row.name);
@@ -543,6 +556,7 @@ export function mergeCastIntoScan(parsed, cast) {
         if (item.gender && !row.gender) row.gender = item.gender;
         if (item.roles?.length) row.roles = [...(row.roles || []), ...item.roles];
         if (item.canonRef && !row.canonRef) row.canonRef = item.canonRef;
+        if (item.sheetDelta) row.sheetDelta = item.sheetDelta;
     }
     const edges = [...(Array.isArray(base.keyRelationshipEdges) ? base.keyRelationshipEdges : []), ...(cast?.keyRelationshipEdges || [])];
     return { ...base, npcs: rows, keyRelationshipEdges: edges };

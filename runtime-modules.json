@@ -14,6 +14,7 @@
     { "path": "core-mechanics.js", "role": "core-mechanics", "required": true },
     { "path": "knowledge.js", "role": "knowledge-ledger-and-gating", "required": true },
     { "path": "cast.js", "role": "cast-resolution-roles-and-canon", "required": true },
+    { "path": "sheet.js", "role": "stat-sheet-items-and-conditions", "required": true },
     { "path": "diagnostics-core.js", "role": "bounded-operation-diagnostics", "required": true },
     { "path": "appearance.js", "role": "appearance-forms", "required": true },
     { "path": "terminal-lifecycle.js", "role": "terminal-lifecycle", "required": true },
@@ -39,6 +40,7 @@
     { "path": "dossier-experience.js", "role": "dossier-experience-refinement", "required": true },
     { "path": "relationship-map-core.js", "role": "relationship-map-primitives", "required": true },
     { "path": "relationship-map.js", "role": "relationship-map-view", "required": true },
+    { "path": "stat-sheet-ui.js", "role": "stat-sheet-view", "required": true },
     { "path": "continuity-ui.js", "role": "calendar-birthday-appearance-ui-adapter", "required": true }
   ]
 }

@@ -2,6 +2,7 @@
 import { appearanceFingerprint, currentPresentationText, normalizeAppearanceModel, resolveNpcAppearance } from './appearance.js';
 import { formatBirthDate } from './birthday.js';
 import { normalizeKnowledge } from './knowledge.js';
+import { normalizeSheet } from './sheet.js';
 
 const KNOWLEDGE_LABELS = Object.freeze({ knows: 'Knows', secret: 'Secret', unaware: 'Does not know' });
 
@@ -153,6 +154,7 @@ export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortr
         mannerisms: stringList(npc?.mannerisms, 10),
         background: plain(npc?.background),
         memories: stringList(npc?.memories, 8),
+        sheet: normalizeSheet(npc?.sheet),
         knowledge: normalizeKnowledge(npc?.knowledge).map(entry => `${KNOWLEDGE_LABELS[entry.kind]}: ${entry.fact}${entry.from ? ` (from ${entry.from})` : ''}`),
         keyRelationships: stringList(npc?.keyRelationships, 12),
         relationshipSummary: plain(npc?.relationshipSummary),
@@ -485,7 +487,7 @@ class DeltaDossierUi {
             </button>
             <section class="delta-panel" role="dialog" aria-modal="true" aria-label="NPC State Delta dossiers" tabindex="-1" hidden>
                 <header class="delta-topbar">
-                    <div class="delta-brand"><span class="delta-kicker">NPC DOSSIER</span><strong>NPC State Delta</strong><span class="delta-chat-state"></span></div>
+                    <div class="delta-brand"><span class="delta-kicker">NPC DOSSIER</span><strong>NPC Codex</strong><span class="delta-chat-state"></span></div>
                     <div class="delta-top-actions">
                         <button type="button" class="delta-btn delta-open-settings">Settings</button>
                         <button type="button" class="delta-btn delta-close" aria-label="Close NPC dossiers">Close</button>

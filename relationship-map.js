@@ -13,6 +13,7 @@ import {
     plain,
     signed,
 } from './relationship-map-core.js';
+import { statPaneHtml, statSheetStyles } from './stat-sheet-ui.js';
 
 const EXTENSION_NAME = 'npc_state_delta';
 const DOSSIER_ROOT_ID = 'npc_state_delta_dossier_root';
@@ -158,16 +159,29 @@ function renderMap(ui, { force = false } = {}) {
     if (refocus) pane.querySelector(refocus)?.focus?.({ preventScroll: true });
 }
 
+// NPC Codex: the Stat tab shows the selected NPC's stat sheet (the "what") beside Dossier and Map.
+function renderStat(ui) {
+    const pane = ui?.root?.querySelector('.delta-stat-pane');
+    if (!pane || view.mode !== 'stat') return;
+    const selected = ui.projection?.npcs?.find(npc => npc.id === ui.selectedNpcId) || null;
+    pane.innerHTML = statPaneHtml(selected);
+}
+
 function setMode(ui, mode) {
-    view.mode = mode === 'map' && readMapSettings().enabled ? 'map' : 'dossier';
+    view.mode = mode === 'map' && readMapSettings().enabled ? 'map' : (mode === 'stat' ? 'stat' : 'dossier');
     const root = ui?.root;
     if (!root) return;
     const map = view.mode === 'map';
+    const stat = view.mode === 'stat';
     root.querySelector('.delta-spread')?.classList.toggle('delta-map-mode', map);
+    root.querySelector('.delta-spread')?.classList.toggle('delta-stat-mode', stat);
     const pane = root.querySelector('.delta-map-pane');
     if (pane) pane.hidden = !map;
+    const statPane = root.querySelector('.delta-stat-pane');
+    if (statPane) statPane.hidden = !stat;
     for (const tab of root.querySelectorAll('.delta-map-switch [data-map-mode]')) tab.setAttribute('aria-selected', String(tab.dataset.mapMode === view.mode));
     if (map) renderMap(ui, { force: true });
+    else if (stat) renderStat(ui);
     else root.querySelector('.delta-document')?.scrollTo?.({ top: 0 });
 }
 
@@ -191,19 +205,28 @@ function syncChrome(ui) {
     const enabled = readMapSettings().enabled;
     const actions = root.querySelector('.delta-top-actions');
     let tabs = root.querySelector('.delta-map-switch');
-    if (enabled && actions && !tabs) {
+    // Dossier (who) and Stat (what) are always there; Map follows its setting.
+    const tabsHtml = `<button type="button" role="tab" data-map-mode="dossier">Dossier</button><button type="button" role="tab" data-map-mode="stat">Stat</button>${enabled ? '<button type="button" role="tab" data-map-mode="map">Map</button>' : ''}`;
+    if (actions && !tabs) {
         tabs = document.createElement('div');
         tabs.className = 'delta-map-switch';
         tabs.setAttribute('role', 'tablist');
         tabs.setAttribute('aria-label', 'Dossier view');
-        tabs.innerHTML = '<button type="button" role="tab" data-map-mode="dossier">Dossier</button><button type="button" role="tab" data-map-mode="map">Map</button>';
         tabs.addEventListener('click', event => {
             const mode = event.target.closest('[data-map-mode]')?.dataset?.mapMode;
             if (mode) setMode(dossierUi(), mode);
         });
         actions.insertBefore(tabs, actions.querySelector('.delta-close'));
-    } else if (!enabled) tabs?.remove();
+    }
+    if (tabs && tabs.innerHTML !== tabsHtml) tabs.innerHTML = tabsHtml;
     const spread = root.querySelector('.delta-spread');
+    if (spread && !root.querySelector('.delta-stat-pane')) {
+        const statPane = document.createElement('main');
+        statPane.className = 'delta-stat-pane';
+        statPane.setAttribute('aria-label', 'Stat sheet');
+        statPane.hidden = view.mode !== 'stat';
+        spread.appendChild(statPane);
+    }
     let pane = root.querySelector('.delta-map-pane');
     if (enabled && spread && !pane) {
         pane = document.createElement('main');
@@ -232,6 +255,12 @@ function onDossierRendered() {
     const ui = dossierUi();
     if (!ui) return;
     syncChrome(ui);
+    if (view.mode === 'stat') {
+        ui.root.querySelector('.delta-spread')?.classList.add('delta-stat-mode');
+        const pane = ui.root.querySelector('.delta-stat-pane');
+        if (pane) pane.hidden = false;
+        renderStat(ui);
+    }
     if (view.mode === 'map') {
         ui.root.querySelector('.delta-spread')?.classList.add('delta-map-mode');
         const pane = ui.root.querySelector('.delta-map-pane');
@@ -365,7 +394,7 @@ function installStyles() {
     if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement('style');
     style.id = STYLE_ID;
-    style.textContent = STYLES;
+    style.textContent = STYLES + statSheetStyles(DOSSIER_ROOT_ID);
     document.head.appendChild(style);
 }
 

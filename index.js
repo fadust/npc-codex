@@ -90,6 +90,7 @@ import {
 } from './core.js';
 import { applyNpcBirthdayUpdate, normalizeBirthDate } from './birthday.js';
 import { knowledgeToEditorText, knowledgeFromEditorText, applyKnowledgeDecisions } from './knowledge.js';
+import { sheetToEditor, sheetFromEditor, SHEET_EDITOR_FIELDS } from './sheet.js';
 import {
     castSignals,
     buildCastShortlist,
@@ -2806,6 +2807,12 @@ function syncOpenNpcEditorFields(npc) {
     set('npc_state_delta_edit_status', npc.status || '');
     set('npc_state_delta_edit_memories', (npc.memories || []).join('\n'));
     set('npc_state_delta_edit_knowledge', knowledgeToEditorText(npc.knowledge));
+    {
+        const sheetFields = sheetToEditor(npc.sheet);
+        set('npc_state_delta_edit_sheet_archetype', sheetFields.archetype);
+        set('npc_state_delta_edit_sheet_rank', sheetFields.rank);
+        for (const field of SHEET_EDITOR_FIELDS) set(`npc_state_delta_edit_sheet_${field.key}`, sheetFields[field.key]);
+    }
     set('npc_state_delta_edit_trust', relationshipNumber(npc.relationship?.trust));
     set('npc_state_delta_edit_affection', relationshipNumber(npc.relationship?.affection));
     set('npc_state_delta_edit_desire', relationshipNumber(npc.relationship?.desire));
@@ -2815,7 +2822,7 @@ function syncOpenNpcEditorFields(npc) {
 }
 
 function refreshChangedFields(before, after) {
-    const fields = ['name','role','species','gender','homeBase','age','apparentAge','appearance','personality','speech','behaviorProfile','background','keyRelationships','relationshipSummary','mood','location','goal','status','lifeState','mannerisms','memories','knowledge'];
+    const fields = ['name','role','species','gender','homeBase','age','apparentAge','appearance','personality','speech','behaviorProfile','background','keyRelationships','relationshipSummary','mood','location','goal','status','lifeState','mannerisms','memories','knowledge','sheet'];
     return fields.filter(field => JSON.stringify(before?.[field] ?? null) !== JSON.stringify(after?.[field] ?? null));
 }
 
@@ -4163,7 +4170,7 @@ function buildSettingsHtml() {
     <div id="${UI_ID}" class="extension_container npc-state-delta-extension">
       <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
-          <b>NPC State Delta <span class="npc-state-delta-version">v${NPC_STATE_VERSION}</span></b>
+          <b>NPC Codex <span class="npc-state-delta-version">v${NPC_STATE_VERSION}</span></b>
           <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content npc-state-delta-drawer">
@@ -5089,6 +5096,7 @@ function openNpcEditor(npcId) {
         <label>Condition / Activity<input id="npc_state_delta_edit_status" class="text_pole" value="${editorValue(npc.status)}"></label>
         <label class="npc-state-delta-editor-wide">Important memories <small>Max 5 · one per line</small><textarea id="npc_state_delta_edit_memories" class="text_pole" rows="5">${editorValue((npc.memories || []).join('\n'))}</textarea></label>
         <label class="npc-state-delta-editor-wide">Knowledge <small>One per line · knows: learned on-page · secret: knows and conceals · unaware: must not know</small><textarea id="npc_state_delta_edit_knowledge" class="text_pole" rows="5">${editorValue(knowledgeToEditorText(npc.knowledge))}</textarea></label>
+        ${(() => { const sheetFields = sheetToEditor(npc.sheet); return `<h4 class="npc-state-delta-editor-wide">Stat sheet <small>Shown on the Stat tab. One entry per line.</small></h4><label>Class / archetype<input id="npc_state_delta_edit_sheet_archetype" class="text_pole" value="${editorValue(sheetFields.archetype)}"></label><label>Rank / level<input id="npc_state_delta_edit_sheet_rank" class="text_pole" value="${editorValue(sheetFields.rank)}"></label>${SHEET_EDITOR_FIELDS.map(field => `<label class="npc-state-delta-editor-wide">${field.label} <small>${field.hint}</small><textarea id="npc_state_delta_edit_sheet_${field.key}" class="text_pole" rows="3">${editorValue(sheetFields[field.key])}</textarea></label>`).join('')}`; })()}
       </div>
       <div class="npc-state-delta-editor-stats">
         <label>Trust<input id="npc_state_delta_edit_trust" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.trust)}"></label>
@@ -5490,6 +5498,11 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     next.status = String(editorField('npc_state_delta_edit_status')).trim().slice(0, 300);
     next.memories = cleanEditorList(editorField('npc_state_delta_edit_memories'), IMPORTANT_MEMORY_LIMIT);
     next.knowledge = knowledgeFromEditorText(editorField('npc_state_delta_edit_knowledge'), current.knowledge);
+    next.sheet = sheetFromEditor({
+        archetype: editorField('npc_state_delta_edit_sheet_archetype'),
+        rank: editorField('npc_state_delta_edit_sheet_rank'),
+        ...Object.fromEntries(SHEET_EDITOR_FIELDS.map(field => [field.key, editorField(`npc_state_delta_edit_sheet_${field.key}`)])),
+    }, current.sheet);
     next.relationship = {
         trust: clampEditorRelationshipStat('npc_state_delta_edit_trust'),
         affection: clampEditorRelationshipStat('npc_state_delta_edit_affection'),
@@ -5517,11 +5530,11 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
             turn: Number.isFinite(Number(state.turn)) ? Number(state.turn) : null,
         };
     }
-    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge'];
+    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge', 'sheet'];
     if (document.getElementById('npc_state_delta_edit_lock_profile')?.checked) {
         const locks = new Set(current.manualProfileFields || []);
         for (const key of stableKeys) {
-            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge';
+            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge' || key === 'sheet';
             const before = listField ? JSON.stringify(current[key] || []) : String(current[key] || '');
             const after = listField ? JSON.stringify(next[key] || []) : String(next[key] || '');
             if (before !== after) locks.add(key);

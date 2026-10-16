@@ -8,6 +8,7 @@ import {
     scannerKnowledgeContext,
 } from './knowledge.js';
 import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
+import { emptySheet, normalizeSheet, readSheetDelta, sheetDeltaIsEmpty, applySheetDelta, sheetIsEmpty, renderSheetInjection } from './sheet.js';
 import {
     reconcileSocialState,
     remapSocialGraphNpcId,
@@ -3205,6 +3206,7 @@ export function normalizeScanNpc(raw = {}, options = {}) {
         knowledge: readScanKnowledge(raw),
         roles: normalizeRoles(raw.roles),
         canonRef: normalizeCanonRef(raw.canonRef ?? raw.canon_ref),
+        sheetDelta: readSheetDelta(raw.sheetDelta ?? raw.sheet_delta),
         mannerisms: normalizeMannerisms(raw.mannerisms),
         mannerismsProvided: Object.prototype.hasOwnProperty.call(raw, 'mannerisms'),
         mannerismState: (() => {
@@ -3721,6 +3723,7 @@ export function normalizeNpcRecord(raw = {}) {
     npc.knowledge = normalizeKnowledge(raw.knowledge);
     npc.roles = normalizeRoles(raw.roles);
     npc.canonRef = normalizeCanonRef(raw.canonRef);
+    npc.sheet = normalizeSheet(raw.sheet);
     npc.mannerisms = locked.has('mannerisms')
         ? cleanList(raw.mannerisms, 8, 320)
         : normalizeMannerisms(raw.mannerisms);
@@ -3818,6 +3821,7 @@ export function createNpcRecord(name, existingIds = [], baseline = DEFAULT_RELAT
         knowledge: [],
         roles: [],
         canonRef: null,
+        sheet: emptySheet(),
         mannerisms: [],
         behaviorProfile: [],
         keyRelationships: [],
@@ -4208,6 +4212,10 @@ function applyIncoming(existing, incoming, turn, relationshipCaps = DEFAULT_RELA
         if (!manualFields.has('role')) merged.role = currentRoleText(merged.roles) || merged.role;
     }
     merged.canonRef = normalizeCanonRef(existing.canonRef) || normalizeCanonRef(incoming.canonRef);
+    // Stat sheet changes arrive as grounded operations from the cast pass; a locked sheet is the player's.
+    merged.sheet = incoming.sheetDelta && !sheetDeltaIsEmpty(incoming.sheetDelta) && !manualFields.has('sheet')
+        ? applySheetDelta(existing.sheet, incoming.sheetDelta, { turn, sourceMessageId })
+        : normalizeSheet(existing.sheet);
     if (manualFields.has('mannerisms')) {
         merged.mannerisms = [...(existing.mannerisms || [])];
     } else if ((existing.mannerisms || []).length) {
@@ -5246,6 +5254,7 @@ function mergeAliasLinkedNpcPair(a, b) {
     merged.knowledge = normalizeKnowledge([...(a.knowledge || []), ...(b.knowledge || [])]);
     merged.roles = normalizeRoles([...(a.roles || []), ...(b.roles || [])]);
     merged.canonRef = normalizeCanonRef(a.canonRef) || normalizeCanonRef(b.canonRef);
+    merged.sheet = sheetIsEmpty(a.sheet) ? normalizeSheet(b.sheet) : normalizeSheet(a.sheet);
     const mannerismLock = lockedSourceFor('mannerisms');
     const behaviorLock = lockedSourceFor('behaviorProfile');
     const relationshipLock = lockedSourceFor('keyRelationships');
@@ -5818,6 +5827,7 @@ function injectionOptionalFields(npc, includeAppearance = false) {
     return [
         appearanceVariants.length && appearanceVariants,
         includeAppearance && !npc.appearance && (npc.currentForm || npc.currentFormUnknown) && 'Current visible appearance is not established; do not infer anatomy from species or another form.',
+        renderSheetInjection(npc.sheet),
         importantMemories.length && `important memories: ${importantMemories.join(' | ')}`,
         npc.species && `species/race: ${npc.species}`,
         npc.gender && `gender: ${normalizeGender(npc.gender)}`,
