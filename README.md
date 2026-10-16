@@ -4,7 +4,14 @@
 
 - **Knowledge ledger and gating.** Each NPC records what they know, keep secret, or must not know. The injection starts each NPC's line with a hard knowledge gate.
 - **Cast resolution.** References such as "the headmaster", "Martha's older daughter" or "her ex-wife" are resolved canon-first (the card's own canon, then lorebooks), else to an existing dossier, else to a new one. Roles carry an organization and exclusivity.
-- **Stat sheet** (in progress). Class and rank, attributes, pools, conditions, spells, skills, equipment and key items, on a Stat tab beside Dossier and Map.
+- **Canon seeding.** A new NPC who is in the card or lorebook canon starts from that canon (gender, role, likes, dislikes); canon fields stay locked against drift.
+- **Memory.** Events with each witness's own view (defining / significant / minor), intentions, hearsay ("told by"), and witness gating: only NPCs who were there remember first-hand. Recall by keyword, plus optional vector recall through Qdrant (Similharity plugin). Memories periodically reflect into beliefs, likes and dislikes.
+- **NPC-to-NPC stances.** Trust, affection and tension between NPCs, only changed while both are present.
+- **Stats as flavour, not rules.** An untrained human is 30 in every attribute. Races and professions are derived once per world by the model, relative to that human. Ranks set the best attribute: E 30–39, D 40–49, C 50–59, B 60–69, A 70–84, S 85–100, and the top few of S (SS, S+, "the strongest") beyond. Other races and story events can pass 100. The prompt gets words ("heavy-handed", "quicker than Kael") only in action scenes, never numbers.
+- **Active status.** Poison, illness, bleeding, infection and curses escalate mild → moderate → severe → dying when left untreated (code never kills). Treatment eases them; buffs and debuffs wear off, then expire. An NPC can be unaware of their own condition.
+- **Per-world schema.** A "NPC Codex Schema" lorebook entry or card block can rename attributes, pools and ranks.
+- **Codex panel.** NPC list on the left, one header (portrait, faction / location / race / occupation / rank chips, your tags and a quote), then Dossier, Stat and Social Map tabs.
+- **Lean scanning.** One cast pass per turn carries cast, sheet changes, events, stances, canon seeds and builds.
 
 Licensed under GPL-3.0, like the original. Storage keys and data files keep the original `npc_state_delta` / `npc-state-delta-*` names, so existing dossiers carry over.
 
