@@ -405,10 +405,12 @@ function relevance(episode, sceneTokens) {
 
 // Keyword recall (Qdrant joins in B2): defining/pinned always; the rest ranked by
 // level x recency x relevance to the current scene. Effect first, event as faint backing.
-export function renderMemoryInjection(npc, { turn = null, limit = 5, text = '' } = {}) {
+export function renderMemoryInjection(npc, { turn = null, limit = 5, text = '', vector = null } = {}) {
     const episodes = normalizeEpisodes(npc?.episodes, npc?.memories);
     const scene = recallTokens(text);
-    const score = item => weight(item, turn) * (1 + relevance(item, scene));
+    // Vector similarity (0..1, from Qdrant) adds to keyword relevance; keys match recall-index.js.
+    const similar = item => (vector instanceof Map ? Number(vector.get(item.eventId || `${npc?.id}:${item.id}`)) || 0 : 0);
+    const score = item => weight(item, turn) * (1 + relevance(item, scene) + 4 * similar(item));
     const defining = episodes.filter(item => item.level === 'defining' || item.pinned);
     const rest = episodes.filter(item => !defining.includes(item)).sort((a, b) => score(b) - score(a));
     const chosen = [...defining.slice(-3), ...rest].slice(0, Math.max(limit, Math.min(defining.length, 3)));

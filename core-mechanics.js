@@ -5843,9 +5843,9 @@ function clauseBoundedInjection(text, room) {
     return boundary >= labelEnd + 20 ? cut.slice(0, boundary) : '';
 }
 
-function injectionOptionalFields(npc, includeAppearance = false, turn = null, sceneText = '') {
+function injectionOptionalFields(npc, includeAppearance = false, turn = null, sceneText = '', recallScores = null) {
     // Episodes replace the old flat memory list; dossiers without episodes keep the old line.
-    const livedMemories = renderMemoryInjection(npc, { turn, text: sceneText });
+    const livedMemories = renderMemoryInjection(npc, { turn, text: sceneText, vector: recallScores });
     const importantMemories = livedMemories ? [] : cleanList(npc.memories, IMPORTANT_MEMORY_LIMIT, 220);
     const appearanceVariants = includeAppearance ? injectionAppearanceVariants(npc) : [];
     return [
@@ -5873,7 +5873,7 @@ function compactInjectionBehaviorRubric(criteria, maxChars) {
     return truncateInjectionText(raw, maxChars);
 }
 
-export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria = DEFAULT_BEHAVIOR_CRITERIA, budgetTokens = DEFAULT_INJECTION_BUDGET_TOKENS, socialGraph = null, { includeAppearance = false, namedNpcIds = [] } = {}) {
+export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria = DEFAULT_BEHAVIOR_CRITERIA, budgetTokens = DEFAULT_INJECTION_BUDGET_TOKENS, socialGraph = null, { includeAppearance = false, namedNpcIds = [], recallScores = null } = {}) {
     const named = new Set(Array.isArray(namedNpcIds) ? namedNpcIds : []);
     const calledIn = npc => !npc?.present && named.has(npc?.id);
     const present = (npcs || []).filter(npc => (Boolean(npc?.present) || calledIn(npc)) && !npc?.archived);
@@ -5947,7 +5947,7 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
     // starve another. Relationship summary is deliberately late: live identity/state already won priority.
     // Resolved appearance uses the same optional budget as other continuity. It must not
     // shrink the essential identity/agency budget or be spliced ahead of characterization.
-    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null, text));
+    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null, text, recallScores));
     const enriched = essentialBlocks.slice();
     const maxPriority = Math.max(0, ...optionalByNpc.map(fields => fields.length));
     for (let priority = 0; priority < maxPriority; priority++) {
