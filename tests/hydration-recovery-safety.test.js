@@ -61,7 +61,7 @@ test('Delta application metadata is v1.1.5 and active core ownership is semantic
     assert.match(core, /export \* from '\.\/core-mechanics\.js'/);
     assert.doesNotMatch(core, /NPC_STATE_SOURCE_ENGINE_VERSION|core-v0218/);
     assert.equal(manifest.version, '1.1.5');
-    assert.equal(manifest.author, 'kohz87');
+    assert.equal(manifest.author, 'fadust (based on NPC State Delta by kohz87)');
 });
 
 
