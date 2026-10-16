@@ -96,6 +96,7 @@ import { RECALL_DEFAULTS, normalizeRecallSettings, syncRecallIndex, queryRecallS
 import { applyStanceDecisions } from './stance.js';
 import { findWorldSchema } from './schema.js';
 import { presenceGuard } from './trust.js';
+import { parseFlorisReadout, applyFlorisReadout, stripFlorisLog } from './floris.js';
 import { setBirthdayFallback } from './birthday.js';
 import { REFLECTION_SYSTEM_PROMPT, reflectionTarget, buildReflectionPrompt, applyReflection, beliefsToEditorText, beliefsFromEditorText, normalizePreferences } from './reflection.js';
 import { canonSeedTargets, canonTextFor, parseCanonSeed, applyCanonSeed } from './canon-seed.js';
@@ -4020,9 +4021,19 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
         // S3.4: presence comes from the story. A newly present NPC the reply never names (only the
         // player's message or a system notice did) stays absent.
         if (!manual && !fullWindowScan && Number.isInteger(messageId)) {
-            const guarded = presenceGuard(state.npcs, merged.state.npcs, ctx.chat?.[messageId]?.mes);
+            // The Floris <log> is a readout, not story: names that appear only there do not count.
+            const guarded = presenceGuard(state.npcs, merged.state.npcs, stripFlorisLog(ctx.chat?.[messageId]?.mes));
             merged.state.npcs = guarded.npcs;
             if (guarded.reverted.length) merged.report.presenceReverted = guarded.reverted;
+        }
+        // S4.3 / S8.3: Floris Bond/Feel readouts are kept per NPC as a hint (never as truth).
+        if (Number.isInteger(messageId)) {
+            const readout = parseFlorisReadout(ctx.chat?.[messageId]?.mes, { userName: ctx.name1 || '' });
+            if (readout.bonds.length || readout.feels.length) {
+                const read = applyFlorisReadout(merged.state.npcs, readout, { turn: state.turn, sourceMessageId: messageId });
+                merged.state.npcs = read.npcs;
+                if (lastScanMetrics) lastScanMetrics.florisApplied = read.applied;
+            }
         }
         if (castPass.cast?.stances?.length) {
             const stanced = applyStanceDecisions(merged.state.npcs, castPass.cast.stances, { turn: state.turn });

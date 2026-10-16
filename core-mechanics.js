@@ -10,6 +10,7 @@ import {
 import { normalizeEpisodes, normalizeIntentions, applyMemoryDecision, renderMemoryInjection } from './memory.js';
 import { normalizeBeliefs, normalizePreferences, renderReflectionInjection } from './reflection.js';
 import { temperamentExpression, normalizeStances, renderStanceInjection } from './stance.js';
+import { normalizeFloris, renderFlorisReadout } from './floris.js';
 import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
 import { emptySheet, normalizeSheet, readSheetDelta, sheetDeltaIsEmpty, applySheetDelta, sheetIsEmpty, renderSheetInjection } from './sheet.js';
 import { normalizeCanonSeed, normalizeCanonLocked, enforceCanonLocks } from './canon-seed.js';
@@ -3729,6 +3730,7 @@ export function normalizeNpcRecord(raw = {}) {
     npc.intentions = normalizeIntentions(raw.intentions);
     npc.beliefs = normalizeBeliefs(raw.beliefs);
     npc.stances = normalizeStances(raw.stances);
+    npc.floris = normalizeFloris(raw.floris);
     npc.likes = normalizePreferences(raw.likes);
     npc.dislikes = normalizePreferences(raw.dislikes);
     npc.knowledge = normalizeKnowledge(raw.knowledge);
@@ -5283,6 +5285,7 @@ function mergeAliasLinkedNpcPair(a, b) {
     merged.beliefs = normalizeBeliefs([...normalizeBeliefs(a.beliefs), ...normalizeBeliefs(b.beliefs)].map(({ id, ...rest }) => rest));
     merged.likes = normalizePreferences([...normalizePreferences(a.likes), ...normalizePreferences(b.likes)]);
     merged.stances = normalizeStances([...normalizeStances(a.stances), ...normalizeStances(b.stances)]);
+    merged.floris = (Number(b.floris?.turn) || -1) > (Number(a.floris?.turn) || -1) ? normalizeFloris(b.floris) : normalizeFloris(a.floris || b.floris);
     merged.dislikes = normalizePreferences([...normalizePreferences(a.dislikes), ...normalizePreferences(b.dislikes)]);
     merged.roles = normalizeRoles([...(a.roles || []), ...(b.roles || [])]);
     merged.canonRef = normalizeCanonRef(a.canonRef) || normalizeCanonRef(b.canonRef);
@@ -5872,6 +5875,7 @@ function injectionOptionalFields(npc, includeAppearance = false, turn = null, sc
         renderSheetInjection(npc.sheet),
         renderReflectionInjection(npc, { text: sceneText }),
         renderStanceInjection(npc, { presentNames }),
+        renderFlorisReadout(npc),
         livedMemories,
         importantMemories.length && `important memories: ${importantMemories.join(' | ')}`,
         npc.species && `species/race: ${npc.species}`,
