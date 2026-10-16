@@ -118,7 +118,7 @@ export function normalizeSheet(raw) {
             const onset = moment(item?.onset);
             const deadline = moment(item?.deadline);
             return { name, kind, ...(severity ? { severity } : {}), ...(until ? { until } : {}), ...(source ? { source } : {}), ...(effect ? { effect } : {}),
-                ...(item?.aware === false ? { aware: false } : {}), ...(item?.fading === true ? { fading: true } : {}),
+                ...(item?.aware === false ? { aware: false } : {}), ...(item?.fading === true ? { fading: true } : {}), ...(item?.treated === true ? { treated: true } : {}),
                 ...(onset && Object.keys(onset).length ? { onset } : {}), ...(deadline && Object.keys(deadline).length ? { deadline } : {}), ...meta(item) };
         }, SHEET_LIMITS.conditions),
         spells: normalizeList(source.spells, item => {

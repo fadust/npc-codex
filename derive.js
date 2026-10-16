@@ -117,11 +117,13 @@ export function deriveSheet({ race = null, profession = null, tier = '', emphasi
     if (budget) {
         const weights = Object.fromEntries(ATTRIBUTES.map(attr => [attr, attr === 'Luck' ? 0.3 : 1]));
         for (const attr of profession?.focus || []) weights[attr] += 1.5;
-        for (const attr of dominant) weights[attr] += 3;
+        for (const attr of dominant) weights[attr] += 2;
         for (const attr of weak) weights[attr] = Math.min(weights[attr], 0.3);
         const sum = Object.values(weights).reduce((total, value) => total + value, 0);
         for (const attr of ATTRIBUTES) values[attr] += (budget * weights[attr]) / sum;
     }
+    // Diminishing returns above 60, so a B-rank's best attribute does not already hit the S ceiling.
+    for (const attr of ATTRIBUTES) if (values[attr] > 60) values[attr] = 60 + (values[attr] - 60) * 0.6;
     const attributes = ATTRIBUTES.map(attr => ({ name: attr, value: String(clamp(values[attr], 1, 100)) }));
     const get = attr => Number(attributes.find(item => item.name === attr).value);
     const tierIndex = tier ? RANKS.indexOf(tier) + 1 : 0;
@@ -152,7 +154,16 @@ export function deriveSheet({ race = null, profession = null, tier = '', emphasi
 
 /* ---------- Flavour for the prompt (action scenes only) ---------- */
 
-export const ACTION_SIGNAL = /\b(fight|fights|fought|attack|attacks|strike|strikes|struck|swing|swings|swung|sword|blade|axe|spear|dagger|bow|arrow|punch|kick|wrestle|grapple|dodge|parry|block|duel|battle|brawl|chase|chased|flee|fled|run|ran|sprint|climb|lift|lifts|lifted|carry|carried|haul|sneak|crept|stealth|cast|casts|spell|spells|hex|charm|curse|shoot|shot|ambush|charge|charged)\b/i;
+// Verbs of action only: weapon nouns, "cast", "charm", "curse", "run" fire on calm scenes (a smith
+// hammering a blade, iron cast in a mould, cursing under a breath).
+const ACTION_SIGNAL = /\b(fight|fights|fighting|fought|attack|attacks|attacked|attacking|strike|strikes|struck|swing|swings|swung|stab|stabs|slash|slashes|punch|punches|kick|kicks|wrestle|grapple|dodge|dodges|parry|parries|duel|battle|brawl|chase|chases|chased|flee|flees|fled|sprint|sprints|climb|climbs|lifts|lifted|haul|hauls|sneak|sneaks|crept|shoots|ambush|ambushes|charge|charges|charged|draws? (?:his|her|their|a|the) (?:sword|blade|steel|weapon|bow|axe|dagger)|draw steel|casts? (?:a |the |an )?(?:spell|hex|ward)|spell|spells|hex)\b/i;
+
+// A fight retold ("tells Mira that Brann attacked...", "asks about the day...") is not one happening.
+const RETELLING = /\b(?:tells?|told|telling|asks?(?: him| her| them)? about|asked(?: him| her| them)? about|talks? about|remembers?|remembered|recalls?|recalled|recounts?|recounted|heard|hears|the day|the time when|once)\b/i;
+
+export function isActionScene(text) {
+    return String(text || '').split(/(?<=[.!?])\s+|\n+/).some(sentence => ACTION_SIGNAL.test(sentence) && !RETELLING.test(sentence));
+}
 
 const HIGH = {
     Strength: 'heavy-handed; blows land with crushing, armour-shaking force',
