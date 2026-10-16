@@ -109,3 +109,15 @@ test('simulation fixes: calm craft and retold fights are not action; treated aff
     const s = value(deriveSheet({ profession: sword, tier: 'S', emphasis: { dominant: ['Agility'] } }), 'Agility');
     assert.ok(b < 90 && s > b, `B ${b}, S ${s}`);
 });
+
+test('rank bands: a ranked character peaks inside its band (S 85-100 ... E 30-39)', async () => {
+    const { RANK_BANDS, RANKS } = await import('../derive.js');
+    const orc = parseRaceProfile({ attributes: { Strength: 48, Endurance: 45, Agility: 28, Intelligence: 22, Wisdom: 24, Charisma: 16, Luck: 30 } });
+    const sword = parseProfessionProfile({ modifiers: { Strength: 6, Agility: 6 }, focus: ['Strength', 'Agility'] });
+    for (const tier of RANKS) {
+        for (const input of [{}, { race: orc }, { profession: sword, emphasis: { dominant: ['Agility'] } }]) {
+            const peak = Math.max(...deriveSheet({ ...input, tier }).attributes.map(item => Number(item.value)));
+            assert.ok(peak >= RANK_BANDS[tier][0] && peak <= RANK_BANDS[tier][1], `${tier}: ${peak}`);
+        }
+    }
+});
