@@ -22,6 +22,7 @@ import { groundSheetDelta, sheetContext, sheetDeltaIsEmpty } from './sheet.js';
 import { memoryContext, readMemoryDecision, readEventDecisions } from './memory.js';
 import { readStanceDecisions } from './stance.js';
 import { applySchemaToDelta, schemaPromptLine } from './schema.js';
+import { capPoolChanges } from './trust.js';
 
 export const CAST_PASS_SYSTEM_PROMPT = "You are NPC State Delta's isolated cast and knowledge evaluator. Use only the supplied candidates, canon entries and current exchange. Return only the requested JSON object.";
 export const ROLE_LIMIT = 6;
@@ -286,6 +287,7 @@ export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation =
                 ...((npc.location || extra.location) ? { location: cleanText(npc.location || extra.location, 120) } : {}),
                 ...(npc.lifeState && npc.lifeState !== 'unknown' ? { lifeState: npc.lifeState } : {}),
                 ...(npc.canonRef ? { canon: `canon:${npc.canonRef.world}#${npc.canonRef.uid}` } : {}),
+                ...(npc.canonSeed ? { seeded: true } : {}),
                 ...(normalizeKnowledge(npc.knowledge).length ? { existingKnowledge: scannerKnowledgeContext(npc, 6) } : {}),
                 ...(sheetContext(npc.sheet) ? { sheet: sheetContext(npc.sheet) } : {}),
                 ...memoryContext(npc),
@@ -411,11 +413,12 @@ Per person: {"ref":"exact words from the exchange","is":"canon:<id>|<dossier id>
 Only roles/ties stated in this exchange or the canon entry. A promotion or new post: the new title "current", the replaced one "former". "ties" reads "<this person> IS <tie> OF <other>". A newly revealed proper name for a dossier: "is":"<that id>","name":"<new name>".
 ${schemaPromptLine(schema) ? `${schemaPromptLine(schema)}
 ` : ''}TASK E (in each person object) - STANCES toward OTHER people present (not ${userName}), only when this exchange shows them interacting: "stances":[{"toward":"","trust":0,"affection":0,"tension":0,"note":"how THEY now see the other, short"}], each -2..2.
+TASK F (in a person object resolved to canon, unless the candidate is "seeded") - SEED from that CANON entry only: "seed":{"species":"","gender":"male|female|","age":"","apparentAge":"","overallAppearance":"enduring body, not clothing","personality":"","speech":"","background":"role, history; max 320 chars","likes":"a; b","dislikes":""}. Copy its wording; "" when it does not say; never give them a title the entry gives someone else.
 TASK C (in each person object) - SHEET: only what THIS exchange states about that person: "sheet":{"items":[{"op":"gained|lost|equipped|unequipped","item":"","slot":"","significance":""}],"conditions":[{"op":"add|clear","name":"","kind":"injury|illness|buff|debuff|curse|status","severity":"","until":""}],"spells":[{"op":"learned|lost","name":"","school":"","tier":""}],"skills":[{"name":"","proficiency":""}],"rank":"","class":"","pools":[{"name":"HP","current":0,"max":0}],"attributes":[{"name":"","value":""}]}. Items: things that identify the person or matter later (weapons, wands, armour, badges/insignia, keys, heirlooms, quest objects, notable artefacts), not food, coins or furniture. An item the text shows them already holding or carrying => "gained"; wearing or wielding => "equipped" with a slot. Stolen/given away/broken/used up => "lost". "rank" = the person's standing on the world's scale (guild rank, level, belt, grade) when this exchange sets or reveals it, e.g. a promotion to Bronze => "rank":"Bronze". A tie or job title alone is not a rank. Omit "sheet" when the exchange states none of this.
 TASK D - MEMORY. "events": what happened IN this exchange that those present will remember: events major to them or to people close to them, ${userName}'s actions that truly match or go against someone's personality, shared moments/jokes that will matter later. Skip routine talk. Each event once, objectively: {"op":"add|update","id":"<stored event id, for update>","what":"objective fact, short","where":"","witnesses":["everyone present who saw it, incl. ${userName}"],"secret":false,"views":[{"who":"<witness>","effect":"what it changed in THEM: feeling, belief or stance","level":"defining|significant|minor","fit":"matches|contradicts|"}]}. One view per witness; each reacts in their own way. defining = changes their life or a relationship. "told": someone here tells another about a stored event (ids in memories); a retelling is "told", never a new event: {"event":"<event id>","by":"","to":"","effect":""}. Per person object, "intents":[{"op":"add|done|drop","id":"","what":"plan, promise or unresolved problem they hold","due":""}]. Max 2 events; never repeat a stored event, update it.
 TASK B - KNOWLEDGE. For people in the exchange, durable facts they now know, keep secret, or explicitly do NOT know (hidden from them, said while they were absent). Never give a fact to someone who could not have learned it. Max ${KNOWLEDGE_NEW_PER_SCAN} per person; skip existingKnowledge.
 JSON only: {"people":[...],"knowledge":[{"who":"<dossier id or name>","fact":"","kind":"knows|secret|unaware","source":"witnessed|told|deduced","from":""}],"events":[...],"told":[...]}
-Example: {"people":[{"ref":"the headmaster","is":"canon:HP#3","name":"Albus Dumbledore","gender":"male","present":true,"roles":[{"title":"Headmaster","org":"Hogwarts","exclusive":true,"status":"current"}],"ties":[]},{"ref":"Martha's older daughter","is":"new","name":"Martha's older daughter","gender":"female","present":false,"roles":[],"ties":[{"is":"older daughter","of":"Martha"}],"sheet":{"items":[{"op":"gained","item":"bread basket","significance":""}]}}],"knowledge":[]}
+Example: {"people":[{"ref":"the headmaster","is":"canon:HP#3","name":"Albus Dumbledore","gender":"male","present":true,"roles":[{"title":"Headmaster","org":"Hogwarts","exclusive":true,"status":"current"}],"ties":[],"seed":{"gender":"male","overallAppearance":"tall, thin, long silver beard","background":"Headmaster of Hogwarts"}},{"ref":"Martha's older daughter","is":"new","name":"Martha's older daughter","gender":"female","present":false,"roles":[],"ties":[{"is":"older daughter","of":"Martha"}],"sheet":{"items":[{"op":"gained","item":"bread basket","significance":""}]}}],"knowledge":[]}
 
 DOSSIER CANDIDATES:
 ${JSON.stringify(shortlist)}
@@ -478,6 +481,7 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
                 ? { id: dossier.id, name: dossier.name, sameIndividual: true }
                 : { name: canonical, identityKind: 'proper_name', dossierSignal: 'persistent', dossierReason: `canon entry ${entry.name}`, sameIndividual: true };
             row.canonRef = { world: entry.world, uid: entry.uid, name: entry.name };
+            if (person?.seed && typeof person.seed === 'object') row.canonSeedRaw = person.seed;
             // Name-like canon keys ("Dumbledore", "Filch") become aliases so later mentions match.
             const nameKeys = (entry.keys || []).filter(key => /^[A-Z][\p{L}'’-]+(?:\s+[A-Z][\p{L}'’-]+)*$/u.test(key) && norm(key) !== norm(row.name));
             if (nameKeys.length && !row.id) row.aliases = nameKeys.slice(0, 4);
@@ -506,7 +510,10 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
         if (person?.sheet && typeof person.sheet === 'object') {
             const grounded = groundSheetDelta(person.sheet, transcript);
             const onSchema = applySchemaToDelta(grounded.delta, schema);
-            grounded.delta = onSchema.delta;
+            // S3.6: an unstated pool figure moves at most half its maximum per scan.
+            const bounded = capPoolChanges(onSchema.delta, row.id ? live.find(npc => npc.id === row.id)?.sheet : null, transcript);
+            grounded.delta = bounded.delta;
+            grounded.rejected.push(...bounded.capped);
             grounded.rejected.push(...onSchema.rejected);
             for (const label of grounded.rejected) report.rejected.push({ ref, reason: `sheet ${label} not in exchange` });
             if (!sheetDeltaIsEmpty(grounded.delta)) row.sheetDelta = grounded.delta;

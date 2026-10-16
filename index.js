@@ -95,8 +95,10 @@ import { episodesToEditorText, episodesFromEditorText, intentionsToEditorText, i
 import { RECALL_DEFAULTS, normalizeRecallSettings, syncRecallIndex, queryRecallScores, resetRecallSession } from './recall-index.js';
 import { applyStanceDecisions } from './stance.js';
 import { findWorldSchema } from './schema.js';
+import { presenceGuard } from './trust.js';
+import { setBirthdayFallback } from './birthday.js';
 import { REFLECTION_SYSTEM_PROMPT, reflectionTarget, buildReflectionPrompt, applyReflection, beliefsToEditorText, beliefsFromEditorText, normalizePreferences } from './reflection.js';
-import { canonSeedTargets, canonTextFor, buildCanonSeedPrompt, parseCanonSeed, applyCanonSeed, CANON_SEED_SYSTEM_PROMPT } from './canon-seed.js';
+import { canonSeedTargets, canonTextFor, parseCanonSeed, applyCanonSeed } from './canon-seed.js';
 import {
     castSignals,
     buildCastShortlist,
@@ -489,6 +491,7 @@ const DEFAULTS = Object.freeze({
     admissionMode: 'conservative',
     inject: true,
     recallEnabled: false,
+    generateBirthdays: false,
     recallModel: RECALL_DEFAULTS.model,
     recallApiUrl: RECALL_DEFAULTS.apiUrl,
     recallQdrantUrl: RECALL_DEFAULTS.qdrantUrl,
@@ -568,6 +571,8 @@ function getSettings() {
     // is moved once; any value the player chose, including a later deliberate 1800, is kept.
     const legacyDefaultBudget = settings.injectBudgetDefaultUpgraded !== true && Number(settings.injectBudgetTokens) === 1800;
     assign('recallEnabled', settings.recallEnabled === true);
+    assign('generateBirthdays', settings.generateBirthdays === true);
+    setBirthdayFallback(settings.generateBirthdays === true);
     assign('recallModel', typeof settings.recallModel === 'string' && settings.recallModel.trim() ? settings.recallModel.trim() : RECALL_DEFAULTS.model);
     assign('recallApiUrl', typeof settings.recallApiUrl === 'string' && settings.recallApiUrl.trim() ? settings.recallApiUrl.trim() : RECALL_DEFAULTS.apiUrl);
     assign('recallQdrantUrl', typeof settings.recallQdrantUrl === 'string' && settings.recallQdrantUrl.trim() ? settings.recallQdrantUrl.trim() : RECALL_DEFAULTS.qdrantUrl);
@@ -3110,8 +3115,8 @@ async function refreshNpcFromChat(npcId) {
 const SCAN_RESPONSE_LENGTH = 1800;
 const FULL_SCAN_RESPONSE_LENGTH = 3200;
 const RELATIONSHIP_RESPONSE_LENGTH = 900;
-const CAST_RESPONSE_LENGTH = 1400;
-const CANON_SEED_RESPONSE_LENGTH = 700;
+// S8.5: one cast call now also carries canon seeds, events, stances and sheets.
+const CAST_RESPONSE_LENGTH = 2200;
 const REFLECTION_RESPONSE_LENGTH = 700;
 const BACKFILL_RESPONSE_LENGTH = 3200;
 const BACKFILL_MAX_ATTEMPTS = 3;
@@ -3470,26 +3475,17 @@ async function readBaiBaiCast() {
 // Canon field seeding (S7.1): the first time a dossier is linked to a canon entry, its base fields
 // are extracted from the full canon text (one small request per newly linked NPC, at most three
 // per scan). The seeds are applied after the merge; a failure never blocks the scan.
-async function runCanonSeeds(ctx, castPass, existingNpcs, options = {}) {
-    const targets = castPass?.cast ? canonSeedTargets(castPass.cast.npcs, existingNpcs) : [];
+// S8.5: canon seeds arrive inside the cast call (no extra request). Each is grounded in the FULL
+// canon text, not just the snippet the cast prompt showed.
+function canonSeedsFromCast(castPass, existingNpcs) {
+    const rows = castPass?.cast?.npcs || [];
     const seeds = [];
-    for (const target of targets) {
+    for (const target of canonSeedTargets(rows, existingNpcs)) {
+        const row = rows.find(item => item.canonSeedRaw && (target.id ? item.id === target.id : item.name === target.name));
         const canonText = canonTextFor(target.canonRef, castPass.canonSources || {});
-        if (!canonText) continue;
-        try {
-            const { parsed } = await generateParsedNpcJson(ctx, {
-                systemPrompt: CANON_SEED_SYSTEM_PROMPT,
-                prompt: buildCanonSeedPrompt({ name: target.name, canonText }),
-                responseLength: CANON_SEED_RESPONSE_LENGTH,
-                label: 'canon seed',
-                requestScope: options.requestScope,
-            });
-            const { fields, rejected } = parseCanonSeed(parsed, canonText);
-            if (Object.keys(fields).length) seeds.push({ ...target, fields, rejected });
-        } catch (error) {
-            if (isScannerRoutingError(error)) throw error;
-            console.warn('[NPC Codex] canon seed failed; the dossier keeps story-derived fields.', error);
-        }
+        if (!row || !canonText) continue;
+        const { fields, rejected } = parseCanonSeed(row.canonSeedRaw, canonText);
+        if (Object.keys(fields).length) seeds.push({ ...target, fields, rejected });
     }
     return seeds;
 }
@@ -3885,7 +3881,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             { currentExchangeOnly: manual || fullWindowScan, requestScope: operation.requestScope },
         );
         const castPass = await runCastPass(ctx, state.npcs, currentTranscript || transcript, { requestScope: operation.requestScope });
-        const canonSeeds = await runCanonSeeds(ctx, castPass, state.npcs, { requestScope: operation.requestScope });
+        const canonSeeds = canonSeedsFromCast(castPass, state.npcs);
         const scanFinishedAt = performance.now?.() ?? Date.now();
         lastScanMetrics = {
             label: manual ? 'manual' : (fullWindowScan ? 'automatic-full' : 'automatic'),
@@ -4021,6 +4017,13 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             merged.report.events = remembered.applied;
             if (lastScanMetrics) lastScanMetrics.eventsApplied = remembered.applied.length;
         }
+        // S3.4: presence comes from the story. A newly present NPC the reply never names (only the
+        // player's message or a system notice did) stays absent.
+        if (!manual && !fullWindowScan && Number.isInteger(messageId)) {
+            const guarded = presenceGuard(state.npcs, merged.state.npcs, ctx.chat?.[messageId]?.mes);
+            merged.state.npcs = guarded.npcs;
+            if (guarded.reverted.length) merged.report.presenceReverted = guarded.reverted;
+        }
         if (castPass.cast?.stances?.length) {
             const stanced = applyStanceDecisions(merged.state.npcs, castPass.cast.stances, { turn: state.turn });
             merged.state.npcs = stanced.npcs;
@@ -4096,6 +4099,9 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             };
             for (const raw of Array.isArray(resolvedParsed?.npcs) ? resolvedParsed.npcs : []) markBroadScanTarget(raw);
             for (const raw of Array.isArray(resolvedParsed?.profileUpdates) ? resolvedParsed.profileUpdates : []) markBroadScanTarget(raw);
+            // S8.5: a canon-seeded newcomer already has a base profile from the cast call, so it skips
+            // the per-NPC new-admission backfill request.
+            const seededThisScan = new Set((merged.report?.canonSeeded || []).map(item => item.npcId));
             const missedParticipants = [];
             for (const npc of nextState.npcs || []) {
                 if (npc.archived || touchedIds.has(npc.id) || !npcParticipatesInExchange(npc, nextState.npcs || [], currentTranscript || '', { includeRole: false })) continue;
@@ -4120,6 +4126,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             // first pass provides. Repair only those new/promoted dossiers; admitting one NPC must
             // never fan out into targeted model calls for unrelated established cast members.
             for (const id of newlyAdmittedIds) {
+                if (seededThisScan.has(id)) continue;
                 const admitted = nextState.npcs.find(npc => npc.id === id && !npc.archived);
                 if (!admitted) continue;
                 queueNpcBackfillInState(nextState, admitted.id, admitted.name, targetMessageId, {
@@ -4215,6 +4222,7 @@ function buildSettingsHtml() {
         ${settingRow('npc_state_delta_recall_model', 'Embedding model', '<input id="npc_state_delta_recall_model" type="text" class="text_pole">', 'Model id on the embedding server, e.g. text-embedding-embeddinggemma-2.')}
         ${settingRow('npc_state_delta_recall_api', 'Embedding server', '<input id="npc_state_delta_recall_api" type="text" class="text_pole">', 'OpenAI-compatible URL (LM Studio: http://127.0.0.1:1234).')}
         ${settingRow('npc_state_delta_recall_qdrant', 'Qdrant URL', '<input id="npc_state_delta_recall_qdrant" type="text" class="text_pole">', '')}
+        ${settingRow('npc_state_delta_generate_birthdays', 'Generate missing birthdays', '<input id="npc_state_delta_generate_birthdays" type="checkbox">', 'Off: an unknown birthday stays empty (nothing is invented). On: a stable fallback date is generated.')}
         ${settingsSlot('relationship-map')}
         <h4 class="delta-settings-subhead">Roster lifecycle</h4>
         ${settingRow('npc_state_delta_max', 'Maximum active NPCs', numberControl('npc_state_delta_max', 1, 100), 'Archived dossiers do not use an active slot.')}
@@ -4392,6 +4400,7 @@ function syncSettingsControls() {
     $('#npc_state_delta_stale_delete_after').val(s.staleDeleteAfter);
     $('#npc_state_delta_inject').prop('checked', !!s.inject);
     $('#npc_state_delta_recall_enabled').prop('checked', !!s.recallEnabled);
+    $('#npc_state_delta_generate_birthdays').prop('checked', !!s.generateBirthdays);
     $('#npc_state_delta_recall_model').val(s.recallModel || '');
     $('#npc_state_delta_recall_api').val(s.recallApiUrl || '');
     $('#npc_state_delta_recall_qdrant').val(s.recallQdrantUrl || '');
@@ -6359,6 +6368,7 @@ function bindUi() {
     bindSettingsCheckbox('#npc_state_delta_full_scan_every_turn', 'fullScanEveryTurn');
     bindSettingsCheckbox('#npc_state_delta_inject', 'inject', updateInjection);
     bindSettingsCheckbox('#npc_state_delta_recall_enabled', 'recallEnabled', updateInjection);
+    bindSettingsCheckbox('#npc_state_delta_generate_birthdays', 'generateBirthdays', () => { setBirthdayFallback(getSettings().generateBirthdays === true); updateInjection(); });
     bindSettingsText('#npc_state_delta_recall_model', 'recallModel', recallSettingsChanged);
     bindSettingsText('#npc_state_delta_recall_api', 'recallApiUrl', recallSettingsChanged);
     bindSettingsText('#npc_state_delta_recall_qdrant', 'recallQdrantUrl', recallSettingsChanged);
@@ -7086,6 +7096,8 @@ window.NPCStateDelta = Object.freeze({
     scan: () => scanNow({ manual: true }),
     cancelScan: () => { const key = getChatKey(); pendingAutoScans.delete(key); return cancelScanOperation(key, 'user cancelled'); },
     scannerRouting: scannerRoutingMetrics,
+    // S8.1: Turn Queue asks this before a generation, so the next reply can see settled dossiers.
+    isBusy: () => isScanBusy(getChatKey()),
     processBackfills: processPendingBackfills,
     scanDossier: async value => {
         const key = getChatKey();

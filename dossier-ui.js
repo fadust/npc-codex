@@ -3,6 +3,7 @@ import { appearanceFingerprint, currentPresentationText, normalizeAppearanceMode
 import { formatBirthDate } from './birthday.js';
 import { normalizeKnowledge } from './knowledge.js';
 import { stancesForView } from './stance.js';
+import { provenanceLines } from './trust.js';
 import { normalizeSheet } from './sheet.js';
 
 const KNOWLEDGE_LABELS = Object.freeze({ knows: 'Knows', secret: 'Secret', unaware: 'Does not know' });
@@ -158,6 +159,7 @@ export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortr
         beliefs: (Array.isArray(npc?.beliefs) ? npc.beliefs : []).map(item => `${item.about && item.about !== 'world' ? `about ${plain(item.about)}: ` : ''}${plain(item.belief)}`),
         likes: stringList(npc?.likes, 8),
         stances: stancesForView(npc),
+        provenance: provenanceLines(npc),
         dislikes: stringList(npc?.dislikes, 8),
         intentions: (Array.isArray(npc?.intentions) ? npc.intentions : []).filter(item => item?.status === 'open').map(item => `${plain(item.what)}${item.due ? ` (by ${plain(item.due)})` : ''}`),
         sheet: normalizeSheet(npc?.sheet),
@@ -911,6 +913,7 @@ class DeltaDossierUi {
             <section class="delta-section" data-delta-section="history">
                 <h3>Background / History${changedMark(selected, 'background')}</h3>${proseHtml(selected.background, 'No background established yet.')}
                 ${selected.canonSeed ? `<p class="delta-muted">Seeded from ${selected.canonSeed.source} canon${selected.canonSeed.entry ? ` (${escapeHtml(selected.canonSeed.entry)})` : ''}: ${escapeHtml(selected.canonSeed.fields.join(', ') || 'nothing')}.${selected.canonLocked.length ? ` Canon-locked: ${escapeHtml(selected.canonLocked.join(', '))}.` : ''}</p>` : ''}
+                ${selected.provenance?.length ? `<h3>Sources</h3>${listHtml(selected.provenance, '')}` : ''}
             </section>`, documentPane.dataset.npcId !== selected.id);
         documentPane.dataset.npcId = selected.id;
         documentPane.scrollTop = documentScroll;

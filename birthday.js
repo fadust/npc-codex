@@ -98,7 +98,15 @@ export function normalizeScanBirthday(raw = {}, config = undefined) {
     };
 }
 
+// S3.3 (NPC Codex): unknown stays empty. The extension turns the generated fallback off unless the
+// player enables "Generate missing birthdays"; the module default keeps NSD's behaviour for its tests.
+let birthdayFallback = true;
+export function setBirthdayFallback(enabled) {
+    birthdayFallback = enabled !== false;
+}
+
 function generatedBirthdayFor(npc = {}, config = undefined) {
+    if (!birthdayFallback) return { birthDate: '', birthDateSource: '', birthDatePrecision: '', birthDateYearSource: '', birthDateCalendarFingerprint: '', birthDateReason: '', birthDateSourceMessageId: null };
     const calendar = activeOrProvided(config);
     const generated = deterministicBirthday(birthdaySeed(npc), calendar);
     return {
@@ -137,6 +145,8 @@ function anchorMissingBirthYear(npc = {}, config = undefined, referenceDate = nu
 }
 
 export function normalizeNpcBirthday(npc = {}, config = undefined, referenceDate = null) {
+    // With the fallback off, an earlier generated birthday is not story fact: it is cleared.
+    if (!birthdayFallback && String(npc?.birthDateSource || '').toLowerCase() === 'generated') npc = { ...npc, birthDate: '', birthDateSource: '' };
     const calendar = activeOrProvided(config);
     const rawDate = normalizeStoredBirthDate(npc?.birthDate ?? npc?.birth_date ?? npc?.birthday, calendar);
     const rawSource = String(npc?.birthDateSource ?? npc?.birth_date_source ?? '').trim().toLowerCase();
