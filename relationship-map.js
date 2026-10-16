@@ -13,7 +13,7 @@ import {
     plain,
     signed,
 } from './relationship-map-core.js';
-import { statPaneHtml, statSheetStyles } from './stat-sheet-ui.js';
+import { statPaneHtml, statSheetStyles, applyStatEdit, addStatRow, removeStatRow } from './stat-sheet-ui.js';
 
 const EXTENSION_NAME = 'npc_state_delta';
 const DOSSIER_ROOT_ID = 'npc_state_delta_dossier_root';
@@ -164,7 +164,28 @@ function renderStat(ui) {
     const pane = ui?.root?.querySelector('.delta-stat-pane');
     if (!pane || view.mode !== 'stat') return;
     const selected = ui.projection?.npcs?.find(npc => npc.id === ui.selectedNpcId) || null;
-    pane.innerHTML = statPaneHtml(selected);
+    pane.innerHTML = statPaneHtml(selected, { schema: ui.projection?.worldSchema || null });
+    if (pane.dataset.statBound) return;
+    // Inline edits: each change saves the whole sheet through the public API (no lock).
+    pane.dataset.statBound = '1';
+    const current = () => (ui.projection?.npcs?.find(npc => npc.id === ui.selectedNpcId) || {}).sheet;
+    const save = next => {
+        const id = pane.querySelector('.delta-stat-head')?.dataset.npcId;
+        if (id) globalThis.NPCStateDelta?.updateSheet?.(id, next);
+    };
+    pane.addEventListener('change', event => {
+        const field = event.target.closest('[data-stat-path]');
+        if (field) save(applyStatEdit(current(), field.dataset.statPath, field.value));
+    });
+    pane.addEventListener('click', event => {
+        const add = event.target.closest('[data-stat-add]');
+        if (add) return void save(addStatRow(current(), add.dataset.statAdd));
+        const remove = event.target.closest('[data-stat-remove]');
+        if (remove) {
+            const [key, index] = remove.dataset.statRemove.split(':');
+            save(removeStatRow(current(), key, index));
+        }
+    });
 }
 
 function setMode(ui, mode) {

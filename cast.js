@@ -91,14 +91,35 @@ export function mergeRoles(existing, incoming, { turn = null } = {}) {
     });
     const out = normalizeRoles(existing).slice();
     for (const role of stamped) {
-        const index = out.findIndex(item => roleKey(item) === roleKey(role));
+        const index = out.findIndex(item => roleKey(item) === roleKey(role) || sameRoleWording(item, role));
         if (index < 0) { out.push(role); continue; }
-        const merged = { ...out[index], ...role };
+        // Keep the more specific wording ("Prefect of Ravenclaw" at "Hogwarts" over "Prefect" at "Ravenclaw").
+        const specific = plainRole(role).length >= plainRole(out[index]).length ? role : out[index];
+        const merged = { ...out[index], ...role, title: specific.title, ...(specific.org ? { org: specific.org } : {}) };
         if (roleIsCurrent(role)) delete merged.until;
         if (Number.isInteger(out[index].since)) merged.since = out[index].since;
         out[index] = merged;
     }
-    return normalizeRoles(out);
+    // Earlier scans may have stored the same role twice in different words: fold those too.
+    const folded = [];
+    for (const role of normalizeRoles(out)) {
+        const twin = folded.findIndex(item => sameRoleWording(item, role));
+        if (twin < 0) folded.push(role);
+        else if (plainRole(role).length > plainRole(folded[twin]).length) folded[twin] = { ...folded[twin], title: role.title, ...(role.org ? { org: role.org } : {}) };
+    }
+    return folded;
+}
+
+function plainRole(role) {
+    return `${role?.title || ''}${role?.org ? ` of ${role.org}` : ''}`.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// "prefect of ravenclaw" and "prefect of ravenclaw of hogwarts" are one role, both current or both former.
+function sameRoleWording(a, b) {
+    if (roleIsCurrent(a) !== roleIsCurrent(b)) return false;
+    const x = plainRole(a);
+    const y = plainRole(b);
+    return Boolean(x && y) && (x === y || x.startsWith(`${y} `) || y.startsWith(`${x} `));
 }
 
 export function roleLabel(role) {

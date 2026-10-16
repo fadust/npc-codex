@@ -8,7 +8,7 @@
  * Pure module: no host, DOM or storage access. */
 
 export const SHEET_LIMITS = Object.freeze({
-    keyItems: 10, equipped: 8, spells: 12, skills: 12, conditions: 8, attributes: 12, pools: 6, itemLog: 12,
+    keyItems: 10, equipped: 8, spells: 12, skills: 12, conditions: 8, attributes: 12, pools: 6, itemLog: 12, passives: 10,
 });
 const TEXT = 160;
 
@@ -67,7 +67,7 @@ function normalizeList(value, map, limit) {
 }
 
 export function emptySheet() {
-    return { archetype: '', rank: '', attributes: [], pools: [], conditions: [], spells: [], skills: [], equipped: [], keyItems: [], itemLog: [] };
+    return { archetype: '', rank: '', attributes: [], pools: [], conditions: [], spells: [], skills: [], equipped: [], keyItems: [], passives: [], itemLog: [] };
 }
 
 export function normalizeSheet(raw) {
@@ -97,20 +97,25 @@ export function normalizeSheet(raw) {
             const kind = CONDITION_KINDS.includes(String(item?.kind || '').toLowerCase()) ? String(item.kind).toLowerCase() : 'status';
             const severity = cleanText(item?.severity, 40);
             const until = cleanText(item?.until, 80);
-            return { name, kind, ...(severity ? { severity } : {}), ...(until ? { until } : {}), ...meta(item) };
+            const source = cleanText(item?.source, 80);
+            const effect = cleanText(item?.effect, TEXT);
+            return { name, kind, ...(severity ? { severity } : {}), ...(until ? { until } : {}), ...(source ? { source } : {}), ...(effect ? { effect } : {}), ...meta(item) };
         }, SHEET_LIMITS.conditions),
         spells: normalizeList(source.spells, item => {
             const name = cleanText(item?.name, 80);
             if (!name) return null;
             const school = cleanText(item?.school, 40);
             const tier = cleanText(item?.tier, 40);
-            return { name, ...(school ? { school } : {}), ...(tier ? { tier } : {}), ...meta(item) };
+            const note = cleanText(item?.note, TEXT);
+            return { name, ...(school ? { school } : {}), ...(tier ? { tier } : {}), ...(note ? { note } : {}), ...meta(item) };
         }, SHEET_LIMITS.spells),
         skills: normalizeList(source.skills, item => {
             const name = cleanText(item?.name, 80);
             if (!name) return null;
             const proficiency = cleanText(item?.proficiency, 40);
-            return { name, ...(proficiency ? { proficiency } : {}), ...meta(item) };
+            const level = cleanText(item?.level, 40);
+            const note = cleanText(item?.note, TEXT);
+            return { name, ...(level ? { level } : {}), ...(proficiency ? { proficiency } : {}), ...(note ? { note } : {}), ...meta(item) };
         }, SHEET_LIMITS.skills),
         equipped: normalizeList(source.equipped, item => {
             const itemName = cleanText(item?.item, TEXT);
@@ -119,6 +124,14 @@ export function normalizeSheet(raw) {
             const notes = cleanText(item?.notes, TEXT);
             return { item: itemName, ...(slot ? { slot } : {}), ...(notes ? { notes } : {}), ...meta(item) };
         }, SHEET_LIMITS.equipped),
+        // Lasting traits and effects without a duration (the Stat tab's Passive Status).
+        passives: normalizeList(source.passives, item => {
+            const name = cleanText(item?.name, 80);
+            if (!name) return null;
+            const type = cleanText(item?.type, 40);
+            const effect = cleanText(item?.effect, TEXT);
+            return { name, ...(type ? { type } : {}), ...(effect ? { effect } : {}), ...meta(item) };
+        }, SHEET_LIMITS.passives),
         keyItems: normalizeList(source.keyItems, item => {
             const itemName = cleanText(item?.item, TEXT);
             if (!itemName) return null;
@@ -139,7 +152,7 @@ export function normalizeSheet(raw) {
 
 export function sheetIsEmpty(sheet) {
     const s = normalizeSheet(sheet);
-    return !s.archetype && !s.rank && ['attributes', 'pools', 'conditions', 'spells', 'skills', 'equipped', 'keyItems'].every(key => !s[key].length);
+    return !s.archetype && !s.rank && ['attributes', 'pools', 'conditions', 'spells', 'skills', 'equipped', 'keyItems', 'passives'].every(key => !s[key].length);
 }
 
 /* ---------- Deltas from the cast pass ---------- */
