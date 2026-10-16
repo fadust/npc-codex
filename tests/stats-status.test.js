@@ -88,3 +88,24 @@ test('buffs fade for one turn, then expire; a re-mention keeps the clock', () =>
     const kept = applySheetDelta({ conditions: scheduleStatuses([{ name: 'venom', kind: 'poison' }], { turn: 1 }) }, { conditions: [{ op: 'add', name: 'venom', kind: 'poison', effect: 'worse' }] });
     assert.equal(kept.conditions[0].onset.turn, 1);
 });
+
+test('simulation fixes: calm craft and retold fights are not action; treated afflictions recover; B stays under S', () => {
+    const brann = { ...createNpcRecord('Brann'), present: true, sheet: { attributes: [{ name: 'Strength', value: '78' }] } };
+    assert.doesNotMatch(buildInjection([brann], 'Grukk hammers a blade at the forge.', 1), /ABILITY/);
+    assert.doesNotMatch(buildInjection([brann], 'Lyra tells Mira that Brann attacked Grukk at the forge.', 1), /ABILITY/);
+    assert.match(buildInjection([brann], 'Bandits ambush the road; Brann draws his sword.', 1), /ABILITY/);
+    let conditions = scheduleStatuses([{ name: 'venom', kind: 'poison', severity: 'dying' }], { turn: 1, day: 1 });
+    let sheet = applySheetDelta({ conditions }, { conditions: [{ op: 'treat', name: 'venom' }] });
+    assert.equal(sheet.conditions[0].treated, true);
+    conditions = scheduleStatuses(sheet.conditions, { turn: 2, day: 1 });
+    let step = tickStatuses(conditions, { turn: 9, day: 2 });
+    assert.equal(step.conditions[0].severity, 'moderate', 'a treated affliction eases, never worsens');
+    step = tickStatuses(step.conditions, { turn: 12, day: 3 });
+    step = tickStatuses(step.conditions, { turn: 15, day: 4 });
+    assert.equal(step.conditions.length, 0);
+    assert.deepEqual(step.events, [{ op: 'recovered', item: 'venom' }]);
+    const sword = parseProfessionProfile({ modifiers: { Agility: 6 }, focus: ['Agility'] });
+    const b = value(deriveSheet({ profession: sword, tier: 'B', emphasis: { dominant: ['Agility'] } }), 'Agility');
+    const s = value(deriveSheet({ profession: sword, tier: 'S', emphasis: { dominant: ['Agility'] } }), 'Agility');
+    assert.ok(b < 90 && s > b, `B ${b}, S ${s}`);
+});

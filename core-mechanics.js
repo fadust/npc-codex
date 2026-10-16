@@ -12,7 +12,7 @@ import { normalizeBeliefs, normalizePreferences, renderReflectionInjection } fro
 import { temperamentExpression, normalizeStances, renderStanceInjection } from './stance.js';
 import { normalizeFloris, renderFlorisReadout } from './floris.js';
 import { renderStatusInjection, sappingStatus } from './status.js';
-import { ACTION_SIGNAL, abilityFlavour, clashComparison } from './derive.js';
+import { isActionScene, abilityFlavour, clashComparison } from './derive.js';
 import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
 import { emptySheet, normalizeSheet, readSheetDelta, sheetDeltaIsEmpty, applySheetDelta, sheetIsEmpty, renderSheetInjection } from './sheet.js';
 import { normalizeCanonSeed, normalizeCanonLocked, enforceCanonLocks } from './canon-seed.js';
@@ -5870,7 +5870,7 @@ function injectionOptionalFields(npc, includeAppearance = false, turn = null, sc
     // Statuses shape every scene; ability flavour only scenes with bodies or magic in motion.
     const conditions = Array.isArray(npc.sheet?.conditions) ? npc.sheet.conditions : [];
     const statusLine = renderStatusInjection(conditions, { turn, day: storyDay });
-    const action = ACTION_SIGNAL.test(String(sceneText || ''));
+    const action = isActionScene(sceneText);
     const flavour = action ? abilityFlavour(npc.sheet, { sappedBy: sappingStatus(conditions) }) : '';
     const clash = action ? clashComparison(npc.sheet, castNpcs.filter(other => other && other.id !== npc.id)) : '';
     const abilityLine = flavour || clash ? `ABILITY (flavour, not rules; never numbers, dice or set outcomes): ${[flavour, clash && `in a clash: ${clash}`].filter(Boolean).join('; ')}` : '';

@@ -87,7 +87,13 @@ export function tickStatuses(conditions, now) {
     const out = [];
     for (const condition of Array.isArray(conditions) ? conditions : []) {
         if (!passed(condition.deadline, now)) { out.push(condition); continue; }
-        if (isAffliction(condition)) {
+        if (isAffliction(condition) && condition.treated) {
+            // Treated: it recovers a stage per window instead of worsening, and clears from mild.
+            const stage = stageOf(condition);
+            if (stage === 0) { events.push({ op: 'recovered', item: condition.name }); continue; }
+            out.push({ ...condition, severity: LADDER[stage - 1], deadline: deadlineFrom(windowFor(condition), now) || undefined });
+            events.push({ op: 'easing', item: `${condition.name} (${LADDER[stage - 1]})` });
+        } else if (isAffliction(condition)) {
             const stage = stageOf(condition);
             if (stage >= LADDER.length - 1) { out.push({ ...condition, deadline: undefined }); continue; }
             const next = LADDER[stage + 1];
@@ -103,11 +109,12 @@ export function tickStatuses(conditions, now) {
     return { conditions: out, events };
 }
 
-// Treatment in the story: one stage down, or gone from mild.
+// Treatment in the story: one stage down, or gone from mild. A treated affliction no longer
+// escalates; its clock restarts as recovery (see tickStatuses).
 export function treatStatus(condition) {
     const stage = stageOf(condition);
     if (!isAffliction(condition) || stage === 0) return null;
-    return { ...condition, severity: LADDER[stage - 1], onset: undefined, deadline: undefined };
+    return { ...condition, severity: LADDER[stage - 1], treated: true, onset: undefined, deadline: undefined };
 }
 
 function elapsed(condition, now) {
@@ -128,7 +135,7 @@ export function renderStatusInjection(conditions, now = {}) {
     if (!list.length) return '';
     const lines = list.map(condition => {
         if (condition.fading) return `${condition.name} is wearing off`;
-        const since = isAffliction(condition) && elapsed(condition, now) ? `, untreated ${elapsed(condition, now)}` : '';
+        const since = !isAffliction(condition) ? '' : condition.treated ? ', treated, recovering' : elapsed(condition, now) ? `, untreated ${elapsed(condition, now)}` : '';
         const severity = condition.severity ? `${condition.severity}${since}` : since.replace(/^, /, '');
         const effect = condition.effect ? `: ${condition.effect}` : '';
         const cause = condition.aware === false ? '; does not know the cause' : '';
@@ -148,6 +155,7 @@ export function statusStateText(condition) {
     return [
         condition?.fading ? 'wearing off' : '',
         isAffliction(condition) ? (condition.severity || LADDER[stageOf(condition)]) : '',
+        condition?.treated ? 'treated' : '',
         condition?.aware === false ? 'unaware' : '',
     ].filter(Boolean).join(' · ');
 }
