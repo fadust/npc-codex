@@ -2,6 +2,7 @@
 import { appearanceFingerprint, currentPresentationText, normalizeAppearanceModel, resolveNpcAppearance } from './appearance.js';
 import { formatBirthDate } from './birthday.js';
 import { normalizeKnowledge } from './knowledge.js';
+import { stancesForView } from './stance.js';
 import { normalizeSheet } from './sheet.js';
 
 const KNOWLEDGE_LABELS = Object.freeze({ knows: 'Knows', secret: 'Secret', unaware: 'Does not know' });
@@ -156,6 +157,7 @@ export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortr
         memories: (Array.isArray(npc?.episodes) && npc.episodes.length ? npc.episodes.map(item => `${item.pinned ? '📌 ' : ''}${item.level === 'defining' ? '★ ' : ''}${plain(item.event)}${item.effect ? ` → ${plain(item.effect)}` : ''}`) : stringList(npc?.memories, 8)).slice(-12),
         beliefs: (Array.isArray(npc?.beliefs) ? npc.beliefs : []).map(item => `${item.about && item.about !== 'world' ? `about ${plain(item.about)}: ` : ''}${plain(item.belief)}`),
         likes: stringList(npc?.likes, 8),
+        stances: stancesForView(npc),
         dislikes: stringList(npc?.dislikes, 8),
         intentions: (Array.isArray(npc?.intentions) ? npc.intentions : []).filter(item => item?.status === 'open').map(item => `${plain(item.what)}${item.due ? ` (by ${plain(item.due)})` : ''}`),
         sheet: normalizeSheet(npc?.sheet),
@@ -900,7 +902,7 @@ class DeltaDossierUi {
                 ${relationshipHistoryHtml(selected.recentRelationshipChanges, selected.lastRelationshipChange)}
             </section>
             <section class="delta-section delta-two-column" data-delta-section="bonds">
-                <div><h3>Important bonds${changedMark(selected, 'keyRelationships')}</h3>${listHtml(selected.keyRelationships, 'No key relationships established yet.')}</div>
+                <div><h3>Important bonds${changedMark(selected, 'keyRelationships')}</h3>${listHtml(selected.keyRelationships, 'No key relationships established yet.')}${selected.stances?.length ? `<h3>Stances toward others</h3>${listHtml(selected.stances, '')}` : ''}</div>
                 <div><h3>Important memories${changedMark(selected, 'memories')}</h3>${listHtml(selected.memories, 'No lived memories yet.')}${selected.intentions?.length ? `<h3>Intentions</h3>${listHtml(selected.intentions, '')}` : ''}${selected.beliefs?.length ? `<h3>Beliefs</h3>${listHtml(selected.beliefs, '')}` : ''}${selected.likes?.length ? `<h3>Likes</h3>${listHtml(selected.likes, '')}` : ''}${selected.dislikes?.length ? `<h3>Dislikes</h3>${listHtml(selected.dislikes, '')}` : ''}</div>
             </section>
             <section class="delta-section" data-delta-section="knowledge">

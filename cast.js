@@ -20,6 +20,8 @@ import {
 } from './knowledge.js';
 import { groundSheetDelta, sheetContext, sheetDeltaIsEmpty } from './sheet.js';
 import { memoryContext, readMemoryDecision, readEventDecisions } from './memory.js';
+import { readStanceDecisions } from './stance.js';
+import { applySchemaToDelta, schemaPromptLine } from './schema.js';
 
 export const CAST_PASS_SYSTEM_PROMPT = "You are NPC State Delta's isolated cast and knowledge evaluator. Use only the supplied candidates, canon entries and current exchange. Return only the requested JSON object.";
 export const ROLE_LIMIT = 6;
@@ -393,7 +395,7 @@ export function rankCanonEntries(entries, transcript, { npcs = [], limit = CANON
 
 /* ---------- The combined cast + knowledge request. ---------- */
 
-export function buildCastPassPrompt({ transcript, shortlist = [], canon = [], signals = {}, userName = 'User', charName = 'Character' }) {
+export function buildCastPassPrompt({ transcript, shortlist = [], canon = [], signals = {}, userName = 'User', charName = 'Character', schema = null }) {
     const hints = [
         signals.unknownNames?.length && `unlisted names: ${signals.unknownNames.join(', ')}`,
         signals.tiePhrases?.length && `tie references: ${signals.tiePhrases.join(' | ')}`,
@@ -407,6 +409,8 @@ TASK A - CAST. List each individual person the CURRENT EXCHANGE refers to by nam
 A reference is a query: anchor + tie or title + qualifiers. "Martha's older daughter" = Martha's child, female, the older one; "his first student" = the earliest of his students; "her ex-wife" = her former spouse; "Tomas's younger brother" = Tomas's sibling, male, younger than Tomas; "the headmaster of Hogwarts" = the CURRENT holder of that title in this story. Decide with the candidates' ties, roles, gender, ages, life state and locations. If two candidates fit equally, use "new" with the reference as the name instead of guessing.
 Per person: {"ref":"exact words from the exchange","is":"canon:<id>|<dossier id>|new","name":"proper name if known","gender":"female|male|","present":true|false,"roles":[{"title":"","org":"","exclusive":true,"status":"current|former"}],"ties":[{"is":"older daughter","of":"Martha"}]}
 Only roles/ties stated in this exchange or the canon entry. A promotion or new post: the new title "current", the replaced one "former". "ties" reads "<this person> IS <tie> OF <other>". A newly revealed proper name for a dossier: "is":"<that id>","name":"<new name>".
+${schemaPromptLine(schema) ? `${schemaPromptLine(schema)}
+` : ''}TASK E (in each person object) - STANCES toward OTHER people present (not ${userName}), only when this exchange shows them interacting: "stances":[{"toward":"","trust":0,"affection":0,"tension":0,"note":"how THEY now see the other, short"}], each -2..2.
 TASK C (in each person object) - SHEET: only what THIS exchange states about that person: "sheet":{"items":[{"op":"gained|lost|equipped|unequipped","item":"","slot":"","significance":""}],"conditions":[{"op":"add|clear","name":"","kind":"injury|illness|buff|debuff|curse|status","severity":"","until":""}],"spells":[{"op":"learned|lost","name":"","school":"","tier":""}],"skills":[{"name":"","proficiency":""}],"rank":"","class":"","pools":[{"name":"HP","current":0,"max":0}],"attributes":[{"name":"","value":""}]}. Items: things that identify the person or matter later (weapons, wands, armour, badges/insignia, keys, heirlooms, quest objects, notable artefacts), not food, coins or furniture. An item the text shows them already holding or carrying => "gained"; wearing or wielding => "equipped" with a slot. Stolen/given away/broken/used up => "lost". "rank" = the person's standing on the world's scale (guild rank, level, belt, grade) when this exchange sets or reveals it, e.g. a promotion to Bronze => "rank":"Bronze". A tie or job title alone is not a rank. Omit "sheet" when the exchange states none of this.
 TASK D - MEMORY. "events": what happened IN this exchange that those present will remember: events major to them or to people close to them, ${userName}'s actions that truly match or go against someone's personality, shared moments/jokes that will matter later. Skip routine talk. Each event once, objectively: {"op":"add|update","id":"<stored event id, for update>","what":"objective fact, short","where":"","witnesses":["everyone present who saw it, incl. ${userName}"],"secret":false,"views":[{"who":"<witness>","effect":"what it changed in THEM: feeling, belief or stance","level":"defining|significant|minor","fit":"matches|contradicts|"}]}. One view per witness; each reacts in their own way. defining = changes their life or a relationship. "told": someone here tells another about a stored event (ids in memories); a retelling is "told", never a new event: {"event":"<event id>","by":"","to":"","effect":""}. Per person object, "intents":[{"op":"add|done|drop","id":"","what":"plan, promise or unresolved problem they hold","due":""}]. Max 2 events; never repeat a stored event, update it.
 TASK B - KNOWLEDGE. For people in the exchange, durable facts they now know, keep secret, or explicitly do NOT know (hidden from them, said while they were absent). Never give a fact to someone who could not have learned it. Max ${KNOWLEDGE_NEW_PER_SCAN} per person; skip existingKnowledge.
@@ -445,7 +449,7 @@ function appearsIn(text, fragment) {
     return Boolean(needle) && haystack.includes(needle);
 }
 
-export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon = [], userName = '', charName = '' } = {}) {
+export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon = [], userName = '', charName = '', schema = null } = {}) {
     const report = { accepted: [], rejected: [] };
     const live = (Array.isArray(npcs) ? npcs : []).filter(npc => npc && !npc.archived);
     const excluded = new Set([userName, charName].map(norm).filter(Boolean));
@@ -453,6 +457,7 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
     const edges = [];
     const nameOf = new Map();
     const presentLabels = [];
+    const stanceRaw = [];
     const people = (Array.isArray(parsed?.people) ? parsed.people : []).slice(0, CAST_PEOPLE_LIMIT);
     for (const person of people) {
         const ref = cleanText(person?.ref, 160);
@@ -500,9 +505,13 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
         if (roles.length) row.roles = roles;
         if (person?.sheet && typeof person.sheet === 'object') {
             const grounded = groundSheetDelta(person.sheet, transcript);
+            const onSchema = applySchemaToDelta(grounded.delta, schema);
+            grounded.delta = onSchema.delta;
+            grounded.rejected.push(...onSchema.rejected);
             for (const label of grounded.rejected) report.rejected.push({ ref, reason: `sheet ${label} not in exchange` });
             if (!sheetDeltaIsEmpty(grounded.delta)) row.sheetDelta = grounded.delta;
         }
+        if (Array.isArray(person?.stances) && person.stances.length) stanceRaw.push({ who: row.name, raw: person.stances });
         if (person?.present === true) presentLabels.push(ref, row.name, ...(row.id ? [row.id] : []), ...(name ? [name] : []));
         if ((person?.memory && typeof person.memory === 'object') || Array.isArray(person?.intents)) {
             const decision = readMemoryDecision(person, { transcript, npc: row.id ? live.find(npc => npc.id === row.id) : null });
@@ -553,7 +562,8 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
         for (const view of event.views) view.who = named(view.who);
     }
     for (const tell of events.told) { tell.by = named(tell.by); tell.to = named(tell.to); }
-    return { npcs: rows, keyRelationshipEdges: edges, knowledge, events: { events: events.events, told: events.told }, report };
+    const stances = stanceRaw.flatMap(({ who, raw }) => readStanceDecisions(who, raw.map(item => ({ ...item, toward: named(item?.toward) })), { present: presentLabels.map(named).concat(presentLabels), userName }));
+    return { npcs: rows, keyRelationshipEdges: edges, knowledge, events: { events: events.events, told: events.told }, stances, report };
 }
 
 // Folds cast rows into the broad scanner's parsed result. A row for an NPC the scanner already

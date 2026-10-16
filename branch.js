@@ -1059,7 +1059,7 @@ const NPC_REVERT_GROUPS = Object.freeze([
     ['personality', 'personalityDevelopment'],
     ['speech', 'speechDevelopment'],
 ]);
-const NPC_REVERT_LIST_FIELDS = Object.freeze(['memories', 'episodes', 'intentions', 'beliefs', 'likes', 'dislikes', 'knowledge', 'roles', 'canonLocked', 'mannerisms', 'behaviorProfile', 'keyRelationships', 'aliases']);
+const NPC_REVERT_LIST_FIELDS = Object.freeze(['memories', 'episodes', 'intentions', 'beliefs', 'stances', 'likes', 'dislikes', 'knowledge', 'roles', 'canonLocked', 'mannerisms', 'behaviorProfile', 'keyRelationships', 'aliases']);
 const NPC_REVERT_SKIP = new Set(['id', 'portrait', 'updatedAt', 'createdAt', 'manualProfileFields', 'manualProfileLocksExplicit']);
 // Presence bookkeeping alone does not make an NPC "used" by later messages, and neither does manual
 // image/retention metadata (a saved seed or prompt is not a narrative appearance).

@@ -9,6 +9,7 @@ import {
 } from './knowledge.js';
 import { normalizeEpisodes, normalizeIntentions, applyMemoryDecision, renderMemoryInjection } from './memory.js';
 import { normalizeBeliefs, normalizePreferences, renderReflectionInjection } from './reflection.js';
+import { temperamentExpression, normalizeStances, renderStanceInjection } from './stance.js';
 import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
 import { emptySheet, normalizeSheet, readSheetDelta, sheetDeltaIsEmpty, applySheetDelta, sheetIsEmpty, renderSheetInjection } from './sheet.js';
 import { normalizeCanonSeed, normalizeCanonLocked, enforceCanonLocks } from './canon-seed.js';
@@ -3727,6 +3728,7 @@ export function normalizeNpcRecord(raw = {}) {
     npc.episodes = normalizeEpisodes(raw.episodes, npc.memories);
     npc.intentions = normalizeIntentions(raw.intentions);
     npc.beliefs = normalizeBeliefs(raw.beliefs);
+    npc.stances = normalizeStances(raw.stances);
     npc.likes = normalizePreferences(raw.likes);
     npc.dislikes = normalizePreferences(raw.dislikes);
     npc.knowledge = normalizeKnowledge(raw.knowledge);
@@ -3833,6 +3835,7 @@ export function createNpcRecord(name, existingIds = [], baseline = DEFAULT_RELAT
         episodes: [],
         intentions: [],
         beliefs: [],
+        stances: [],
         likes: [],
         dislikes: [],
         roles: [],
@@ -5279,6 +5282,7 @@ function mergeAliasLinkedNpcPair(a, b) {
     merged.intentions = normalizeIntentions([...normalizeIntentions(a.intentions), ...normalizeIntentions(b.intentions)].map(({ id, ...rest }) => rest));
     merged.beliefs = normalizeBeliefs([...normalizeBeliefs(a.beliefs), ...normalizeBeliefs(b.beliefs)].map(({ id, ...rest }) => rest));
     merged.likes = normalizePreferences([...normalizePreferences(a.likes), ...normalizePreferences(b.likes)]);
+    merged.stances = normalizeStances([...normalizeStances(a.stances), ...normalizeStances(b.stances)]);
     merged.dislikes = normalizePreferences([...normalizePreferences(a.dislikes), ...normalizePreferences(b.dislikes)]);
     merged.roles = normalizeRoles([...(a.roles || []), ...(b.roles || [])]);
     merged.canonRef = normalizeCanonRef(a.canonRef) || normalizeCanonRef(b.canonRef);
@@ -5814,8 +5818,12 @@ function injectionCurrentStateCore(npc, stateCap = 180) {
 function compactRelationshipModifier(npc, behaviorCap = 160) {
     const rel = normalizeRelationshipBaseline(npc?.relationship || DEFAULT_RELATIONSHIP);
     const summary = calibrateRelationshipSummary(npc?.relationshipSummary, rel);
-    if (summary && relationshipSummaryConsistent(summary, rel)) return truncateInjectionText(summary, behaviorCap);
-    return truncateInjectionText(buildBehaviorGuidance(npc), behaviorCap);
+    // S2.9: the same stance reads differently through each temperament (calm + dislike = cold and
+    // clipped, fiery + dislike = open anger); the blend is short and kept outside the cap.
+    // Under a tight budget the behaviour levers are more specific than the blend: they win.
+    const blend = behaviorCap >= 160 ? temperamentExpression(npc, rel) : '';
+    const base = summary && relationshipSummaryConsistent(summary, rel) ? truncateInjectionText(summary, behaviorCap) : truncateInjectionText(buildBehaviorGuidance(npc), behaviorCap);
+    return blend ? `${base}; ${blend}` : base;
 }
 
 function injectionEssentialBlock(npc, behaviorCap = 160, identityCap = 620, agencyCap = 300, stateCap = 180) {
@@ -5853,7 +5861,7 @@ function clauseBoundedInjection(text, room) {
     return boundary >= labelEnd + 20 ? cut.slice(0, boundary) : '';
 }
 
-function injectionOptionalFields(npc, includeAppearance = false, turn = null, sceneText = '', recallScores = null) {
+function injectionOptionalFields(npc, includeAppearance = false, turn = null, sceneText = '', recallScores = null, presentNames = []) {
     // Episodes replace the old flat memory list; dossiers without episodes keep the old line.
     const livedMemories = renderMemoryInjection(npc, { turn, text: sceneText, vector: recallScores });
     const importantMemories = livedMemories ? [] : cleanList(npc.memories, IMPORTANT_MEMORY_LIMIT, 220);
@@ -5863,6 +5871,7 @@ function injectionOptionalFields(npc, includeAppearance = false, turn = null, sc
         includeAppearance && !npc.appearance && (npc.currentForm || npc.currentFormUnknown) && 'Current visible appearance is not established; do not infer anatomy from species or another form.',
         renderSheetInjection(npc.sheet),
         renderReflectionInjection(npc, { text: sceneText }),
+        renderStanceInjection(npc, { presentNames }),
         livedMemories,
         importantMemories.length && `important memories: ${importantMemories.join(' | ')}`,
         npc.species && `species/race: ${npc.species}`,
@@ -5958,7 +5967,8 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
     // starve another. Relationship summary is deliberately late: live identity/state already won priority.
     // Resolved appearance uses the same optional budget as other continuity. It must not
     // shrink the essential identity/agency budget or be spliced ahead of characterization.
-    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null, text, recallScores));
+    const presentNames = relevant.map(npc => npc.name);
+    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null, text, recallScores, presentNames));
     const enriched = essentialBlocks.slice();
     const maxPriority = Math.max(0, ...optionalByNpc.map(fields => fields.length));
     for (let priority = 0; priority < maxPriority; priority++) {

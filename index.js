@@ -93,6 +93,8 @@ import { knowledgeToEditorText, knowledgeFromEditorText, applyKnowledgeDecisions
 import { sheetToEditor, sheetFromEditor, SHEET_EDITOR_FIELDS } from './sheet.js';
 import { episodesToEditorText, episodesFromEditorText, intentionsToEditorText, intentionsFromEditorText, applyEventDecisions } from './memory.js';
 import { RECALL_DEFAULTS, normalizeRecallSettings, syncRecallIndex, queryRecallScores, resetRecallSession } from './recall-index.js';
+import { applyStanceDecisions } from './stance.js';
+import { findWorldSchema } from './schema.js';
 import { REFLECTION_SYSTEM_PROMPT, reflectionTarget, buildReflectionPrompt, applyReflection, beliefsToEditorText, beliefsFromEditorText, normalizePreferences } from './reflection.js';
 import { canonSeedTargets, canonTextFor, buildCanonSeedPrompt, parseCanonSeed, applyCanonSeed, CANON_SEED_SYSTEM_PROMPT } from './canon-seed.js';
 import {
@@ -3505,16 +3507,17 @@ async function runCastPass(ctx, existingNpcs, transcript, options = {}) {
     const cardText = [card?.description, card?.scenario].filter(Boolean).join('\n');
     const cardEntries = cardCanonEntries(cardText);
     const canon = rankCanonEntries([...cardEntries, ...entries], transcript, { npcs, exclude: [ctx.name1, ctx.name2] });
+    const schema = findWorldSchema({ cardText, entries });
     if (!shortlist.length && !canon.length && !signals.unknownNames.length && !signals.tiePhrases.length && !signals.titlePhrases.length) return empty;
     try {
         const { parsed, raw } = await generateParsedNpcJson(ctx, {
             systemPrompt: CAST_PASS_SYSTEM_PROMPT,
-            prompt: buildCastPassPrompt({ transcript, shortlist, canon, signals, userName: ctx.name1 || 'User', charName: ctx.name2 || 'Character' }),
+            prompt: buildCastPassPrompt({ transcript, shortlist, canon, signals, userName: ctx.name1 || 'User', charName: ctx.name2 || 'Character', schema }),
             responseLength: CAST_RESPONSE_LENGTH,
             label: 'cast pass',
             requestScope: options.requestScope,
         });
-        const cast = castDecisionsToScan(parsed, { transcript, npcs, canon, userName: ctx.name1 || '', charName: ctx.name2 || '' });
+        const cast = castDecisionsToScan(parsed, { transcript, npcs, canon, userName: ctx.name1 || '', charName: ctx.name2 || '', schema });
         return { cast, used: true, responseChars: String(raw ?? '').length, shortlist: shortlist.length, canon: canon.length, canonSources: { entries, cardEntries } };
     } catch (error) {
         if (isScannerRoutingError(error)) throw error;
@@ -4017,6 +4020,11 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             merged.state.npcs = remembered.npcs;
             merged.report.events = remembered.applied;
             if (lastScanMetrics) lastScanMetrics.eventsApplied = remembered.applied.length;
+        }
+        if (castPass.cast?.stances?.length) {
+            const stanced = applyStanceDecisions(merged.state.npcs, castPass.cast.stances, { turn: state.turn });
+            merged.state.npcs = stanced.npcs;
+            if (lastScanMetrics) lastScanMetrics.stancesApplied = stanced.applied;
         }
         // Reflection: one NPC with enough unreflected memories distils them into beliefs and
         // preferences. Rare (REFLECT_MIN_NEW episodes), one NPC per scan, never blocks the scan.
