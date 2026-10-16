@@ -15,7 +15,9 @@
 export const ATTRIBUTES = Object.freeze(['Strength', 'Agility', 'Endurance', 'Intelligence', 'Wisdom', 'Charisma', 'Luck']);
 export const HUMAN_BASELINE = 30;
 export const RANKS = Object.freeze(['E', 'D', 'C', 'B', 'A', 'S']);
-const RANK_BUDGET = { E: 20, D: 50, C: 90, B: 140, A: 200, S: 270 };
+const RANK_BUDGET = { E: 5, D: 15, C: 40, B: 65, A: 95, S: 130 };
+// The best attribute of a ranked character lands in its rank's band (user's scale; E starts at the human 30).
+export const RANK_BANDS = Object.freeze({ E: [30, 39], D: [40, 49], C: [50, 59], B: [60, 69], A: [70, 84], S: [85, 100] });
 const MAGIC = ['none', 'weak', 'normal', 'strong'];
 const MAGIC_FACTOR = { none: 0, weak: 0.5, normal: 1, strong: 1.5 };
 export const PROFILE_SYSTEM_PROMPT = "You are NPC Codex's isolated world-rules helper. Reason from common knowledge of the genre and the supplied lore. Return only the requested JSON object.";
@@ -122,8 +124,19 @@ export function deriveSheet({ race = null, profession = null, tier = '', emphasi
         const sum = Object.values(weights).reduce((total, value) => total + value, 0);
         for (const attr of ATTRIBUTES) values[attr] += (budget * weights[attr]) / sum;
     }
-    // Diminishing returns above 60, so a B-rank's best attribute does not already hit the S ceiling.
-    for (const attr of ATTRIBUTES) if (values[attr] > 60) values[attr] = 60 + (values[attr] - 60) * 0.6;
+    // Fit the peak into the rank band, scaling what lies above the human 30 so the shape is kept.
+    const band = RANK_BANDS[tier];
+    if (band) {
+        const peak = Math.max(...ATTRIBUTES.map(attr => values[attr]));
+        const target = Math.min(band[1], Math.max(band[0], peak));
+        if (peak > HUMAN_BASELINE && target !== peak) {
+            const k = (target - HUMAN_BASELINE) / (peak - HUMAN_BASELINE);
+            for (const attr of ATTRIBUTES) if (values[attr] > HUMAN_BASELINE) values[attr] = HUMAN_BASELINE + (values[attr] - HUMAN_BASELINE) * k;
+        } else if (peak <= HUMAN_BASELINE) {
+            const top = ATTRIBUTES.reduce((best, attr) => values[attr] > values[best] ? attr : best, ATTRIBUTES[0]);
+            values[top] = target;
+        }
+    }
     const attributes = ATTRIBUTES.map(attr => ({ name: attr, value: String(clamp(values[attr], 1, 100)) }));
     const get = attr => Number(attributes.find(item => item.name === attr).value);
     const tierIndex = tier ? RANKS.indexOf(tier) + 1 : 0;
@@ -199,7 +212,7 @@ export function abilityFlavour(sheet, { sappedBy = '' } = {}) {
     const attrs = attributeMap(sheet);
     const entries = Object.entries(attrs);
     if (!entries.length) return '';
-    const high = entries.filter(([, value]) => value >= 55).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([attr]) => HIGH[attr]);
+    const high = entries.filter(([, value]) => value >= 45).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([attr]) => HIGH[attr]);
     const low = entries.filter(([, value]) => value <= 20).sort((a, b) => a[1] - b[1]).slice(0, 1).map(([attr]) => LOW[attr]);
     const restrictions = (sheet?.restrictions || []).includes('no magic') ? ['cannot use magic'] : [];
     let strengths = high.join('; ');
@@ -208,17 +221,17 @@ export function abilityFlavour(sheet, { sappedBy = '' } = {}) {
     return parts.length ? parts.join('; ') : '';
 }
 
-// "quicker than Brann; Brann hits harder" - only for clear gaps.
+// "quicker than Brann; Brann hits harder" - only for clear gaps (about one rank band).
 export function clashComparison(sheet, others = []) {
     const mine = attributeMap(sheet);
     const lines = [];
     for (const other of others) {
         const theirs = attributeMap(other.sheet);
         const gap = attr => (mine[attr] ?? null) !== null && (theirs[attr] ?? null) !== null ? mine[attr] - theirs[attr] : 0;
-        if (gap('Agility') >= 15) lines.push(`quicker than ${other.name}`);
-        else if (gap('Agility') <= -15) lines.push(`${other.name} is quicker`);
-        if (gap('Strength') >= 15) lines.push(`hits harder than ${other.name}`);
-        else if (gap('Strength') <= -15) lines.push(`${other.name} hits harder`);
+        if (gap('Agility') >= 10) lines.push(`quicker than ${other.name}`);
+        else if (gap('Agility') <= -10) lines.push(`${other.name} is quicker`);
+        if (gap('Strength') >= 10) lines.push(`hits harder than ${other.name}`);
+        else if (gap('Strength') <= -10) lines.push(`${other.name} hits harder`);
     }
     return lines.slice(0, 3).join('; ');
 }
