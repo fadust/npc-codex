@@ -51,6 +51,7 @@
     { "path": "relationship-map-core.js", "role": "relationship-map-primitives", "required": true },
     { "path": "relationship-map.js", "role": "relationship-map-view", "required": true },
     { "path": "stat-sheet-ui.js", "role": "stat-sheet-view", "required": true },
+    { "path": "codex-header.js", "role": "codex-header-view", "required": true },
     { "path": "continuity-ui.js", "role": "calendar-birthday-appearance-ui-adapter", "required": true }
   ]
 }

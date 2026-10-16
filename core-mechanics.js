@@ -3734,6 +3734,9 @@ export function normalizeNpcRecord(raw = {}) {
     npc.stances = normalizeStances(raw.stances);
     npc.floris = normalizeFloris(raw.floris);
     npc.likes = normalizePreferences(raw.likes);
+    // NPC Codex header decor, set by the user only (never scanner input or prompt content).
+    npc.quote = cleanText(raw.quote, 240);
+    npc.tags = [...new Set((Array.isArray(raw.tags) ? raw.tags : []).map(tag => cleanText(tag, 32)).filter(Boolean))].slice(0, 8);
     npc.dislikes = normalizePreferences(raw.dislikes);
     npc.knowledge = normalizeKnowledge(raw.knowledge);
     npc.roles = normalizeRoles(raw.roles);
@@ -3842,6 +3845,8 @@ export function createNpcRecord(name, existingIds = [], baseline = DEFAULT_RELAT
         stances: [],
         likes: [],
         dislikes: [],
+        quote: '',
+        tags: [],
         roles: [],
         canonRef: null,
         sheet: emptySheet(),

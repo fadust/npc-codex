@@ -51,9 +51,15 @@ const EXCLUSIVE_TITLE = /\b(head ?master|head ?mistress|headman|principal|dean|c
 export function normalizeRole(raw) {
     if (typeof raw === 'string') raw = { title: raw };
     if (!raw || typeof raw !== 'object') return null;
-    const title = cleanText(raw.title ?? raw.role ?? raw.name, 120);
+    let title = cleanText(raw.title ?? raw.role ?? raw.name, 120);
     if (!title) return null;
     const org = cleanText(raw.org ?? raw.organization ?? raw.faction ?? raw.of, 120);
+    // The model often repeats the org in the title ("messenger of guild" + org "guild"), which
+    // read back as "messenger of guild of guild".
+    if (org) {
+        const tail = [` of the ${org}`, ` of ${org}`].find(item => title.toLowerCase().endsWith(item.toLowerCase()));
+        if (tail && title.length > tail.length) title = title.slice(0, -tail.length).trim();
+    }
     const role = { title, ...(org ? { org } : {}) };
     // Exclusivity is decided here, not by the model: "prefect" or "professor" can be shared even
     // when a model calls them exclusive, and a wrong flag would end someone else's title.

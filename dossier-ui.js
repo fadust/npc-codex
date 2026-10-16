@@ -142,6 +142,9 @@ export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortr
     const shown = displayedPortrait(npc, portraitAssets, formPortraits);
     return {
         ...dossierIndexProjection(npc, portraitAssets),
+        quote: plain(npc?.quote),
+        occupation: plain((Array.isArray(npc?.roles) ? npc.roles : []).find(role => role && !role.until)?.title),
+        tags: stringList(npc?.tags, 8),
         faction: [...new Set((Array.isArray(npc?.roles) ? npc.roles : []).filter(role => role && !role.until && role.org).map(role => plain(role.org)))].join(', '),
         portrait: shown.src,
         portraitFromForm: shown.fromForm,

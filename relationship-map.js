@@ -14,6 +14,7 @@ import {
     signed,
 } from './relationship-map-core.js';
 import { statPaneHtml, statSheetStyles, applyStatEdit, addStatRow, removeStatRow } from './stat-sheet-ui.js';
+import { codexHeaderHtml, codexLayoutStyles } from './codex-header.js';
 
 const EXTENSION_NAME = 'npc_state_delta';
 const DOSSIER_ROOT_ID = 'npc_state_delta_dossier_root';
@@ -227,7 +228,7 @@ function syncChrome(ui) {
     const actions = root.querySelector('.delta-top-actions');
     let tabs = root.querySelector('.delta-map-switch');
     // Dossier (who) and Stat (what) are always there; Map follows its setting.
-    const tabsHtml = `<button type="button" role="tab" data-map-mode="dossier">Dossier</button><button type="button" role="tab" data-map-mode="stat">Stat</button>${enabled ? '<button type="button" role="tab" data-map-mode="map">Map</button>' : ''}`;
+    const tabsHtml = `<button type="button" role="tab" data-map-mode="dossier">Dossier</button><button type="button" role="tab" data-map-mode="stat">Stat</button>${enabled ? '<button type="button" role="tab" data-map-mode="map">Social Map</button>' : ''}`;
     if (actions && !tabs) {
         tabs = document.createElement('div');
         tabs.className = 'delta-map-switch';
@@ -272,10 +273,75 @@ function syncChrome(ui) {
     else if (tabs) for (const tab of tabs.querySelectorAll('[data-map-mode]')) tab.setAttribute('aria-selected', String(tab.dataset.mapMode === view.mode));
 }
 
+// NPC Codex: one header (portrait, name, chips, tags, quote) above the tabs, the cast as a left
+// column. Quote and tags save through the public API; everything else is read-only here.
+function renderHeader(ui) {
+    const root = ui?.root;
+    const stage = root?.querySelector('.delta-stage');
+    if (!stage) return;
+    root.querySelector('.delta-panel')?.classList.add('delta-codex');
+    const selected = ui.projection?.npcs?.find(npc => npc.id === ui.selectedNpcId) || null;
+    const signature = JSON.stringify(selected ? [selected.id, selected.name, selected.gender, selected.age, selected.apparentAge, selected.aliases, selected.role, selected.occupation, selected.faction,
+        selected.location, selected.homeBase, selected.species, selected.sheet?.rank, selected.tags, selected.quote, selected.portrait, selected.bucket, selected.statusLabel] : null);
+    let head = stage.querySelector(':scope > .codex-head');
+    // Held before a redraw: the tabs live inside the header and must survive its replacement.
+    const tabs = root.querySelector('.delta-map-switch');
+    const typing = head && head.contains(document.activeElement) && document.activeElement?.matches?.('[data-codex-quote], [data-codex-new-tag]');
+    if (!head || (head.dataset.signature !== signature && !typing)) {
+        const holder = document.createElement('div');
+        holder.innerHTML = codexHeaderHtml(selected);
+        const next = holder.firstElementChild;
+        next.dataset.signature = signature;
+        if (head) head.replaceWith(next); else stage.prepend(next);
+        head = next;
+        bindHeader(head);
+    }
+    const slot = head.querySelector('.codex-tabs-slot');
+    if (tabs && slot && tabs.parentElement !== slot) slot.appendChild(tabs);
+}
+
+function bindHeader(head) {
+    const id = head.dataset.npcId;
+    if (!id) return;
+    const api = () => globalThis.NPCStateDelta;
+    const currentTags = () => { try { return JSON.parse(head.dataset.tags || '[]'); } catch { return []; } };
+    head.querySelector('[data-codex-quote]')?.addEventListener('change', event => api()?.updateDecor?.(id, { quote: event.target.value }));
+    head.addEventListener('click', event => {
+        const untag = event.target.closest('[data-codex-untag]');
+        if (untag) return void api()?.updateDecor?.(id, { tags: currentTags().filter((_, index) => index !== Number(untag.dataset.codexUntag)) });
+        const add = event.target.closest('[data-codex-tag]');
+        if (!add) return;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.maxLength = 32;
+        input.className = 'codex-chip';
+        input.placeholder = 'tag';
+        input.setAttribute('data-codex-new-tag', '');
+        add.replaceWith(input);
+        input.focus();
+        let done = false;
+        const commit = () => {
+            if (done) return;
+            done = true;
+            const value = input.value.trim();
+            // No longer "typing": the header may redraw with the new tag.
+            input.removeAttribute('data-codex-new-tag');
+            if (value) api()?.updateDecor?.(id, { tags: [...currentTags(), value] });
+            else input.replaceWith(add);
+        };
+        input.addEventListener('keydown', key => {
+            if (key.key === 'Enter') commit();
+            if (key.key === 'Escape') { done = true; input.replaceWith(add); }
+        });
+        input.addEventListener('blur', commit);
+    });
+}
+
 function onDossierRendered() {
     const ui = dossierUi();
     if (!ui) return;
     syncChrome(ui);
+    renderHeader(ui);
     if (view.mode === 'stat') {
         ui.root.querySelector('.delta-spread')?.classList.add('delta-stat-mode');
         const pane = ui.root.querySelector('.delta-stat-pane');
@@ -415,7 +481,7 @@ function installStyles() {
     if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement('style');
     style.id = STYLE_ID;
-    style.textContent = STYLES + statSheetStyles(DOSSIER_ROOT_ID);
+    style.textContent = STYLES + statSheetStyles(DOSSIER_ROOT_ID) + codexLayoutStyles(DOSSIER_ROOT_ID);
     document.head.appendChild(style);
 }
 

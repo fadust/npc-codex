@@ -5897,6 +5897,23 @@ function updateNpcSheet(npcId, sheet, { chatKey } = {}) {
     return true;
 }
 
+// Header decor (quote, tags): user-only fields, saved like a manual sheet edit.
+function updateNpcDecor(npcId, patch = {}, { chatKey } = {}) {
+    if (!chatKey || chatKey !== getChatKey() || !requireReadyChatMutation('edit the dossier header', chatKey)) return false;
+    const state = getChatState(chatKey);
+    const index = state.npcs.findIndex(item => item.id === String(npcId || ''));
+    if (index < 0) return false;
+    const decor = {};
+    if (typeof patch.quote === 'string') decor.quote = patch.quote;
+    if (Array.isArray(patch.tags)) decor.tags = patch.tags;
+    state.npcs[index] = normalizeNpcRecord({ ...state.npcs[index], ...decor, updatedAt: Date.now() });
+    const messageId = latestMessageId(false);
+    if (messageId >= 0) commitBranchCheckpoint(state, messageId, 'manual-edit');
+    persistCritical(chatKey);
+    renderDossier();
+    return true;
+}
+
 function updateNpcAppearance(npcId, draft, { chatKey, lockAppearance = false } = {}) {
     if (!chatKey || chatKey !== getChatKey() || !requireReadyChatMutation('edit appearance forms', chatKey)) return false;
     // The appearance draft lives in the dossier editor; like its main Save, it must not overwrite a
@@ -7300,6 +7317,7 @@ window.NPCStateDelta = Object.freeze({
     renderInline: renderInlineCards,
     openEditor: value => { const npc = findNpcByIdOrName(value); return npc ? openNpcEditorSafely(npc.id) : false; },
     updateSheet: (npcId, sheet) => updateNpcSheet(npcId, sheet, { chatKey: getChatKey() }),
+    updateDecor: (npcId, patch) => updateNpcDecor(npcId, patch, { chatKey: getChatKey() }),
     openDossier: value => { const npc = findNpcByIdOrName(value); return npc ? openLauncherDossier(npc.id) : false; },
     injectionPreview: () => structuredClone(injectionPreview()),
     uiStatus: () => ({
