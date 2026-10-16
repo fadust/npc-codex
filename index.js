@@ -90,7 +90,9 @@ import {
 } from './core.js';
 import { applyNpcBirthdayUpdate, normalizeBirthDate } from './birthday.js';
 import { knowledgeToEditorText, knowledgeFromEditorText, applyKnowledgeDecisions } from './knowledge.js';
-import { sheetToEditor, sheetFromEditor, SHEET_EDITOR_FIELDS } from './sheet.js';
+import { sheetToEditor, sheetFromEditor, SHEET_EDITOR_FIELDS, normalizeSheet } from './sheet.js';
+import { PROFILE_SYSTEM_PROMPT, buildRaceProfilePrompt, buildProfessionProfilePrompt, parseRaceProfile, parseProfessionProfile, deriveSheet, rankTier, profileKey } from './derive.js';
+import { scheduleStatuses, tickStatuses } from './status.js';
 import { episodesToEditorText, episodesFromEditorText, intentionsToEditorText, intentionsFromEditorText, applyEventDecisions } from './memory.js';
 import { RECALL_DEFAULTS, normalizeRecallSettings, syncRecallIndex, queryRecallScores, resetRecallSession } from './recall-index.js';
 import { applyStanceDecisions } from './stance.js';
@@ -493,6 +495,7 @@ const DEFAULTS = Object.freeze({
     inject: true,
     recallEnabled: false,
     generateBirthdays: false,
+    deriveStats: true,
     recallModel: RECALL_DEFAULTS.model,
     recallApiUrl: RECALL_DEFAULTS.apiUrl,
     recallQdrantUrl: RECALL_DEFAULTS.qdrantUrl,
@@ -573,6 +576,7 @@ function getSettings() {
     const legacyDefaultBudget = settings.injectBudgetDefaultUpgraded !== true && Number(settings.injectBudgetTokens) === 1800;
     assign('recallEnabled', settings.recallEnabled === true);
     assign('generateBirthdays', settings.generateBirthdays === true);
+    assign('deriveStats', settings.deriveStats !== false);
     setBirthdayFallback(settings.generateBirthdays === true);
     assign('recallModel', typeof settings.recallModel === 'string' && settings.recallModel.trim() ? settings.recallModel.trim() : RECALL_DEFAULTS.model);
     assign('recallApiUrl', typeof settings.recallApiUrl === 'string' && settings.recallApiUrl.trim() ? settings.recallApiUrl.trim() : RECALL_DEFAULTS.apiUrl);
@@ -2457,7 +2461,7 @@ function updateInjection() {
     const namedNpcIds = namedByPlayerNpcIds(state);
     const sceneText = recentTranscript(4);
     const recallScores = recallCache.chatKey === injectionKey ? recallCache.scores : null;
-    const prompt = buildInjection(state.npcs, sceneText, state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds, recallScores });
+    const prompt = buildInjection(state.npcs, sceneText, state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds, recallScores, storyDay: storyDayAt(latestMessageId(true)) });
     scheduleRecallRefresh(state, sceneText, injectionKey);
     const present = (state.npcs || []).filter(npc => npc?.present && !npc?.archived);
     const depth = Math.max(0, Math.min(20, Number(settings.injectDepth) || 1));
@@ -3121,6 +3125,9 @@ const RELATIONSHIP_RESPONSE_LENGTH = 900;
 // S8.5: one cast call now also carries canon seeds, events, stances and sheets.
 const CAST_RESPONSE_LENGTH = 2200;
 const REFLECTION_RESPONSE_LENGTH = 700;
+const PROFILE_RESPONSE_LENGTH = 500;
+const PROFILE_CALLS_PER_SCAN = 2;
+const DERIVE_PER_SCAN = 4;
 const BACKFILL_RESPONSE_LENGTH = 3200;
 const BACKFILL_MAX_ATTEMPTS = 3;
 const BACKFILL_RETRY_COOLDOWN_MS = 60 * 1000;
@@ -3478,6 +3485,122 @@ async function readBaiBaiCast() {
 // Canon field seeding (S7.1): the first time a dossier is linked to a canon entry, its base fields
 // are extracted from the full canon text (one small request per newly linked NPC, at most three
 // per scan). The seeds are applied after the merge; a failure never blocks the scan.
+/* ---------- Stats: derived sheets and status timing (fadust fork) ---------- */
+
+// Race and profession profiles are cached per world (the card, or the group).
+function worldKeyFor(ctx) {
+    const card = Number.isInteger(Number(ctx?.characterId)) ? ctx.characters?.[ctx.characterId] : null;
+    return ctx?.groupId ? `group:${ctx.groupId}` : (card?.avatar || 'default');
+}
+
+function professionOf(npc) {
+    const role = (Array.isArray(npc?.roles) ? npc.roles : []).find(item => item && !item.until && item.title);
+    // The core noun: "blacksmith of the guild forge" and "blacksmith" share one cached profile.
+    return String(role?.title || String(npc?.role || '').split(/[;,]/)[0] || '').split(/\s+(?:of|for|at|in|to|from|with)\s+/i)[0].trim();
+}
+
+const sameStat = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+
+// Fills the Stat tab for NPCs without a derived sheet, and re-spreads after a rank change (keeping
+// the player's edits by shifting values by the difference). A world with its own schema keeps its
+// own stat set and is not derived.
+async function deriveNpcStats(ctx, npcs, castPass, options = {}) {
+    const settings = getSettings();
+    if (settings.deriveStats === false || lastWorldSchema?.attributes?.length) return { npcs, derived: 0 };
+    settings.worldProfiles = settings.worldProfiles && typeof settings.worldProfiles === 'object' ? settings.worldProfiles : {};
+    const key = worldKeyFor(ctx);
+    const world = settings.worldProfiles[key] || (settings.worldProfiles[key] = { races: {}, professions: {} });
+    const builds = new Map((castPass?.cast?.npcs || []).filter(row => row.build).map(row => [String(row.id || row.name).toLowerCase(), row.build]));
+    const entries = castPass?.canonSources?.entries || [];
+    const loreFor = name => entries.filter(entry => [entry.comment, ...(Array.isArray(entry.key) ? entry.key : [])].some(label => String(label || '').toLowerCase().includes(name))).map(entry => entry.content).join('\n').slice(0, 1200);
+    let calls = 0;
+    let derived = 0;
+    let learned = false;
+    // undefined = not known yet (call budget used up or failed): try again on a later scan.
+    const profile = async (kind, name) => {
+        const id = profileKey(name);
+        if (!id) return null;
+        if (world[kind][id]) return world[kind][id];
+        if (calls >= PROFILE_CALLS_PER_SCAN) return undefined;
+        calls += 1;
+        try {
+            const { parsed } = await generateParsedNpcJson(ctx, {
+                systemPrompt: PROFILE_SYSTEM_PROMPT,
+                prompt: kind === 'races' ? buildRaceProfilePrompt(name, loreFor(id)) : buildProfessionProfilePrompt(name, loreFor(id)),
+                responseLength: PROFILE_RESPONSE_LENGTH,
+                label: 'world rules',
+                requestScope: options.requestScope,
+            });
+            world[kind][id] = kind === 'races' ? parseRaceProfile(parsed) : parseProfessionProfile(parsed, name);
+            learned = true;
+            return world[kind][id];
+        } catch (error) {
+            if (isScannerRoutingError(error)) throw error;
+            console.warn('[NPC Codex] world rules request failed; stats are derived on a later scan.', error);
+            return undefined;
+        }
+    };
+    const out = [];
+    for (const npc of Array.isArray(npcs) ? npcs : []) {
+        if (!npc || npc.archived || derived >= DERIVE_PER_SCAN || (npc.manualProfileFields || []).includes('sheet')) { out.push(npc); continue; }
+        const sheet = normalizeSheet(npc.sheet);
+        const tier = rankTier(sheet.rank, lastWorldSchema?.ranks);
+        const prior = sheet.derivation;
+        const build = builds.get(String(npc.id).toLowerCase()) || builds.get(String(npc.name).toLowerCase()) || null;
+        const species = String(npc.species || build?.race || '').trim();
+        const human = !species || /\bhuman\b/i.test(species);
+        const professionKey = professionOf(npc);
+        // Re-derive only when what it was derived from changed: rank, race (incl. a race learned
+        // after a human guess) or profession.
+        const sameBasis = prior && (prior.rank || '') === tier && (prior.profession || '') === professionKey
+            && (human ? !prior.assumedRace || !species : profileKey(prior.race) === profileKey(species) && !prior.assumedRace);
+        if (sameBasis) { out.push(npc); continue; }
+        const race = human ? null : await profile('races', species);
+        const professionName = professionKey;
+        const profession = professionName ? await profile('professions', professionName) : null;
+        if (race === undefined || profession === undefined) { out.push(npc); continue; }
+        const emphasis = build && (build.dominant?.length || build.weak?.length) ? build : (prior?.emphasis || {});
+        const base = { race, profession, emphasis, raceName: human ? 'human' : species, professionName };
+        const next = deriveSheet({ ...base, tier, previousPools: sheet.pools });
+        let attributes;
+        let pools;
+        if (!prior) {
+            attributes = [...sheet.attributes, ...next.attributes.filter(item => !sheet.attributes.some(other => sameStat(other.name, item.name)))];
+            pools = [...sheet.pools, ...next.pools.filter(item => !sheet.pools.some(other => sameStat(other.name, item.name)))];
+        } else {
+            // What the sheet was derived from before; the difference shifts values, keeping edits.
+            const oldRace = prior.assumedRace || /\bhuman\b/i.test(prior.race || '') ? null : (world.races[profileKey(prior.race)] || null);
+            const oldProfession = prior.profession ? (world.professions[profileKey(prior.profession)] || null) : null;
+            const old = deriveSheet({ ...base, race: oldRace, profession: oldProfession, emphasis: prior.emphasis || {}, tier: prior.rank || '' });
+            const shift = (list, field) => (item, oldList, newList) => {
+                const before = oldList.find(other => sameStat(other.name, item.name));
+                const after = newList.find(other => sameStat(other.name, item.name));
+                if (!before || !after) return item;
+                const value = Math.max(1, Math.round(Number(item[field] ?? before[field]) + Number(after[field]) - Number(before[field])));
+                return { ...item, [field]: field === 'value' ? String(Math.min(100, value)) : value };
+            };
+            attributes = sheet.attributes.map(item => shift(null, 'value')(item, old.attributes, next.attributes));
+            pools = sheet.pools.map(item => shift(null, 'max')(item, old.pools, next.pools));
+            for (const pool of next.pools) if (!pools.some(other => sameStat(other.name, pool.name))) pools.push(pool);
+        }
+        out.push({ ...npc, sheet: { ...sheet, attributes, pools, restrictions: next.restrictions, derivation: { ...next.derivation, ...(Number.isInteger(options.turn) ? { turn: options.turn } : {}) } } });
+        derived += 1;
+    }
+    if (learned) persistSettings();
+    return { npcs: out, derived, calls };
+}
+
+// Statuses move with story time: afflictions escalate past their window, buffs fade then expire.
+function tickNpcStatuses(npcs, now) {
+    return (Array.isArray(npcs) ? npcs : []).map(npc => {
+        const conditions = npc?.sheet?.conditions;
+        if (!Array.isArray(conditions) || !conditions.length) return npc;
+        const { conditions: ticked, events } = tickStatuses(scheduleStatuses(conditions, now), now);
+        const itemLog = events.length ? [...(npc.sheet.itemLog || []), ...events.map(event => ({ ...event, ...(Number.isInteger(now.turn) ? { since: now.turn } : {}) }))] : npc.sheet.itemLog;
+        return { ...npc, sheet: { ...npc.sheet, conditions: ticked, itemLog } };
+    });
+}
+
 // S8.5: canon seeds arrive inside the cast call (no extra request). Each is grounded in the FULL
 // canon text, not just the snippet the cast prompt showed.
 function canonSeedsFromCast(castPass, existingNpcs) {
@@ -4029,6 +4152,10 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             merged.state.npcs = guarded.npcs;
             if (guarded.reverted.length) merged.report.presenceReverted = guarded.reverted;
         }
+        // Stats: derived sheets for NPCs that have none (or changed rank); statuses move with time.
+        const derivedStats = await deriveNpcStats(ctx, merged.state.npcs, castPass, { requestScope: operation.requestScope, turn: state.turn });
+        merged.state.npcs = tickNpcStatuses(derivedStats.npcs, { turn: state.turn, day: Number.isInteger(messageId) ? storyDayAt(messageId) : null });
+        if (lastScanMetrics) lastScanMetrics.statsDerived = derivedStats.derived;
         // S4.3 / S8.3: Floris Bond/Feel readouts are kept per NPC as a hint (never as truth).
         if (Number.isInteger(messageId)) {
             const readout = parseFlorisReadout(ctx.chat?.[messageId]?.mes, { userName: ctx.name1 || '' });
@@ -4236,6 +4363,7 @@ function buildSettingsHtml() {
         ${settingRow('npc_state_delta_recall_model', 'Embedding model', '<input id="npc_state_delta_recall_model" type="text" class="text_pole">', 'Model id on the embedding server, e.g. text-embedding-embeddinggemma-2.')}
         ${settingRow('npc_state_delta_recall_api', 'Embedding server', '<input id="npc_state_delta_recall_api" type="text" class="text_pole">', 'OpenAI-compatible URL (LM Studio: http://127.0.0.1:1234).')}
         ${settingRow('npc_state_delta_recall_qdrant', 'Qdrant URL', '<input id="npc_state_delta_recall_qdrant" type="text" class="text_pole">', '')}
+        ${settingRow('npc_state_delta_derive_stats', 'Derive NPC stats', '<input id="npc_state_delta_derive_stats" type="checkbox">', 'Fills the Stat tab from race, profession and rank (an untrained human is 30). One small call the first time a race or profession appears in a world. Stats only colour action scenes; the prompt never gets numbers.')}
         ${settingRow('npc_state_delta_generate_birthdays', 'Generate missing birthdays', '<input id="npc_state_delta_generate_birthdays" type="checkbox">', 'Off: an unknown birthday stays empty (nothing is invented). On: a stable fallback date is generated.')}
         ${settingsSlot('relationship-map')}
         <h4 class="delta-settings-subhead">Roster lifecycle</h4>
@@ -4415,6 +4543,7 @@ function syncSettingsControls() {
     $('#npc_state_delta_inject').prop('checked', !!s.inject);
     $('#npc_state_delta_recall_enabled').prop('checked', !!s.recallEnabled);
     $('#npc_state_delta_generate_birthdays').prop('checked', !!s.generateBirthdays);
+    $('#npc_state_delta_derive_stats').prop('checked', s.deriveStats !== false);
     $('#npc_state_delta_recall_model').val(s.recallModel || '');
     $('#npc_state_delta_recall_api').val(s.recallApiUrl || '');
     $('#npc_state_delta_recall_qdrant').val(s.recallQdrantUrl || '');
@@ -6397,6 +6526,7 @@ function bindUi() {
     bindSettingsCheckbox('#npc_state_delta_full_scan_every_turn', 'fullScanEveryTurn');
     bindSettingsCheckbox('#npc_state_delta_inject', 'inject', updateInjection);
     bindSettingsCheckbox('#npc_state_delta_recall_enabled', 'recallEnabled', updateInjection);
+    bindSettingsCheckbox('#npc_state_delta_derive_stats', 'deriveStats');
     bindSettingsCheckbox('#npc_state_delta_generate_birthdays', 'generateBirthdays', () => { setBirthdayFallback(getSettings().generateBirthdays === true); updateInjection(); });
     bindSettingsText('#npc_state_delta_recall_model', 'recallModel', recallSettingsChanged);
     bindSettingsText('#npc_state_delta_recall_api', 'recallApiUrl', recallSettingsChanged);

@@ -7,6 +7,8 @@
  *
  * Pure module: no host, DOM or storage access. */
 
+import { treatStatus } from './status.js';
+
 export const SHEET_LIMITS = Object.freeze({
     keyItems: 10, equipped: 8, spells: 12, skills: 12, conditions: 8, attributes: 12, pools: 6, itemLog: 12, passives: 10,
 });
@@ -60,7 +62,8 @@ function removeNamed(list, name, key) {
     return list.filter(item => !sameName(item[key], name));
 }
 
-const CONDITION_KINDS = ['injury', 'illness', 'buff', 'debuff', 'curse', 'status'];
+const CONDITION_KINDS = ['injury', 'illness', 'poison', 'bleeding', 'infection', 'buff', 'debuff', 'curse', 'status'];
+const moment = value => (value && typeof value === 'object' ? { ...(Number.isInteger(value.turn) ? { turn: value.turn } : {}), ...(Number.isInteger(value.day) ? { day: value.day } : {}) } : null);
 
 function normalizeList(value, map, limit) {
     return (Array.isArray(value) ? value : []).map(map).filter(Boolean).slice(-limit);
@@ -76,7 +79,20 @@ export function normalizeSheet(raw) {
         ...(Number.isInteger(item?.since) ? { since: item.since } : {}),
         ...(Number.isInteger(item?.sourceMessageId) ? { sourceMessageId: item.sourceMessageId } : {}),
     });
+    const derivation = source.derivation && typeof source.derivation === 'object' ? {
+        race: cleanText(source.derivation.race, 40),
+        ...(source.derivation.assumedRace ? { assumedRace: true } : {}),
+        ...(cleanText(source.derivation.profession, 60) ? { profession: cleanText(source.derivation.profession, 60) } : {}),
+        ...(cleanText(source.derivation.rank, 4) ? { rank: cleanText(source.derivation.rank, 4) } : {}),
+        emphasis: {
+            dominant: (source.derivation.emphasis?.dominant || []).map(item => cleanText(item, 20)).filter(Boolean).slice(0, 3),
+            weak: (source.derivation.emphasis?.weak || []).map(item => cleanText(item, 20)).filter(Boolean).slice(0, 3),
+        },
+        ...(Number.isInteger(source.derivation.turn) ? { turn: source.derivation.turn } : {}),
+    } : null;
     return {
+        ...(derivation ? { derivation } : {}),
+        ...(Array.isArray(source.restrictions) && source.restrictions.length ? { restrictions: source.restrictions.map(item => cleanText(item, 40)).filter(Boolean).slice(0, 6) } : {}),
         archetype: cleanText(source.archetype ?? source.class, 120),
         rank: cleanText(source.rank ?? source.level, 120),
         attributes: normalizeList(source.attributes, item => {
@@ -99,7 +115,11 @@ export function normalizeSheet(raw) {
             const until = cleanText(item?.until, 80);
             const source = cleanText(item?.source, 80);
             const effect = cleanText(item?.effect, TEXT);
-            return { name, kind, ...(severity ? { severity } : {}), ...(until ? { until } : {}), ...(source ? { source } : {}), ...(effect ? { effect } : {}), ...meta(item) };
+            const onset = moment(item?.onset);
+            const deadline = moment(item?.deadline);
+            return { name, kind, ...(severity ? { severity } : {}), ...(until ? { until } : {}), ...(source ? { source } : {}), ...(effect ? { effect } : {}),
+                ...(item?.aware === false ? { aware: false } : {}), ...(item?.fading === true ? { fading: true } : {}),
+                ...(onset && Object.keys(onset).length ? { onset } : {}), ...(deadline && Object.keys(deadline).length ? { deadline } : {}), ...meta(item) };
         }, SHEET_LIMITS.conditions),
         spells: normalizeList(source.spells, item => {
             const name = cleanText(item?.name, 80);
@@ -194,7 +214,10 @@ export function readSheetDelta(raw) {
             significance: cleanText(item?.significance, TEXT),
         })).filter(item => item.op && item.item),
         conditions: list(source.conditions).map(item => ({
-            op: String(item?.op || 'add').toLowerCase() === 'clear' ? 'clear' : 'add',
+            op: ['clear', 'treat'].includes(String(item?.op || 'add').toLowerCase()) ? String(item.op).toLowerCase() : 'add',
+            source: cleanText(item?.source, 80),
+            effect: cleanText(item?.effect, TEXT),
+            aware: item?.aware === false ? false : true,
             name: cleanText(item?.name, TEXT),
             kind: cleanText(item?.kind, 20).toLowerCase(),
             severity: cleanText(item?.severity, 40),
@@ -266,8 +289,17 @@ export function applySheetDelta(sheet, delta, meta = {}) {
     }
     for (const condition of d.conditions) {
         if (condition.op === 'clear') { s.conditions = removeNamed(s.conditions, condition.name, 'name'); continue; }
+        if (condition.op === 'treat') {
+            // Treatment steps an affliction down one stage (or ends it from mild); the clock restarts.
+            const current = s.conditions.find(item => sameName(item.name, condition.name));
+            if (!current) continue;
+            const treated = treatStatus(current);
+            s.conditions = treated ? s.conditions.map(item => (item === current ? treated : item)) : removeNamed(s.conditions, current.name, 'name');
+            continue;
+        }
         const kind = CONDITION_KINDS.includes(condition.kind) ? condition.kind : 'status';
-        s.conditions = upsert(s.conditions, stamp({ name: condition.name, kind, ...(condition.severity ? { severity: condition.severity } : {}), ...(condition.until ? { until: condition.until } : {}) }, meta), 'name', SHEET_LIMITS.conditions);
+        s.conditions = upsert(s.conditions, stamp({ name: condition.name, kind, ...(condition.severity ? { severity: condition.severity } : {}), ...(condition.until ? { until: condition.until } : {}),
+            ...(condition.source ? { source: condition.source } : {}), ...(condition.effect ? { effect: condition.effect } : {}), ...(condition.aware === false ? { aware: false } : {}) }, meta), 'name', SHEET_LIMITS.conditions);
     }
     for (const spell of d.spells) {
         if (spell.op === 'lost') { s.spells = removeNamed(s.spells, spell.name, 'name'); continue; }
@@ -290,8 +322,6 @@ export function applySheetDelta(sheet, delta, meta = {}) {
 const itemText = item => `${item.item}${item.significance ? ` (${item.significance})` : ''}`;
 const equipText = item => `${item.item}${item.slot ? ` [${item.slot}]` : ''}`;
 const spellText = spell => `${spell.name}${spell.school || spell.tier ? ` (${[spell.school, spell.tier].filter(Boolean).join(', ')})` : ''}`;
-const conditionText = condition => `${condition.name}${condition.severity ? `, ${condition.severity}` : ''}${condition.until ? `, until ${condition.until}` : ''}`;
-const poolText = pool => `${pool.name} ${pool.current ?? '?'}${pool.max != null ? `/${pool.max}` : ''}`;
 
 // Compact continuity line for the roleplay injection. Conditions and carried items come first:
 // they are what a returning NPC most often contradicts.
@@ -299,15 +329,13 @@ export function renderSheetInjection(sheet, maxChars = 420) {
     const s = normalizeSheet(sheet);
     if (sheetIsEmpty(s)) return '';
     const parts = [
-        s.conditions.length && `condition: ${s.conditions.map(conditionText).join('; ')}`,
         s.keyItems.length && `carries: ${s.keyItems.map(itemText).join('; ')}`,
         s.equipped.length && `equipped: ${s.equipped.map(equipText).join('; ')}`,
         (s.rank || s.archetype) && `class/rank: ${[s.archetype, s.rank].filter(Boolean).join(', ')}`,
         s.spells.length && `spells: ${s.spells.map(spellText).join('; ')}`,
         s.skills.length && `skills: ${s.skills.map(skill => `${skill.name}${skill.proficiency ? ` (${skill.proficiency})` : ''}`).join('; ')}`,
-        s.pools.length && `pools: ${s.pools.map(poolText).join(', ')}`,
-        s.attributes.length && `attributes: ${s.attributes.map(item => `${item.name} ${item.value}`).join(', ')}`,
     ].filter(Boolean);
+    if (!parts.length) return '';
     let text = `STAT SHEET (established): ${parts.join('; ')}`;
     if (text.length > maxChars) {
         const cut = text.slice(0, maxChars);

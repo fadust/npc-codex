@@ -11,6 +11,8 @@ import { normalizeEpisodes, normalizeIntentions, applyMemoryDecision, renderMemo
 import { normalizeBeliefs, normalizePreferences, renderReflectionInjection } from './reflection.js';
 import { temperamentExpression, normalizeStances, renderStanceInjection } from './stance.js';
 import { normalizeFloris, renderFlorisReadout } from './floris.js';
+import { renderStatusInjection, sappingStatus } from './status.js';
+import { ACTION_SIGNAL, abilityFlavour, clashComparison } from './derive.js';
 import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
 import { emptySheet, normalizeSheet, readSheetDelta, sheetDeltaIsEmpty, applySheetDelta, sheetIsEmpty, renderSheetInjection } from './sheet.js';
 import { normalizeCanonSeed, normalizeCanonLocked, enforceCanonLocks } from './canon-seed.js';
@@ -5864,12 +5866,21 @@ function clauseBoundedInjection(text, room) {
     return boundary >= labelEnd + 20 ? cut.slice(0, boundary) : '';
 }
 
-function injectionOptionalFields(npc, includeAppearance = false, turn = null, sceneText = '', recallScores = null, presentNames = []) {
+function injectionOptionalFields(npc, includeAppearance = false, turn = null, sceneText = '', recallScores = null, presentNames = [], { castNpcs = [], storyDay = null } = {}) {
+    // Statuses shape every scene; ability flavour only scenes with bodies or magic in motion.
+    const conditions = Array.isArray(npc.sheet?.conditions) ? npc.sheet.conditions : [];
+    const statusLine = renderStatusInjection(conditions, { turn, day: storyDay });
+    const action = ACTION_SIGNAL.test(String(sceneText || ''));
+    const flavour = action ? abilityFlavour(npc.sheet, { sappedBy: sappingStatus(conditions) }) : '';
+    const clash = action ? clashComparison(npc.sheet, castNpcs.filter(other => other && other.id !== npc.id)) : '';
+    const abilityLine = flavour || clash ? `ABILITY (flavour, not rules; never numbers, dice or set outcomes): ${[flavour, clash && `in a clash: ${clash}`].filter(Boolean).join('; ')}` : '';
     // Episodes replace the old flat memory list; dossiers without episodes keep the old line.
     const livedMemories = renderMemoryInjection(npc, { turn, text: sceneText, vector: recallScores });
     const importantMemories = livedMemories ? [] : cleanList(npc.memories, IMPORTANT_MEMORY_LIMIT, 220);
     const appearanceVariants = includeAppearance ? injectionAppearanceVariants(npc) : [];
     return [
+        statusLine,
+        abilityLine,
         appearanceVariants.length && appearanceVariants,
         includeAppearance && !npc.appearance && (npc.currentForm || npc.currentFormUnknown) && 'Current visible appearance is not established; do not infer anatomy from species or another form.',
         renderSheetInjection(npc.sheet),
@@ -5897,7 +5908,7 @@ function compactInjectionBehaviorRubric(criteria, maxChars) {
     return truncateInjectionText(raw, maxChars);
 }
 
-export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria = DEFAULT_BEHAVIOR_CRITERIA, budgetTokens = DEFAULT_INJECTION_BUDGET_TOKENS, socialGraph = null, { includeAppearance = false, namedNpcIds = [], recallScores = null } = {}) {
+export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria = DEFAULT_BEHAVIOR_CRITERIA, budgetTokens = DEFAULT_INJECTION_BUDGET_TOKENS, socialGraph = null, { includeAppearance = false, namedNpcIds = [], recallScores = null, storyDay = null } = {}) {
     const named = new Set(Array.isArray(namedNpcIds) ? namedNpcIds : []);
     const calledIn = npc => !npc?.present && named.has(npc?.id);
     const present = (npcs || []).filter(npc => (Boolean(npc?.present) || calledIn(npc)) && !npc?.archived);
@@ -5972,7 +5983,7 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
     // Resolved appearance uses the same optional budget as other continuity. It must not
     // shrink the essential identity/agency budget or be spliced ahead of characterization.
     const presentNames = relevant.map(npc => npc.name);
-    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null, text, recallScores, presentNames));
+    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null, text, recallScores, presentNames, { castNpcs: relevant, storyDay }));
     const enriched = essentialBlocks.slice();
     const maxPriority = Math.max(0, ...optionalByNpc.map(fields => fields.length));
     for (let priority = 0; priority < maxPriority; priority++) {
