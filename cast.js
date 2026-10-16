@@ -19,7 +19,7 @@ import {
     KNOWLEDGE_NEW_PER_SCAN,
 } from './knowledge.js';
 import { groundSheetDelta, sheetContext, sheetDeltaIsEmpty } from './sheet.js';
-import { memoryContext, readMemoryDecision } from './memory.js';
+import { memoryContext, readMemoryDecision, readEventDecisions } from './memory.js';
 
 export const CAST_PASS_SYSTEM_PROMPT = "You are NPC State Delta's isolated cast and knowledge evaluator. Use only the supplied candidates, canon entries and current exchange. Return only the requested JSON object.";
 export const ROLE_LIMIT = 6;
@@ -408,9 +408,9 @@ A reference is a query: anchor + tie or title + qualifiers. "Martha's older daug
 Per person: {"ref":"exact words from the exchange","is":"canon:<id>|<dossier id>|new","name":"proper name if known","gender":"female|male|","present":true|false,"roles":[{"title":"","org":"","exclusive":true,"status":"current|former"}],"ties":[{"is":"older daughter","of":"Martha"}]}
 Only roles/ties stated in this exchange or the canon entry. A promotion or new post: the new title "current", the replaced one "former". "ties" reads "<this person> IS <tie> OF <other>". A newly revealed proper name for a dossier: "is":"<that id>","name":"<new name>".
 TASK C (in each person object) - SHEET: only what THIS exchange states about that person: "sheet":{"items":[{"op":"gained|lost|equipped|unequipped","item":"","slot":"","significance":""}],"conditions":[{"op":"add|clear","name":"","kind":"injury|illness|buff|debuff|curse|status","severity":"","until":""}],"spells":[{"op":"learned|lost","name":"","school":"","tier":""}],"skills":[{"name":"","proficiency":""}],"rank":"","class":"","pools":[{"name":"HP","current":0,"max":0}],"attributes":[{"name":"","value":""}]}. Items: things that identify the person or matter later (weapons, wands, armour, badges/insignia, keys, heirlooms, quest objects, notable artefacts), not food, coins or furniture. An item the text shows them already holding or carrying => "gained"; wearing or wielding => "equipped" with a slot. Stolen/given away/broken/used up => "lost". "rank" = the person's standing on the world's scale (guild rank, level, belt, grade) when this exchange sets or reveals it, e.g. a promotion to Bronze => "rank":"Bronze". A tie or job title alone is not a rank. Omit "sheet" when the exchange states none of this.
-TASK D (in each person object) - MEMORY, from THAT person's viewpoint, only if they were present: keep events major to them or to people close to them, ${userName}'s actions that truly match or go against their personality, and shared moments/jokes that will matter later. Skip routine talk. "memory":{"ops":[{"op":"add|update|delete","id":"","event":"what happened, short","effect":"what it changed in them: feeling, belief or stance","level":"defining|significant|minor","fit":"matches|contradicts|"}],"intents":[{"op":"add|done|drop","id":"","what":"plan, promise or unresolved problem they hold","due":""}]}. defining = changes their life or a relationship. Existing memories/intents carry ids: "update" the id this exchange changes, "delete" one proven false, "done"/"drop" a resolved intent; never repeat a stored one. Max 2 new per person. Omit "memory" when nothing qualifies.
+TASK D - MEMORY. "events": what happened IN this exchange that those present will remember: events major to them or to people close to them, ${userName}'s actions that truly match or go against someone's personality, shared moments/jokes that will matter later. Skip routine talk. Each event once, objectively: {"op":"add|update","id":"<stored event id, for update>","what":"objective fact, short","where":"","witnesses":["everyone present who saw it, incl. ${userName}"],"secret":false,"views":[{"who":"<witness>","effect":"what it changed in THEM: feeling, belief or stance","level":"defining|significant|minor","fit":"matches|contradicts|"}]}. One view per witness; each reacts in their own way. defining = changes their life or a relationship. "told": someone here tells another about a stored event (ids in memories); a retelling is "told", never a new event: {"event":"<event id>","by":"","to":"","effect":""}. Per person object, "intents":[{"op":"add|done|drop","id":"","what":"plan, promise or unresolved problem they hold","due":""}]. Max 2 events; never repeat a stored event, update it.
 TASK B - KNOWLEDGE. For people in the exchange, durable facts they now know, keep secret, or explicitly do NOT know (hidden from them, said while they were absent). Never give a fact to someone who could not have learned it. Max ${KNOWLEDGE_NEW_PER_SCAN} per person; skip existingKnowledge.
-JSON only: {"people":[...],"knowledge":[{"who":"<dossier id or name>","fact":"","kind":"knows|secret|unaware","source":"witnessed|told|deduced","from":""}]}
+JSON only: {"people":[...],"knowledge":[{"who":"<dossier id or name>","fact":"","kind":"knows|secret|unaware","source":"witnessed|told|deduced","from":""}],"events":[...],"told":[...]}
 Example: {"people":[{"ref":"the headmaster","is":"canon:HP#3","name":"Albus Dumbledore","gender":"male","present":true,"roles":[{"title":"Headmaster","org":"Hogwarts","exclusive":true,"status":"current"}],"ties":[]},{"ref":"Martha's older daughter","is":"new","name":"Martha's older daughter","gender":"female","present":false,"roles":[],"ties":[{"is":"older daughter","of":"Martha"}],"sheet":{"items":[{"op":"gained","item":"bread basket","significance":""}]}}],"knowledge":[]}
 
 DOSSIER CANDIDATES:
@@ -452,6 +452,7 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
     const rows = [];
     const edges = [];
     const nameOf = new Map();
+    const presentLabels = [];
     const people = (Array.isArray(parsed?.people) ? parsed.people : []).slice(0, CAST_PEOPLE_LIMIT);
     for (const person of people) {
         const ref = cleanText(person?.ref, 160);
@@ -502,7 +503,8 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
             for (const label of grounded.rejected) report.rejected.push({ ref, reason: `sheet ${label} not in exchange` });
             if (!sheetDeltaIsEmpty(grounded.delta)) row.sheetDelta = grounded.delta;
         }
-        if (person?.memory && typeof person.memory === 'object') {
+        if (person?.present === true) presentLabels.push(ref, row.name, ...(row.id ? [row.id] : []), ...(name ? [name] : []));
+        if ((person?.memory && typeof person.memory === 'object') || Array.isArray(person?.intents)) {
             const decision = readMemoryDecision(person, { transcript, npc: row.id ? live.find(npc => npc.id === row.id) : null });
             for (const reason of decision.rejected) report.rejected.push({ ref, reason: `memory ${reason}` });
             if (decision.ops.length || decision.intents.length) row.memoryDecision = { ops: decision.ops, intents: decision.intents };
@@ -542,7 +544,16 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
         const list = knowledge.get(key) || [];
         if (list.length < KNOWLEDGE_NEW_PER_SCAN) knowledge.set(key, [...list, ...entries].slice(0, KNOWLEDGE_NEW_PER_SCAN));
     }
-    return { npcs: rows, keyRelationshipEdges: edges, knowledge, report };
+    // Shared events: witnesses must be present; labels resolve to the names rows were stored under.
+    const events = readEventDecisions(parsed, { transcript, present: presentLabels, npcs: live, userName });
+    for (const reason of events.rejected) report.rejected.push({ ref: 'events', reason });
+    const named = who => nameOf.get(norm(who)) || who;
+    for (const event of events.events) {
+        event.witnesses = [...new Set(event.witnesses.map(named))];
+        for (const view of event.views) view.who = named(view.who);
+    }
+    for (const tell of events.told) { tell.by = named(tell.by); tell.to = named(tell.to); }
+    return { npcs: rows, keyRelationshipEdges: edges, knowledge, events: { events: events.events, told: events.told }, report };
 }
 
 // Folds cast rows into the broad scanner's parsed result. A row for an NPC the scanner already

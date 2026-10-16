@@ -5843,9 +5843,9 @@ function clauseBoundedInjection(text, room) {
     return boundary >= labelEnd + 20 ? cut.slice(0, boundary) : '';
 }
 
-function injectionOptionalFields(npc, includeAppearance = false, turn = null) {
+function injectionOptionalFields(npc, includeAppearance = false, turn = null, sceneText = '') {
     // Episodes replace the old flat memory list; dossiers without episodes keep the old line.
-    const livedMemories = renderMemoryInjection(npc, { turn });
+    const livedMemories = renderMemoryInjection(npc, { turn, text: sceneText });
     const importantMemories = livedMemories ? [] : cleanList(npc.memories, IMPORTANT_MEMORY_LIMIT, 220);
     const appearanceVariants = includeAppearance ? injectionAppearanceVariants(npc) : [];
     return [
@@ -5947,7 +5947,7 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
     // starve another. Relationship summary is deliberately late: live identity/state already won priority.
     // Resolved appearance uses the same optional budget as other continuity. It must not
     // shrink the essential identity/agency budget or be spliced ahead of characterization.
-    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null));
+    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null, text));
     const enriched = essentialBlocks.slice();
     const maxPriority = Math.max(0, ...optionalByNpc.map(fields => fields.length));
     for (let priority = 0; priority < maxPriority; priority++) {

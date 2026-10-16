@@ -56,7 +56,7 @@ test('injection leads with the effect, carries relative time and open intents; l
     ], intentions: [{ id: 'i1', what: 'repay the Guild debt', due: 'festival', status: 'open' }] });
     const line = renderMemoryInjection(npc, { turn: 50 });
     assert.match(line, /never recite/);
-    assert.match(line, /doubts Kai’s promises \(Kai left her alone in the mine, long ago\)/);
+    assert.match(line, /doubts Kai’s promises \(Kai left her alone in the mine; long ago\)/);
     assert.match(line, /shared a joke about the goat \(just now\)/);
     assert.match(line, /still means to \/ unresolved: repay the Guild debt \(by festival\)/);
     assert.match(buildInjection([{ ...npc, present: true }], 'Sera', 50), /lived memories/);

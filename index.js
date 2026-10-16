@@ -91,7 +91,7 @@ import {
 import { applyNpcBirthdayUpdate, normalizeBirthDate } from './birthday.js';
 import { knowledgeToEditorText, knowledgeFromEditorText, applyKnowledgeDecisions } from './knowledge.js';
 import { sheetToEditor, sheetFromEditor, SHEET_EDITOR_FIELDS } from './sheet.js';
-import { episodesToEditorText, episodesFromEditorText, intentionsToEditorText, intentionsFromEditorText } from './memory.js';
+import { episodesToEditorText, episodesFromEditorText, intentionsToEditorText, intentionsFromEditorText, applyEventDecisions } from './memory.js';
 import { canonSeedTargets, canonTextFor, buildCanonSeedPrompt, parseCanonSeed, applyCanonSeed, CANON_SEED_SYSTEM_PROMPT } from './canon-seed.js';
 import {
     castSignals,
@@ -3954,6 +3954,12 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             });
             merged.report.canonSeeded = seededReport;
             if (lastScanMetrics) lastScanMetrics.canonSeeded = seededReport.length;
+        }
+        if (castPass.cast?.events && (castPass.cast.events.events.length || castPass.cast.events.told.length)) {
+            const remembered = applyEventDecisions(merged.state.npcs, castPass.cast.events, { turn: state.turn, sourceMessageId: targetMessageId, userName: ctx.name1 || '' });
+            merged.state.npcs = remembered.npcs;
+            merged.report.events = remembered.applied;
+            if (lastScanMetrics) lastScanMetrics.eventsApplied = remembered.applied.length;
         }
         const castKnowledge = castPass.cast ? resolveKnowledgeKeys(castPass.cast.knowledge, merged.state.npcs) : new Map();
         if (castKnowledge.size) {

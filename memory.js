@@ -50,6 +50,12 @@ export function normalizeEpisode(raw) {
         level,
         ...(FITS.includes(raw.fit) ? { fit: raw.fit } : {}),
         ...(Array.isArray(raw.with) && raw.with.length ? { with: [...new Set(raw.with.map(item => cleanText(item, LIMITS.with)).filter(Boolean))].slice(0, 4) } : {}),
+        // Phase B: the shared event this episode is one witness's view of.
+        ...(/^e\d+$/.test(String(raw.eventId || '')) ? { eventId: raw.eventId } : {}),
+        ...(cleanText(raw.where, 80) ? { where: cleanText(raw.where, 80) } : {}),
+        ...(Array.isArray(raw.witnesses) && raw.witnesses.length ? { witnesses: [...new Set(raw.witnesses.map(item => cleanText(item, LIMITS.with)).filter(Boolean))].slice(0, 8) } : {}),
+        ...(cleanText(raw.toldBy, LIMITS.with) ? { toldBy: cleanText(raw.toldBy, LIMITS.with) } : {}),
+        ...(raw.secret === true ? { secret: true } : {}),
         ...(Number.isInteger(raw.turn) ? { turn: raw.turn } : {}),
         ...(Number.isInteger(raw.sourceMessageId) ? { sourceMessageId: raw.sourceMessageId } : {}),
         ...(raw.pinned === true ? { pinned: true } : {}),
@@ -124,7 +130,7 @@ export function readMemoryDecision(person, { transcript = '', npc = null } = {})
         ops.push({ op: 'add', episode });
     }
     const intents = [];
-    for (const raw of (Array.isArray(memory.intents) ? memory.intents : []).slice(0, 4)) {
+    for (const raw of (Array.isArray(memory.intents) ? memory.intents : (Array.isArray(person?.intents) ? person.intents : [])).slice(0, 4)) {
         const op = String(raw?.op || 'add').toLowerCase();
         if (op === 'done' || op === 'drop') {
             if (intentions.some(item => item.id === raw.id && item.status === 'open')) intents.push({ op, id: raw.id });
@@ -166,13 +172,7 @@ export function applyMemoryDecision(npc, decision, { turn = null, sourceMessageI
             changed += 1;
         }
     }
-    // Over the cap: the lightest unpinned, non-defining episode goes first.
-    while (episodes.length > EPISODE_LIMIT) {
-        const candidates = episodes.filter(item => !item.pinned && item.level !== 'defining');
-        if (!candidates.length) break;
-        const lightest = candidates.reduce((low, item) => weight(item, turn) < weight(low, turn) ? item : low);
-        episodes = episodes.filter(item => item !== lightest);
-    }
+    episodes = capEpisodes(episodes, turn);
     for (const op of decision?.intents || []) {
         if (op.op === 'add') {
             if (intentions.some(item => item.status === 'open' && sameEvent(item.what, op.intention.what))) continue;
@@ -187,13 +187,193 @@ export function applyMemoryDecision(npc, decision, { turn = null, sourceMessageI
     return { npc: { ...npc, episodes, intentions }, changed };
 }
 
+// Over the cap: the lightest unpinned, non-defining episode goes first.
+function capEpisodes(list, turn) {
+    let episodes = list;
+    while (episodes.length > EPISODE_LIMIT) {
+        const candidates = episodes.filter(item => !item.pinned && item.level !== 'defining');
+        if (!candidates.length) break;
+        const lightest = candidates.reduce((low, item) => weight(item, turn) < weight(low, turn) ? item : low);
+        episodes = episodes.filter(item => item !== lightest);
+    }
+    return episodes;
+}
+
+/* ---------- Phase B: shared event nodes, one view per witness, told-by ----------
+ * An event node is the objective fact, identified by an eventId (e1, e2 ...) shared by every
+ * witness's episode. Each witness keeps their own view (effect, level, fit). Nothing is stored
+ * at chat level, so per-NPC rollback (swipe/delete/edit) keeps working unchanged. Gossip: when
+ * someone present tells a listener about an event they hold, the listener gains a second-hand
+ * episode (toldBy) and becomes a holder. */
+
+export const EVENTS_PER_SCAN = 2;
+
+function npcLabels(npc) {
+    return [npc?.id, npc?.name, ...(Array.isArray(npc?.aliases) ? npc.aliases : [])].filter(Boolean).map(norm);
+}
+
+function findNpc(npcs, who) {
+    const key = norm(who);
+    return key ? (npcs || []).find(npc => npc && !npc.archived && npcLabels(npc).includes(key)) : null;
+}
+
+export function nextEventNumber(npcs) {
+    let max = 0;
+    for (const npc of npcs || []) for (const episode of npc?.episodes || []) max = Math.max(max, Number(String(episode?.eventId || '').slice(1)) || 0);
+    return max + 1;
+}
+
+const TELLING = /\b(?:told|tells|tell|telling|informed|informs|reported|reports|recounted|recounts|mentioned|mentions|warned|warns|explained|explains|said that|says that)\b/i;
+
+// The stored event a recounting refers to, and which of the people involved holds it.
+function retoldEvent(what, npcs, people) {
+    for (const who of people) {
+        const teller = findNpc(npcs, who);
+        for (const episode of teller?.episodes || []) {
+            if (!episode?.eventId) continue;
+            // A retelling paraphrases: three shared content words (names count) identify it.
+            const stored = recallTokens(episode.event);
+            let shared = 0;
+            for (const word of recallTokens(what)) if (stored.has(word)) shared += 1;
+            if (shared >= 3) return { eventId: episode.eventId, teller: teller.name };
+        }
+    }
+    return null;
+}
+
+// Validates the cast pass's "events" and "told" against the exchange and who was present.
+export function readEventDecisions(parsed, { transcript = '', present = [], npcs = [], userName = '' } = {}) {
+    const rejected = [];
+    const events = [];
+    const told = [];
+    const here = new Set(present.map(norm).filter(Boolean));
+    const isUser = who => Boolean(userName) && norm(who) === norm(userName);
+    const isHere = who => here.has(norm(who)) || isUser(who);
+    const known = new Set((npcs || []).flatMap(npc => (npc?.episodes || []).map(episode => episode?.eventId)).filter(Boolean));
+    for (const raw of (Array.isArray(parsed?.events) ? parsed.events : []).slice(0, 4)) {
+        const op = String(raw?.op || 'add').toLowerCase() === 'update' ? 'update' : 'add';
+        const what = cleanText(raw?.what ?? raw?.objective, LIMITS.event);
+        if (!what) continue;
+        if (!groundedIn(transcript, what, { minRatio: 0.5 })) { rejected.push(`event not in exchange: ${what}`); continue; }
+        if (op === 'update' && !known.has(raw?.id)) { rejected.push('event update: unknown id'); continue; }
+        if (op === 'add' && events.filter(item => item.op === 'add').length >= EVENTS_PER_SCAN) { rejected.push('over the per-turn event limit'); continue; }
+        const witnesses = [...new Set((Array.isArray(raw?.witnesses) ? raw.witnesses : []).map(item => cleanText(item, LIMITS.with)).filter(isHere))];
+        const views = [];
+        for (const view of (Array.isArray(raw?.views) ? raw.views : []).slice(0, 8)) {
+            const who = cleanText(view?.who, LIMITS.with);
+            if (!who || isUser(who)) continue;
+            // Witness gating: only someone present in this exchange can hold a first-hand view.
+            if (!isHere(who)) { rejected.push(`view from someone absent: ${who}`); continue; }
+            if (!witnesses.some(item => norm(item) === norm(who))) witnesses.push(who);
+            views.push({
+                who,
+                effect: cleanText(view?.effect, LIMITS.effect),
+                level: MEMORY_LEVELS.includes(view?.level) ? view.level : 'significant',
+                ...(FITS.includes(view?.fit) ? { fit: view.fit } : {}),
+            });
+        }
+        if (!views.length) { rejected.push(`event without a present NPC's view: ${what}`); continue; }
+        // A "new" event that is someone recounting a stored event they hold is gossip: the
+        // listeners join that event second-hand instead of getting a duplicate node.
+        const retold = op === 'add' && TELLING.test(what) ? retoldEvent(what, npcs, [...witnesses, ...views.map(view => view.who)]) : null;
+        if (retold) {
+            for (const view of views) {
+                const listener = findNpc(npcs, view.who);
+                if (!listener || norm(listener.name) === norm(retold.teller)) continue;
+                if ((listener.episodes || []).some(item => item.eventId === retold.eventId)) continue;
+                told.push({ event: retold.eventId, by: retold.teller, to: view.who, effect: view.effect });
+            }
+            continue;
+        }
+        events.push({ op, ...(op === 'update' ? { id: raw.id } : {}), what, where: cleanText(raw?.where, 80), witnesses, secret: raw?.secret === true, views });
+    }
+    for (const raw of (Array.isArray(parsed?.told) ? parsed.told : []).slice(0, 4)) {
+        const by = cleanText(raw?.by, LIMITS.with);
+        const to = cleanText(raw?.to, LIMITS.with);
+        if (!known.has(raw?.event)) { rejected.push('told: unknown event'); continue; }
+        if (!isHere(by) || !isHere(to) || isUser(to)) { rejected.push(`told: ${by} -> ${to} not both present`); continue; }
+        told.push({ event: raw.event, by, to, effect: cleanText(raw?.effect, LIMITS.effect) });
+    }
+    return { events, told, rejected };
+}
+
+// Applies validated events/told to the dossiers (after the merge, so new NPCs exist).
+export function applyEventDecisions(npcs, decisions, { turn = null, sourceMessageId = null, userName = '' } = {}) {
+    let list = Array.isArray(npcs) ? [...npcs] : [];
+    const applied = [];
+    const rejected = [];
+    const stamp = { ...(Number.isInteger(turn) ? { turn } : {}), ...(Number.isInteger(sourceMessageId) ? { sourceMessageId } : {}) };
+    const editable = npc => !(Array.isArray(npc?.manualProfileFields) && npc.manualProfileFields.includes('memories'));
+    const replace = (npc, next) => { list = list.map(item => item === npc ? next : item); };
+    let number = nextEventNumber(list);
+    for (const event of decisions?.events || []) {
+        const eventId = event.op === 'update' ? event.id : `e${number++}`;
+        const witnesses = event.witnesses.map(who => findNpc(list, who)?.name || who);
+        for (const view of event.views) {
+            const npc = findNpc(list, view.who);
+            if (!npc) { rejected.push(`unknown witness ${view.who}`); continue; }
+            if (!editable(npc)) continue;
+            const hidden = (Array.isArray(npc.knowledge) ? npc.knowledge : []).filter(entry => entry?.kind === 'unaware').map(entry => entry.fact);
+            if (hidden.some(fact => groundedIn(event.what, fact, { minRatio: 0.6 }))) { rejected.push(`hidden from ${npc.name}`); continue; }
+            let episodes = normalizeEpisodes(npc.episodes, npc.memories);
+            const fields = {
+                eventId, event: event.what, level: view.level, witnesses,
+                ...(event.where ? { where: event.where } : {}),
+                ...(event.secret ? { secret: true } : {}),
+                ...(view.effect ? { effect: view.effect } : {}),
+                ...(view.fit ? { fit: view.fit } : {}),
+                ...stamp,
+            };
+            const existing = episodes.find(item => item.eventId === eventId)
+                || (event.op === 'add' ? episodes.find(item => !item.eventId && sameEvent(item.event, event.what)) : null);
+            episodes = existing
+                ? episodes.map(item => item === existing ? normalizeEpisode({ ...item, ...fields, id: item.id, pinned: item.pinned }) : item)
+                : [...episodes, normalizeEpisode({ ...fields, id: nextId(episodes, 'm') })];
+            replace(npc, { ...npc, episodes: capEpisodes(episodes, turn) });
+            applied.push({ npcId: npc.id, eventId });
+        }
+        // The objective fact is one node: an update reaches every holder, witness or told.
+        if (event.op === 'update') {
+            list = list.map(npc => (npc?.episodes || []).some(item => item.eventId === eventId)
+                ? { ...npc, episodes: npc.episodes.map(item => item.eventId === eventId ? { ...item, event: event.what } : item) }
+                : npc);
+        }
+    }
+    for (const tell of decisions?.told || []) {
+        const listener = findNpc(list, tell.to);
+        if (!listener || !editable(listener)) continue;
+        if ((listener.episodes || []).some(item => item.eventId === tell.event)) continue;
+        const teller = findNpc(list, tell.by);
+        const userTells = Boolean(userName) && norm(tell.by) === norm(userName);
+        const source = (teller?.episodes || []).find(item => item.eventId === tell.event)
+            || (userTells ? list.flatMap(npc => npc?.episodes || []).find(item => item.eventId === tell.event && (item.witnesses || []).some(who => norm(who) === norm(userName))) : null);
+        if (!source) { rejected.push(`told: ${tell.by} does not hold ${tell.event}`); continue; }
+        const episodes = normalizeEpisodes(listener.episodes, listener.memories);
+        episodes.push(normalizeEpisode({
+            id: nextId(episodes, 'm'),
+            eventId: tell.event,
+            event: source.event,
+            ...(source.where ? { where: source.where } : {}),
+            witnesses: source.witnesses,
+            toldBy: teller?.name || tell.by,
+            // Hearsay never lands harder than first-hand experience.
+            level: source.level === 'defining' ? 'significant' : source.level,
+            ...(tell.effect ? { effect: tell.effect } : {}),
+            ...stamp,
+        }));
+        replace(listener, { ...listener, episodes: capEpisodes(episodes, turn) });
+        applied.push({ npcId: listener.id, eventId: tell.event, toldBy: teller?.name || tell.by });
+    }
+    return { npcs: list, applied, rejected };
+}
+
 /* ---------- Prompt context and injection ---------- */
 
 // For the cast pass: stored ids so the model can update instead of repeating.
 export function memoryContext(npc, limit = 6, turn = null) {
     const episodes = normalizeEpisodes(npc?.episodes, npc?.memories)
         .sort((a, b) => weight(b, turn) - weight(a, turn)).slice(0, limit)
-        .map(item => `${item.id} [${item.level}] ${item.event}${item.effect ? ` -> ${item.effect}` : ''}`);
+        .map(item => `${item.eventId || item.id} [${item.level}] ${item.event}${item.effect ? ` -> ${item.effect}` : ''}${item.toldBy ? ` (heard from ${item.toldBy})` : ''}`);
     const intents = normalizeIntentions(npc?.intentions).filter(item => item.status === 'open').slice(-4)
         .map(item => `${item.id} ${item.what}${item.due ? ` (by ${item.due})` : ''}`);
     return { ...(episodes.length ? { memories: episodes } : {}), ...(intents.length ? { intents } : {}) };
@@ -208,15 +388,35 @@ export function relativeTime(turn, episodeTurn) {
     return 'long ago';
 }
 
-// Effect first, event as faint backing, relative time: material to act from, not to recite.
-export function renderMemoryInjection(npc, { turn = null, limit = 5 } = {}) {
+const RECALL_STOP = new Set(['that', 'this', 'with', 'from', 'have', 'they', 'them', 'their', 'there', 'what', 'when', 'were', 'been', 'into', 'about', 'would', 'could', 'just', 'then', 'than', 'your', 'said', 'says']);
+
+function recallTokens(text) {
+    return new Set(String(text || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(word => word.length > 3 && !RECALL_STOP.has(word)));
+}
+
+// Relevance to the current scene: shared content words and people in the episode.
+function relevance(episode, sceneTokens) {
+    if (!sceneTokens.size) return 0;
+    const words = recallTokens([episode.event, episode.effect, ...(episode.witnesses || []), ...(episode.with || []), episode.toldBy, episode.where].join(' '));
+    let hits = 0;
+    for (const word of words) if (sceneTokens.has(word)) hits += 1;
+    return Math.min(hits, 4);
+}
+
+// Keyword recall (Qdrant joins in B2): defining/pinned always; the rest ranked by
+// level x recency x relevance to the current scene. Effect first, event as faint backing.
+export function renderMemoryInjection(npc, { turn = null, limit = 5, text = '' } = {}) {
     const episodes = normalizeEpisodes(npc?.episodes, npc?.memories);
+    const scene = recallTokens(text);
+    const score = item => weight(item, turn) * (1 + relevance(item, scene));
     const defining = episodes.filter(item => item.level === 'defining' || item.pinned);
-    const rest = episodes.filter(item => !defining.includes(item)).sort((a, b) => weight(b, turn) - weight(a, turn));
+    const rest = episodes.filter(item => !defining.includes(item)).sort((a, b) => score(b) - score(a));
     const chosen = [...defining.slice(-3), ...rest].slice(0, Math.max(limit, Math.min(defining.length, 3)));
     const lines = chosen.map(item => {
         const when = relativeTime(turn, item.turn);
-        return item.effect ? `${item.effect} (${item.event}${when ? `, ${when}` : ''})` : `${item.event}${when ? ` (${when})` : ''}`;
+        const notes = [item.toldBy && `heard from ${item.toldBy}`, when, item.secret && 'keeps it secret'].filter(Boolean).join(', ');
+        if (item.effect) return `${item.effect} (${item.event}${notes ? `; ${notes}` : ''})`;
+        return `${item.event}${notes ? ` (${notes})` : ''}`;
     });
     const open = normalizeIntentions(npc?.intentions).filter(item => item.status === 'open').slice(-3)
         .map(item => `${item.what}${item.due ? ` (by ${item.due})` : ''}`);
