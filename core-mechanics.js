@@ -7,6 +7,7 @@ import {
     renderKnowledgeGate,
     scannerKnowledgeContext,
 } from './knowledge.js';
+import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
 import {
     reconcileSocialState,
     remapSocialGraphNpcId,
@@ -3202,6 +3203,8 @@ export function normalizeScanNpc(raw = {}, options = {}) {
         memories: semanticDedupeItems(cleanList(raw.memories, Math.max(6, memoryInputLimit * 2), DURABLE_PROFILE_LIMITS.memory), { maxItems: memoryInputLimit, maxChars: DURABLE_PROFILE_LIMITS.memory, similarity: 0.58 }),
         memoryRetention: semanticDedupeItems(cleanList(raw.memoryRetention ?? raw.memory_retention, IMPORTANT_MEMORY_LIMIT * 2, DURABLE_PROFILE_LIMITS.memory), { maxItems: IMPORTANT_MEMORY_LIMIT, maxChars: DURABLE_PROFILE_LIMITS.memory, similarity: 0.58 }),
         knowledge: readScanKnowledge(raw),
+        roles: normalizeRoles(raw.roles),
+        canonRef: normalizeCanonRef(raw.canonRef ?? raw.canon_ref),
         mannerisms: normalizeMannerisms(raw.mannerisms),
         mannerismsProvided: Object.prototype.hasOwnProperty.call(raw, 'mannerisms'),
         mannerismState: (() => {
@@ -3716,6 +3719,8 @@ export function normalizeNpcRecord(raw = {}) {
     npc.aliases = cleanList(raw.aliases, 8, 120);
     npc.memories = normalizeStoredMemories(raw.memories);
     npc.knowledge = normalizeKnowledge(raw.knowledge);
+    npc.roles = normalizeRoles(raw.roles);
+    npc.canonRef = normalizeCanonRef(raw.canonRef);
     npc.mannerisms = locked.has('mannerisms')
         ? cleanList(raw.mannerisms, 8, 320)
         : normalizeMannerisms(raw.mannerisms);
@@ -3811,6 +3816,8 @@ export function createNpcRecord(name, existingIds = [], baseline = DEFAULT_RELAT
         status: '',
         memories: [],
         knowledge: [],
+        roles: [],
+        canonRef: null,
         mannerisms: [],
         behaviorProfile: [],
         keyRelationships: [],
@@ -4195,6 +4202,12 @@ function applyIncoming(existing, incoming, turn, relationshipCaps = DEFAULT_RELA
     merged.knowledge = manualFields.has('knowledge')
         ? normalizeKnowledge(existing.knowledge)
         : mergeKnowledge(existing.knowledge, incoming.knowledge, { sourceMessageId, turn });
+    if (incoming.roles?.length && !manualFields.has('roles')) {
+        merged.roles = mergeRoles(existing.roles, incoming.roles, { turn });
+        // The free-text role mirrors the current titles unless the player locked it.
+        if (!manualFields.has('role')) merged.role = currentRoleText(merged.roles) || merged.role;
+    }
+    merged.canonRef = normalizeCanonRef(existing.canonRef) || normalizeCanonRef(incoming.canonRef);
     if (manualFields.has('mannerisms')) {
         merged.mannerisms = [...(existing.mannerisms || [])];
     } else if ((existing.mannerisms || []).length) {
@@ -5231,6 +5244,8 @@ function mergeAliasLinkedNpcPair(a, b) {
     }
     merged.memories = normalizeStoredMemories([...(a.memories || []), ...(b.memories || [])]);
     merged.knowledge = normalizeKnowledge([...(a.knowledge || []), ...(b.knowledge || [])]);
+    merged.roles = normalizeRoles([...(a.roles || []), ...(b.roles || [])]);
+    merged.canonRef = normalizeCanonRef(a.canonRef) || normalizeCanonRef(b.canonRef);
     const mannerismLock = lockedSourceFor('mannerisms');
     const behaviorLock = lockedSourceFor('behaviorProfile');
     const relationshipLock = lockedSourceFor('keyRelationships');
@@ -5479,6 +5494,9 @@ export function mergeScanResult(state, scanResult, options = {}) {
     const knowledgeGuard = enforceKnowledgeBoundaries(next.npcs, { sourceMessageId, turn });
     next.npcs = knowledgeGuard.npcs;
     report.knowledgeGuard = knowledgeGuard.changes;
+    const roleTransfer = transferExclusiveRoles(next.npcs, { turn });
+    next.npcs = roleTransfer.npcs.map(npc => (npc ? stripTitleAliases(npc) : npc));
+    report.roleTransfers = roleTransfer.changes;
     for (const change of knowledgeGuard.changes) if (!report.updated.includes(change.npcId)) report.updated.push(change.npcId);
 
     next.npcs.sort((a, b) => Number(b.lastSeenTurn || 0) - Number(a.lastSeenTurn || 0));

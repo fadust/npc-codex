@@ -89,15 +89,18 @@ import {
     normalizeFormPortraitAssets,
 } from './core.js';
 import { applyNpcBirthdayUpdate, normalizeBirthDate } from './birthday.js';
+import { knowledgeToEditorText, knowledgeFromEditorText, applyKnowledgeDecisions } from './knowledge.js';
 import {
-    knowledgeToEditorText,
-    knowledgeFromEditorText,
-    knowledgePassTargets,
-    buildKnowledgePassPrompt,
-    parseKnowledgePass,
-    applyKnowledgeDecisions,
-    KNOWLEDGE_PASS_SYSTEM_PROMPT,
-} from './knowledge.js';
+    castSignals,
+    buildCastShortlist,
+    rankCanonEntries,
+    cardCanonEntries,
+    buildCastPassPrompt,
+    castDecisionsToScan,
+    mergeCastIntoScan,
+    resolveKnowledgeKeys,
+    CAST_PASS_SYSTEM_PROMPT,
+} from './cast.js';
 import {
     encodeNpcStateBundle,
     mergeImportedDossierState,
@@ -3039,7 +3042,7 @@ async function refreshNpcFromChat(npcId) {
 const SCAN_RESPONSE_LENGTH = 1800;
 const FULL_SCAN_RESPONSE_LENGTH = 3200;
 const RELATIONSHIP_RESPONSE_LENGTH = 900;
-const KNOWLEDGE_RESPONSE_LENGTH = 900;
+const CAST_RESPONSE_LENGTH = 1400;
 const BACKFILL_RESPONSE_LENGTH = 3200;
 const BACKFILL_MAX_ATTEMPTS = 3;
 const BACKFILL_RETRY_COOLDOWN_MS = 60 * 1000;
@@ -3375,25 +3378,52 @@ function hasCompletePrimaryRelationshipDecision(raw, transcript = '') {
     return true;
 }
 
-// Information flow (who knows what) gets its own small request: the broad scanner rarely fills
-// optional fields, and a misplaced secret leaks into injection. Skipped unless the exchange carries
-// information-flow signals and names a dossier; a failure never blocks the dossier scan.
-async function runFocusedKnowledgePass(ctx, existingNpcs, transcript, options = {}) {
-    const targets = knowledgePassTargets(existingNpcs, transcript);
-    if (!targets.length) return { decisions: new Map(), used: false, responseChars: 0, targetCount: 0 };
+// Cast resolution + information flow share one focused request (fadust fork). The broad scanner
+// rarely fills optional fields and misses NPCs referred to by title or tie ("the headmaster",
+// "Martha's older daughter"). Code narrows candidates (names, 1-hop ties, roles, scene location,
+// canon lorebook entries); the model resolves canon entry -> dossier -> new; code validates.
+// Skipped when the exchange carries no cast or information signal; a failure never blocks the scan.
+async function readCanonEntries() {
+    try {
+        const { getSortedEntries } = await import('../../../world-info.js');
+        return typeof getSortedEntries === 'function' ? await getSortedEntries() : [];
+    } catch { return []; }
+}
+
+async function readBaiBaiCast() {
+    try {
+        const snapshot = await globalThis.STBaiBaiBook?.getSnapshot?.();
+        return { location: String(snapshot?.state?.location || ''), npcs: Array.isArray(snapshot?.npcs) ? snapshot.npcs : [] };
+    } catch { return { location: '', npcs: [] }; }
+}
+
+async function runCastPass(ctx, existingNpcs, transcript, options = {}) {
+    const empty = { cast: null, used: false, responseChars: 0, shortlist: 0, canon: 0 };
+    const npcs = Array.isArray(existingNpcs) ? existingNpcs : [];
+    const knownLabels = npcs.flatMap(npc => [npc?.name, ...(npc?.aliases || [])]).filter(Boolean);
+    const signals = castSignals(transcript, { knownLabels, userName: ctx.name1 || '', charName: ctx.name2 || '' });
+    if (!signals.any) return empty;
+    const [baibai, entries] = await Promise.all([readBaiBaiCast(), readCanonEntries()]);
+    const shortlist = buildCastShortlist({ npcs, transcript, sceneLocation: baibai.location, baibaiNpcs: baibai.npcs });
+    // Card canon (this story's own definitions, possibly an AU) ranks ahead of lorebook canon.
+    const card = Number.isInteger(Number(ctx.characterId)) ? ctx.characters?.[ctx.characterId] : null;
+    const cardText = [card?.description, card?.scenario].filter(Boolean).join('\n');
+    const canon = rankCanonEntries([...cardCanonEntries(cardText), ...entries], transcript, { npcs, exclude: [ctx.name1, ctx.name2] });
+    if (!shortlist.length && !canon.length && !signals.unknownNames.length && !signals.tiePhrases.length && !signals.titlePhrases.length) return empty;
     try {
         const { parsed, raw } = await generateParsedNpcJson(ctx, {
-            systemPrompt: KNOWLEDGE_PASS_SYSTEM_PROMPT,
-            prompt: buildKnowledgePassPrompt({ transcript, targets, userName: ctx.name1 || 'User' }),
-            responseLength: KNOWLEDGE_RESPONSE_LENGTH,
-            label: 'knowledge pass',
+            systemPrompt: CAST_PASS_SYSTEM_PROMPT,
+            prompt: buildCastPassPrompt({ transcript, shortlist, canon, signals, userName: ctx.name1 || 'User', charName: ctx.name2 || 'Character' }),
+            responseLength: CAST_RESPONSE_LENGTH,
+            label: 'cast pass',
             requestScope: options.requestScope,
         });
-        return { decisions: parseKnowledgePass(parsed, targets), used: true, responseChars: String(raw ?? '').length, targetCount: targets.length };
+        const cast = castDecisionsToScan(parsed, { transcript, npcs, canon, userName: ctx.name1 || '', charName: ctx.name2 || '' });
+        return { cast, used: true, responseChars: String(raw ?? '').length, shortlist: shortlist.length, canon: canon.length };
     } catch (error) {
         if (isScannerRoutingError(error)) throw error;
-        console.warn('[NPC State Delta] focused knowledge pass failed; the dossier scan continues without it.', error);
-        return { decisions: new Map(), used: true, responseChars: 0, targetCount: targets.length };
+        console.warn('[NPC State Delta] cast pass failed; the dossier scan continues without it.', error);
+        return { ...empty, used: true, shortlist: shortlist.length, canon: canon.length };
     }
 }
 
@@ -3755,7 +3785,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             settings,
             { currentExchangeOnly: manual || fullWindowScan, requestScope: operation.requestScope },
         );
-        const knowledgePass = await runFocusedKnowledgePass(ctx, state.npcs, currentTranscript || transcript, { requestScope: operation.requestScope });
+        const castPass = await runCastPass(ctx, state.npcs, currentTranscript || transcript, { requestScope: operation.requestScope });
         const scanFinishedAt = performance.now?.() ?? Date.now();
         lastScanMetrics = {
             label: manual ? 'manual' : (fullWindowScan ? 'automatic-full' : 'automatic'),
@@ -3767,9 +3797,12 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             relationshipTargets: relationshipPass.targetCount,
             relationshipResponseChars: relationshipPass.responseChars,
             relationshipRetried: relationshipPass.retried,
-            knowledgePass: knowledgePass.used,
-            knowledgeTargets: knowledgePass.targetCount,
-            knowledgeResponseChars: knowledgePass.responseChars,
+            castPass: castPass.used,
+            castShortlist: castPass.shortlist,
+            castCanon: castPass.canon,
+            castResponseChars: castPass.responseChars,
+            castAccepted: castPass.cast?.report?.accepted?.length || 0,
+            castRejected: castPass.cast?.report?.rejected?.length || 0,
             newNpcRelationshipTargets: 0,
             newNpcRelationshipResponseChars: 0,
             relationshipEdges: relationshipEdgeCount,
@@ -3798,7 +3831,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             npc.present = false;
             if (!compactWorldStateTurn) npc.worldActive = false;
         }
-        const merged = mergeScanResult(mergeBaseState, parsedForMerge, {
+        const merged = mergeScanResult(mergeBaseState, castPass.cast ? mergeCastIntoScan(parsedForMerge, castPass.cast) : parsedForMerge, {
             maxNpcs: settings.maxNpcs,
             excludeNames: [...currentExclusions(), ...(state.dismissed || [])],
             turn: state.turn,
@@ -3869,8 +3902,9 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             console.info('[NPC State Delta] dossier scan metrics', lastScanMetrics);
         }
         applyFocusedRelationshipDecisions(merged.state, relationshipPass.decisions, settings.relationshipCaps, targetMessageId, merged.report);
-        if (knowledgePass.decisions.size) {
-            const knowledgeApplied = applyKnowledgeDecisions(merged.state.npcs, knowledgePass.decisions, { sourceMessageId: targetMessageId, turn: state.turn });
+        const castKnowledge = castPass.cast ? resolveKnowledgeKeys(castPass.cast.knowledge, merged.state.npcs) : new Map();
+        if (castKnowledge.size) {
+            const knowledgeApplied = applyKnowledgeDecisions(merged.state.npcs, castKnowledge, { sourceMessageId: targetMessageId, turn: state.turn });
             merged.state.npcs = knowledgeApplied.npcs;
             merged.report.knowledgeGuard = [...(merged.report.knowledgeGuard || []), ...knowledgeApplied.changes];
             if (lastScanMetrics) lastScanMetrics.knowledgeApplied = knowledgeApplied.applied;

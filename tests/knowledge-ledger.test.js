@@ -145,33 +145,21 @@ test('scanner prompt carries the knowledge rule and existing ledger for dedupe',
     assert.match(prompt, /unaware: Mother signed the guarantee/);
 });
 
-test('knowledge pass targets only named dossiers on information-bearing exchanges', async () => {
-    const { knowledgePassTargets, knowledgePassRelevant } = await import('../knowledge.js');
-    const npcs = [{ id: 's', name: 'Soo-jin' }, { id: 'e', name: 'Eun-ji' }, { id: 'h', name: 'Park Ha-neul', aliases: ['Ha-neul'] }, { id: 'x', name: 'Dead Man', lifeState: 'deceased' }];
-    assert.equal(knowledgePassRelevant('Rain all day. Ramyeon for lunch.'), false);
-    assert.deepEqual(knowledgePassTargets(npcs, 'Eun-ji ate ramyeon with Kai.'), []);
-    const text = 'While Eun-ji showered, Soo-jin confessed the guarantee. "She must never know." Dead Man watched.';
-    assert.deepEqual(knowledgePassTargets(npcs, text).map(npc => npc.id), ['s', 'e']);
-    assert.deepEqual(knowledgePassTargets(npcs, 'Ha-neul whispered that Bae tips like a dead man.').map(npc => npc.id), ['h']);
-});
-
-test('knowledge pass prompt, parse and apply: decisions merge per target and the guard still runs', async () => {
-    const { buildKnowledgePassPrompt, parseKnowledgePass, applyKnowledgeDecisions } = await import('../knowledge.js');
-    const targets = [{ id: 's', name: 'Soo-jin', knowledge: [] }, { id: 'e', name: 'Eun-ji', knowledge: [], memories: [] }];
-    const prompt = buildKnowledgePassPrompt({ transcript: 'Soo-jin confessed.', targets, userName: 'Kai' });
-    assert.match(prompt, /"id":"s"/);
-    assert.match(prompt, /Kai is the player/);
-    const decisions = parseKnowledgePass({ npcs: [
-        { id: 's', knowledge: [{ fact: 'Soo-jin forged Eun-ji\'s seal as co-guarantor and hides it from Eun-ji', kind: 'secret' }] },
-        { name: 'Eun-ji', knowledge: [{ fact: 'Soo-jin forged Eun-ji\'s seal as co-guarantor', kind: 'unaware' }] },
-        { id: 'stranger', knowledge: [{ fact: 'ignored', kind: 'knows' }] },
-    ] }, targets);
-    assert.deepEqual([...decisions.keys()], ['s', 'e']);
-    const locked = { id: 'e2', name: 'Eun-ji', knowledge: [], manualProfileFields: ['knowledge'] };
-    const { npcs, applied } = applyKnowledgeDecisions([targets[0], targets[1], locked], new Map([...decisions, ['e2', decisions.get('e')]]), { sourceMessageId: 9 });
+test('applyKnowledgeDecisions merges per NPC, respects locks, and re-runs the guard', async () => {
+    const { applyKnowledgeDecisions } = await import('../knowledge.js');
+    const soojin = { id: 's', name: 'Soo-jin', knowledge: [] };
+    const eunji = { id: 'e', name: 'Eun-ji', knowledge: [], memories: ["Soo-jin forged Eun-ji's seal as co-guarantor"] };
+    const locked = { id: 'e2', name: 'Eun-ji Two', knowledge: [], manualProfileFields: ['knowledge'] };
+    const decisions = new Map([
+        ['s', [{ fact: "Soo-jin forged Eun-ji's seal as co-guarantor and hides it from Eun-ji", kind: 'secret' }]],
+        ['e', [{ fact: "Soo-jin forged Eun-ji's seal as co-guarantor", kind: 'unaware' }]],
+        ['e2', [{ fact: 'anything', kind: 'knows' }]],
+    ]);
+    const { npcs, applied } = applyKnowledgeDecisions([soojin, eunji, locked], decisions, { sourceMessageId: 9 });
     assert.equal(applied, 2);
     assert.equal(npcs[0].knowledge[0].kind, 'secret');
     assert.equal(npcs[1].knowledge[0].kind, 'unaware');
     assert.equal(npcs[1].knowledge[0].sourceMessageId, 9);
+    assert.deepEqual(npcs[1].memories, [], 'the guard strips the memory that repeats an unaware fact');
     assert.equal(npcs[2], locked, 'manual knowledge lock is respected');
 });

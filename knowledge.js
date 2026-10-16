@@ -142,7 +142,7 @@ function escapeRegExp(value) {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function labelsOf(npc) {
+export function labelsOf(npc) {
     const names = [npc?.name, ...(Array.isArray(npc?.aliases) ? npc.aliases : [])].map(value => cleanText(value, 120)).filter(Boolean);
     // A first name alone ("Sera" for "Sera Vantrell") is how prose usually refers to someone.
     for (const name of names.slice()) {
@@ -159,7 +159,7 @@ function namePattern(labels) {
 
 const HIDE_VERB = '(?:must|should|can|cannot|can\'t|mustn\'t|will|may|is to|are to)?\\s*(?:never|not|n\'t)\\s+(?:ever\\s+)?(?:know|find out|learn|be told|hear|discover)';
 
-function firstIndex(text, labels) {
+export function firstIndex(text, labels) {
     const pattern = namePattern(labels);
     if (!pattern) return -1;
     const match = new RegExp(pattern, 'iu').exec(text);
@@ -284,69 +284,15 @@ export function enforceKnowledgeBoundaries(npcs, { sourceMessageId = null, turn 
     return { npcs: result, changes };
 }
 
-/* Focused knowledge pass. The broad dossier scanner rarely fills optional fields it is not shown
- * an example of, so information flow gets its own small request, like the relationship pass.
- * It runs only when the current exchange carries information-flow signals and names a dossier. */
+/* Information-flow signal: the cast pass (cast.js) also extracts knowledge when an exchange carries
+ * these words. The broad dossier scanner rarely fills optional fields it is not shown an example of. */
 const INFORMATION_SIGNAL = /\b(secret(?:ly)?|never (?:tell|know|find out)|don'?t tell|must(?:n'?t| not| never) know|confess(?:ed|es)?|confid(?:e|ed|es)|between us|keep (?:it|this) (?:quiet|between)|hid(?:e|es|den|ing)?|kept from|whisper(?:ed|s)?|told|tells|reveal(?:ed|s)?|admit(?:ted|s)?|lie[ds]?|lying|overh(?:eard|ear)|found out|learn(?:ed|s|t)?|discover(?:ed|s)?|doesn'?t know|does not know|swore|swear|promise[ds]?|alias|real name|isn'?t my name|truth)\b/i;
-
-export const KNOWLEDGE_PASS_TARGET_LIMIT = 6;
-export const KNOWLEDGE_PASS_SYSTEM_PROMPT = "You are NPC State Delta's isolated knowledge evaluator. Use only the supplied targets and current exchange. Return only the requested JSON object.";
 
 export function knowledgePassRelevant(transcript) {
     return INFORMATION_SIGNAL.test(String(transcript || ''));
 }
 
-export function knowledgePassTargets(npcs, transcript, limit = KNOWLEDGE_PASS_TARGET_LIMIT) {
-    const text = String(transcript || '');
-    if (!knowledgePassRelevant(text)) return [];
-    return (Array.isArray(npcs) ? npcs : [])
-        .filter(npc => npc && !npc.archived && npc.lifeState !== 'deceased')
-        .filter(npc => firstIndex(text, labelsOf(npc)) >= 0)
-        .slice(0, limit);
-}
-
-export function buildKnowledgePassPrompt({ transcript, targets = [], userName = 'User' }) {
-    const payload = targets.map(npc => ({
-        id: npc.id,
-        name: npc.name,
-        ...(Array.isArray(npc.aliases) && npc.aliases.length ? { aliases: npc.aliases.slice(0, 4) } : {}),
-        ...(normalizeKnowledge(npc.knowledge).length ? { existingKnowledge: scannerKnowledgeContext(npc, 8) } : {}),
-    }));
-    return `Private NPC knowledge evaluator.
-Decide, for each TARGET, what durable facts from the CURRENT EXCHANGE that NPC now knows, keeps secret, or explicitly does NOT know.
-Rules:
-1. kind="knows": the NPC was present and perceived it, was told it on-page, or worked it out from on-page evidence (source=witnessed|told|deduced; from=who told them).
-2. kind="secret": the NPC knows it and deliberately conceals it from someone; name who it is hidden from in the fact.
-3. kind="unaware": the exchange shows the NPC does NOT know it: it is hidden from them, said while they were absent/asleep/out of earshot, or they believe something false about it.
-4. A fact never goes to an NPC who could not have learned it. Absent NPCs learn nothing. ${userName} is the player: never a target.
-5. Only facts that matter later (identities, secrets, debts, crimes, promises, who did what). Max 3 per target. Skip facts already in existingKnowledge. One short sentence each, naming the people involved.
-6. Targets with nothing new: "knowledge":[].
-JSON only: {"npcs":[{"id":"<target id>","knowledge":[{"fact":"...","kind":"knows|secret|unaware","source":"witnessed|told|deduced","from":""}]}]}
-Example: Mara tells the player, while Jun sleeps, that she stole the ledger and Jun must never know => {"npcs":[{"id":"npc_mara","knowledge":[{"fact":"Mara stole the ledger and hides it from Jun","kind":"secret"}]},{"id":"npc_jun","knowledge":[{"fact":"Mara stole the ledger","kind":"unaware"}]}]}
-
-TARGETS:
-${JSON.stringify(payload)}
-
-CURRENT EXCHANGE:
-${String(transcript || '').trim()}`;
-}
-
-// Map of target id -> knowledge entries from a parsed knowledge-pass response.
-export function parseKnowledgePass(parsed, targets = []) {
-    const decisions = new Map();
-    const rows = Array.isArray(parsed?.npcs) ? parsed.npcs : [];
-    for (const target of targets) {
-        const labels = labelsOf(target).map(label => label.toLowerCase());
-        const row = rows.find(item => String(item?.id || '') === String(target.id)
-            || (item?.name && labels.includes(String(item.name).trim().toLowerCase())));
-        if (!row) continue;
-        const entries = readScanKnowledge(row).slice(0, KNOWLEDGE_NEW_PER_SCAN);
-        if (entries.length) decisions.set(target.id, entries);
-    }
-    return decisions;
-}
-
-// Applies knowledge-pass decisions to stored NPCs (manual locks respected), then re-runs the
+// Applies cast-pass knowledge decisions to stored NPCs (manual locks respected), then re-runs the
 // cross-NPC guard. Returns { npcs, applied, changes }.
 export function applyKnowledgeDecisions(npcs, decisions, { sourceMessageId = null, turn = null } = {}) {
     let applied = 0;
