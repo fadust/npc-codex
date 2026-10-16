@@ -15,9 +15,12 @@
 export const ATTRIBUTES = Object.freeze(['Strength', 'Agility', 'Endurance', 'Intelligence', 'Wisdom', 'Charisma', 'Luck']);
 export const HUMAN_BASELINE = 30;
 export const RANKS = Object.freeze(['E', 'D', 'C', 'B', 'A', 'S']);
-const RANK_BUDGET = { E: 5, D: 15, C: 40, B: 65, A: 95, S: 130 };
+const RANK_BUDGET = { E: 5, D: 15, C: 40, B: 65, A: 95, S: 130, 'S+': 175 };
 // The best attribute of a ranked character lands in its rank's band (user's scale; E starts at the human 30).
-export const RANK_BANDS = Object.freeze({ E: [30, 39], D: [40, 49], C: [50, 59], B: [60, 69], A: [70, 84], S: [85, 100] });
+// S is the highest acknowledged rank, but the top few of S (SS, S+, "the strongest S-rank") pass 100.
+export const RANK_BANDS = Object.freeze({ E: [30, 39], D: [40, 49], C: [50, 59], B: [60, 69], A: [70, 84], S: [85, 100], 'S+': [101, 125] });
+const APEX_RANK = /\b(?:SS|SSS|EX)\b|\bS\+/; // case-sensitive: "ex-captain" is not EX rank
+const APEX_WORD = /\b(?:strongest|apex|legendary|peerless|unmatched|unrivall?ed|greatest|mightiest)\b/i;
 const MAGIC = ['none', 'weak', 'normal', 'strong'];
 const MAGIC_FACTOR = { none: 0, weak: 0.5, normal: 1, strong: 1.5 };
 export const PROFILE_SYSTEM_PROMPT = "You are NPC Codex's isolated world-rules helper. Reason from common knowledge of the genre and the supplied lore. Return only the requested JSON object.";
@@ -96,6 +99,7 @@ export function rankTier(rank, schemaRanks = []) {
     const letter = text.match(/\b([EDCBAS])\s*[-–]?\s*(?:class|rank|tier|grade)\b/i)?.[1]
         || text.match(/\b(?:class|rank|tier|grade)\s*[:-]?\s*([EDCBAS])\b/i)?.[1]
         || (/^[EDCBAS]$/i.test(text) ? text : '');
+    if (APEX_RANK.test(text) || (letter && letter.toUpperCase() === 'S' && APEX_WORD.test(text))) return 'S+';
     if (letter) return letter.toUpperCase();
     const scale = Array.isArray(schemaRanks) ? schemaRanks : [];
     const index = scale.findIndex(item => norm(item) === norm(text));
@@ -142,9 +146,9 @@ export function deriveSheet({ race = null, profession = null, tier = '', emphasi
     if (race) for (const attr of ATTRIBUTES) values[attr] += (race.attributes[attr] ?? HUMAN_BASELINE) - HUMAN_BASELINE;
     // Flavour, not math: a derived human starts within 100, other races may pass it; the story and
     // edits may push anyone further.
-    const attributes = ATTRIBUTES.map(attr => ({ name: attr, value: String(clamp(values[attr], 1, race ? 999 : 100)) }));
+    const attributes = ATTRIBUTES.map(attr => ({ name: attr, value: String(clamp(values[attr], 1, race || tier === 'S+' ? 999 : 100)) }));
     const get = attr => Number(attributes.find(item => item.name === attr).value);
-    const tierIndex = tier ? RANKS.indexOf(tier) + 1 : 0;
+    const tierIndex = tier === 'S+' ? RANKS.length + 1 : tier ? RANKS.indexOf(tier) + 1 : 0;
     const magic = profession?.magic === 'none' ? 'none' : base.magic;
     const keep = (name, max) => {
         const before = (previousPools || []).find(pool => norm(pool.name) === norm(name));

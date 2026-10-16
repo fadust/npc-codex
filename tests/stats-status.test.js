@@ -132,3 +132,12 @@ test('humans cap at 100; other races may pass it', () => {
     assert.ok(value(human, 'Strength') <= 100);
     assert.ok(value(big, 'Strength') > 100, String(value(big, 'Strength')));
 });
+
+test('S is the top rank, but the top few of S pass 100', () => {
+    assert.equal(rankTier('S-rank'), 'S');
+    assert.equal(rankTier('SS-rank'), 'S+');
+    assert.equal(rankTier('Rank: S+'), 'S+');
+    assert.equal(rankTier('the strongest S-class hero'), 'S+');
+    const peak = tier => Math.max(...deriveSheet({ tier, emphasis: { dominant: ['Strength'] } }).attributes.map(item => Number(item.value)));
+    assert.ok(peak('S') <= 100 && peak('S+') > 100, `${peak('S')} / ${peak('S+')}`);
+});
