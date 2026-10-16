@@ -1,6 +1,22 @@
-# NPC State Delta changes
+# NPC Codex changes
+
+From 2.0.0 NPC Codex has its own version numbers. 1.1.5 and earlier are NPC State Delta releases by kohz87, kept below for history.
 
 ## Unreleased
+
+## 2.0.0 - 17 October 2026
+
+First NPC Codex release (fadust fork). Existing NPC State Delta dossiers load unchanged; storage keys and data files keep their `npc_state_delta` names.
+
+- **Knowledge ledger and gating**, and **cast resolution** that resolves "the headmaster" or "Martha's older daughter" canon-first.
+- **Canon seeding**: an NPC found in the card or lorebook canon starts from it, with canon fields locked.
+- **Memory**: events with each witness's own view, intentions, hearsay, witness gating, keyword and optional Qdrant vector recall, and reflection into beliefs, likes and dislikes.
+- **NPC-to-NPC stances** (trust, affection, tension), changed only while both are present.
+- **Stats as flavour**: human baseline 30, races and professions derived per world, ranks E 30–39 to S 85–100 with the top of S beyond, other races and the story free to pass 100. The prompt gets words, only in action scenes.
+- **Active status**: afflictions escalate untreated up to dying (never death), treatment eases them, buffs and debuffs wear off; unaware conditions.
+- **Per-world schema** for attribute, pool and rank names.
+- **Codex panel**: NPC list column, one header with chips, tags and a quote, and Dossier / Stat / Social Map tabs.
+- **Leaner scanning**: one cast pass per turn carries cast, sheet, events, stances, seeds and builds.
 
 ## 1.1.5 - 9 October 2026
 

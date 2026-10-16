@@ -1,4 +1,4 @@
-/* NPC Codex v1.1.5 bootstrap. */
+/* NPC Codex v2.0.0 bootstrap. */
 import { prepareNpcStateHardening } from './hardening.js';
 
 await prepareNpcStateHardening();
