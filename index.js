@@ -3568,7 +3568,8 @@ async function deriveNpcStats(ctx, npcs, castPass, options = {}) {
             attributes = [...sheet.attributes, ...next.attributes.filter(item => !sheet.attributes.some(other => sameStat(other.name, item.name)))];
             pools = [...sheet.pools, ...next.pools.filter(item => !sheet.pools.some(other => sameStat(other.name, item.name)))];
         } else {
-            // What the sheet was derived from before; the difference shifts values, keeping edits.
+            // What the sheet was derived from before; the difference shifts values, keeping edits
+            // (no cap: the story may have pushed a value past 100).
             const oldRace = prior.assumedRace || /\bhuman\b/i.test(prior.race || '') ? null : (world.races[profileKey(prior.race)] || null);
             const oldProfession = prior.profession ? (world.professions[profileKey(prior.profession)] || null) : null;
             const old = deriveSheet({ ...base, race: oldRace, profession: oldProfession, emphasis: prior.emphasis || {}, tier: prior.rank || '' });
@@ -3577,7 +3578,7 @@ async function deriveNpcStats(ctx, npcs, castPass, options = {}) {
                 const after = newList.find(other => sameStat(other.name, item.name));
                 if (!before || !after) return item;
                 const value = Math.max(1, Math.round(Number(item[field] ?? before[field]) + Number(after[field]) - Number(before[field])));
-                return { ...item, [field]: field === 'value' ? String(Math.min(100, value)) : value };
+                return { ...item, [field]: field === 'value' ? String(value) : value };
             };
             attributes = sheet.attributes.map(item => shift(null, 'value')(item, old.attributes, next.attributes));
             pools = sheet.pools.map(item => shift(null, 'max')(item, old.pools, next.pools));
