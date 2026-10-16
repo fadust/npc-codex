@@ -2399,6 +2399,8 @@ function namedByPlayerNpcIds(state) {
 // Vector recall (memory Phase B2): scores refresh in the background and the injection is rebuilt
 // when they arrive; until then, and whenever Similharity/Qdrant is unavailable, recall is by keyword.
 let recallCache = { chatKey: '', scores: new Map(), sig: '' };
+// The world schema (S2.13) last found for this chat, for the Stat tab's attribute names.
+let lastWorldSchema = null;
 let recallBusy = false;
 const recallTransport = { fetch: (...args) => fetch(...args), headers: () => getRequestHeaders() };
 
@@ -3505,6 +3507,7 @@ async function runCastPass(ctx, existingNpcs, transcript, options = {}) {
     const cardEntries = cardCanonEntries(cardText);
     const canon = rankCanonEntries([...cardEntries, ...entries], transcript, { npcs, exclude: [ctx.name1, ctx.name2] });
     const schema = findWorldSchema({ cardText, entries });
+    if (JSON.stringify(schema) !== JSON.stringify(lastWorldSchema)) { lastWorldSchema = schema; renderDossier(); }
     if (!shortlist.length && !canon.length && !signals.unknownNames.length && !signals.tiePhrases.length && !signals.titlePhrases.length) return empty;
     try {
         const { parsed, raw } = await generateParsedNpcJson(ctx, {
@@ -5749,6 +5752,21 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
 }
 
 
+// Stat tab inline edits. They do not lock the sheet: story updates keep landing on top.
+function updateNpcSheet(npcId, sheet, { chatKey } = {}) {
+    if (!chatKey || chatKey !== getChatKey() || !requireReadyChatMutation('edit the stat sheet', chatKey)) return false;
+    const state = getChatState(chatKey);
+    const index = state.npcs.findIndex(item => item.id === String(npcId || ''));
+    if (index < 0) return false;
+    state.npcs[index] = normalizeNpcRecord({ ...state.npcs[index], sheet, updatedAt: Date.now() });
+    const messageId = latestMessageId(false);
+    if (messageId >= 0) commitBranchCheckpoint(state, messageId, 'manual-edit');
+    persistCritical(chatKey);
+    renderDossier();
+    updateInjection();
+    return true;
+}
+
 function updateNpcAppearance(npcId, draft, { chatKey, lockAppearance = false } = {}) {
     if (!chatKey || chatKey !== getChatKey() || !requireReadyChatMutation('edit appearance forms', chatKey)) return false;
     // The appearance draft lives in the dossier editor; like its main Save, it must not overwrite a
@@ -7150,6 +7168,7 @@ window.NPCStateDelta = Object.freeze({
     render: renderDossier,
     renderInline: renderInlineCards,
     openEditor: value => { const npc = findNpcByIdOrName(value); return npc ? openNpcEditorSafely(npc.id) : false; },
+    updateSheet: (npcId, sheet) => updateNpcSheet(npcId, sheet, { chatKey: getChatKey() }),
     openDossier: value => { const npc = findNpcByIdOrName(value); return npc ? openLauncherDossier(npc.id) : false; },
     injectionPreview: () => structuredClone(injectionPreview()),
     uiStatus: () => ({
@@ -7160,6 +7179,7 @@ window.NPCStateDelta = Object.freeze({
         scanBusyForChat: isScanBusy(getChatKey()),
         scanOperation: scanOperations.status(getChatKey()),
         scannerRouting: scannerRoutingMetrics(),
+        worldSchema: lastWorldSchema,
         vectorRecall: { enabled: Boolean(getSettings().recallEnabled), busy: recallBusy, chatKey: recallCache.chatKey, scored: recallCache.scores?.size || 0, synced: recallCache.synced || null, error: recallCache.error || null, at: recallCache.at || null },
         inlineEntries: chatHydrationStatus(getChatKey()) === 'ready' ? (getChatState().inlineCards?.length || 0) : 0,
         mountedInlineAnchors: document.querySelectorAll?.('.npc-state-delta-inline-anchor')?.length || 0,

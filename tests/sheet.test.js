@@ -82,12 +82,13 @@ test('a locked sheet ignores scanner deltas; records normalize and survive an em
 test('Stat tab renders every section, escapes text, and explains an empty sheet', () => {
     const sheet = applySheetDelta(emptySheet(), { archetype: 'tracker', rank: 'Iron', items: [{ op: 'gained', item: '<b>compass</b>' }, { op: 'equipped', item: 'longsword', slot: 'back' }], pools: [{ name: 'HP', current: 6, max: 12 }], conditions: [{ name: 'grazed shoulder', kind: 'injury' }] });
     const html = statPaneHtml({ name: 'Sera', sheet });
-    assert.match(html, /STAT SHEET/);
-    assert.match(html, /tracker · Iron/);
+    assert.match(html, /Core Attributes/);
+    assert.match(html, /<p>tracker<\/p>/);
+    assert.match(html, /data-stat-path="rank" value="Iron"/);
     assert.match(html, /&lt;b&gt;compass&lt;\/b&gt;/);
     assert.match(html, /style="width:50%"/);
-    assert.match(html, /data-kind="injury"/);
-    assert.match(statPaneHtml({ name: 'Pell', sheet: emptySheet() }), /Nothing established yet/);
+    assert.match(html, /value="grazed shoulder"/);
+    assert.match(statPaneHtml({ name: 'Pell', sheet: emptySheet() }), /No skills added yet\./);
     assert.match(statPaneHtml(null), /Select an NPC/);
 });
 

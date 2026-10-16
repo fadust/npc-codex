@@ -142,6 +142,7 @@ export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortr
     const shown = displayedPortrait(npc, portraitAssets, formPortraits);
     return {
         ...dossierIndexProjection(npc, portraitAssets),
+        faction: [...new Set((Array.isArray(npc?.roles) ? npc.roles : []).filter(role => role && !role.until && role.org).map(role => plain(role.org)))].join(', '),
         portrait: shown.src,
         portraitFromForm: shown.fromForm,
         formPortraits: Object.fromEntries(Object.entries(formPortraits || {}).filter(([, image]) => image?.dataUrl).map(([name, image]) => [name, plain(image.dataUrl)])),
@@ -252,6 +253,7 @@ export function projectDossierState(state = {}, status = {}) {
         chatKey: plain(status?.chatKey, 'no-chat'),
         hydrationStatus: plain(status?.hydrationStatus, 'ready'),
         hydrationError: plain(status?.hydrationError),
+        worldSchema: status?.worldSchema && typeof status.worldSchema === 'object' ? status.worldSchema : null,
         turn: Number.isFinite(Number(state?.turn)) ? Number(state.turn) : 0,
         npcs: details,
         index: sortDossierIndex(details.map(npc => ({
