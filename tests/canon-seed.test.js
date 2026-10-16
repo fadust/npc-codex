@@ -4,7 +4,6 @@ import { createNpcRecord, mergeScanResult, normalizeNpcRecord } from '../core.js
 import { cardCanonEntries } from '../cast.js';
 import {
     applyCanonSeed,
-    buildCanonSeedPrompt,
     canonSeedTargets,
     canonTextFor,
     enforceCanonLocks,
@@ -35,7 +34,6 @@ test('only grounded fields are kept; species must be fully stated; invented age 
     }, DUMBLEDORE);
     assert.deepEqual(Object.keys(fields).sort(), ['background', 'gender', 'overallAppearance', 'personality']);
     assert.deepEqual(rejected.sort(), ['age', 'species', 'speech']);
-    assert.match(buildCanonSeedPrompt({ name: 'Albus Dumbledore', canonText: DUMBLEDORE }), /CANON TEXT:\nAlbus Dumbledore is the Headmaster/);
 });
 
 test('a new dossier takes canon as its base; an older one only fills empty fields; manual fields are untouched', () => {
@@ -88,4 +86,28 @@ test('a seeded field that hands this person a gendered title of the other gender
     // Kin words are not titles: a man's background may name his daughter.
     const father = applyCanonSeed({ ...createNpcRecord('Tom'), gender: 'male' }, { background: 'Widowed blacksmith; raises his daughter alone.' }, { isNew: true });
     assert.deepEqual(father.seeded, ['background']);
+});
+
+test('S8.5: the cast call carries the seed for a canon-resolved person; the shortlist marks seeded dossiers', async () => {
+    const { castDecisionsToScan, buildCastPassPrompt, buildCastShortlist } = await import('../cast.js');
+    const canon = [{ id: 'canon:HP#1', world: 'HP', uid: 1, name: 'Albus Dumbledore', keys: ['Dumbledore'], snippet: DUMBLEDORE }];
+    const out = castDecisionsToScan({ people: [{ ref: 'the headmaster', is: 'canon:HP#1', name: 'Albus Dumbledore', present: true,
+        seed: { gender: 'male', overallAppearance: 'tall and thin, long silver beard, half-moon spectacles', species: 'human wizard' } }] },
+        { transcript: 'At the high table the headmaster rises.', canon });
+    const row = out.npcs[0];
+    assert.equal(row.canonSeedRaw.gender, 'male');
+    const { fields, rejected } = parseCanonSeed(row.canonSeedRaw, DUMBLEDORE);
+    assert.deepEqual(Object.keys(fields).sort(), ['gender', 'overallAppearance']);
+    assert.deepEqual(rejected, ['species']);
+    assert.match(buildCastPassPrompt({ transcript: 'x' }), /TASK F \(in a person object resolved to canon, unless the candidate is "seeded"\)/);
+    const seeded = { ...createNpcRecord('Albus Dumbledore'), canonSeed: { fields: ['background'] } };
+    assert.equal(buildCastShortlist({ npcs: [seeded], transcript: 'Albus Dumbledore smiles.' })[0].seeded, true);
+});
+
+test('S3.3: canon gender needs gendered words in the canon text (live: Idris Quill got "male" from a sentence that never says it)', () => {
+    const quill = parseCanonSeed({ gender: 'male', background: 'Deputy to Miriam Harcourt' }, 'Miriam Harcourt is the headmistress, with Idris Quill as deputy.');
+    assert.equal(quill.fields.gender, undefined);
+    assert.ok(quill.rejected.includes('gender'));
+    assert.equal(parseCanonSeed({ gender: 'female' }, 'Minerva McGonagall is a stern witch; she teaches Transfiguration.').fields.gender, 'female');
+    assert.equal(parseCanonSeed({ gender: 'male' }, 'He married her in the spring.').fields.gender, undefined, 'conflicting cues drop it');
 });
