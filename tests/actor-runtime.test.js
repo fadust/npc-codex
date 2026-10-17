@@ -68,6 +68,7 @@ async function ariAutomaticChecks(mockState, eventSource, manualAddNpc, sleep, e
         queryCanon: async () => ({ status: 'no-match', entries: [] }),
     } };
     mockState.quietResponder = async (args = {}) => {
+        assert.doesNotMatch(JSON.stringify(args), /PLANNING_ONLY_FALSE_DEATH/, 'Floris planning is not scanner evidence');
         promptEpoch++; // quiet-generation cleanup does not change the canon-source epoch.
         if (!/isolated dossier scanner/i.test(args.systemPrompt || '')) return '{"people":[],"npcs":[]}';
         return JSON.stringify({ npcs: [{ name: fixture.card.name, present: turn < 9,
@@ -81,7 +82,7 @@ async function ariAutomaticChecks(mockState, eventSource, manualAddNpc, sleep, e
         const story = turn === 9 ? 'Ari Vale died in the flood. His death is explicitly confirmed.' : turn === 10
             ? 'The traveller remembers Ari Vale, who remains deceased.'
             : `Ari Vale is deliberate and speaks softly. Ari Vale is calm at the river on turn ${turn}.`;
-        mockState.context.chat.push({ is_user: false, name: fixture.card.name, mes: story, swipe_id: 0 });
+        mockState.context.chat.push({ is_user: false, name: fixture.card.name, mes: story + '\n<log>PLANNING_ONLY_FALSE_DEATH: Ari Vale dies next turn.</log>', swipe_id: 0 });
         const messageId = mockState.context.chat.length - 1;
         eventSource.emit('message_received', messageId);
         if (turn === 5) mockState.context.chat[messageId].mes += '\n[COLORS:Ari Vale=#9cb8c9]';

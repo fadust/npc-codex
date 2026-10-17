@@ -23,6 +23,7 @@ import { memoryContext, readMemoryDecision, readEventDecisions } from './memory.
 import { readStanceDecisions } from './stance.js';
 import { applySchemaToDelta, schemaPromptLine } from './schema.js';
 import { capPoolChanges } from './trust.js';
+import { resolveActor } from './actor-stack.js';
 import { renderFlorisReadout } from './floris.js';
 
 export const CAST_PASS_SYSTEM_PROMPT = "You are NPC State Delta's isolated cast and knowledge evaluator. Use only the supplied candidates, canon entries and current exchange. Return only the requested JSON object.";
@@ -602,7 +603,7 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
     for (const item of Array.isArray(parsed?.knowledge) ? parsed.knowledge : []) {
         const who = cleanText(item?.who, 160);
         if (!who) continue;
-        const dossier = live.find(npc => npc.id === who || labelsOf(npc).some(label => norm(label) === norm(who)));
+        const dossier = resolveActor(live, who);
         const key = dossier ? dossier.id : `name:${norm(nameOf.get(norm(who)) || who)}`;
         const entries = readScanKnowledge({ knowledge: [item] });
         if (!entries.length) continue;
@@ -690,7 +691,7 @@ export function resolveKnowledgeKeys(knowledge, npcs) {
     for (const [key, entries] of knowledge || []) {
         if (!key.startsWith('name:')) { out.set(key, entries); continue; }
         const label = key.slice(5);
-        const npc = (npcs || []).find(item => item && labelsOf(item).some(name => norm(name) === label));
+        const npc = resolveActor(npcs, label);
         if (npc) out.set(npc.id, [...(out.get(npc.id) || []), ...entries]);
     }
     return out;

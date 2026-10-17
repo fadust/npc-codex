@@ -4,14 +4,14 @@ import fs from 'node:fs';
 import { createNpcRecord, mergeScanResult, buildInjection } from '../core.js';
 import { resolveSagaAdmissions } from '../saga-canon.js';
 import { captureCanonRevision, canonRevisionCurrent } from '../saga-canon.js';
-import { buildCastShortlist, mergeCastIntoScan } from '../cast.js';
+import { buildCastShortlist, mergeCastIntoScan, resolveKnowledgeKeys } from '../cast.js';
 import { canonSeedTargets } from '../canon-seed.js';
 import { actorProfiles, resolveActor, readStoryContinuity } from '../actor-stack.js';
 import { acceptPortrayal, renderPortrayal, PORTRAYAL_REFERENCES } from '../actor-portrayal.js';
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/layer1-ari.json', import.meta.url)));
 const ari = () => ({ ...createNpcRecord(fixture.card.name), id: 'ari', personality: 'deliberate', speech: 'speaks softly', present: true });
 test('Ari live regression: a shared alias never transfers Senn death to Vale', async () => {
-    const vale = { ...ari(), aliases: ['Ari'], canonRef: { world: 'Saga:vale@r1', uid: 0, name: 'Ari Vale' } };
+    const vale = { ...ari(), id: 'npc_ari-vale', aliases: ['Ari'], canonRef: { world: 'Saga:vale@r1', uid: 0, name: 'Ari Vale' } };
     const senn = { name: 'Ari Senn', aliases: ['Ari'], present: true, identityKind: 'proper_name', dossierSignal: 'persistent', canonRef: { world: 'Saga:senn@r1', uid: 0, name: 'Ari Senn' } };
     const folded = mergeCastIntoScan({ npcs: [{ id: vale.id, name: vale.name, aliases: ['Ari'] }] }, { npcs: [{ ...senn, matchLabels: ['Ari'] }] });
     assert.equal(folded.npcs.length, 2);
@@ -24,6 +24,8 @@ test('Ari live regression: a shared alias never transfers Senn death to Vale', a
     const wrongId = { ...dead, id: vale.id };
     assert.equal((await resolveSagaAdmissions({ npcs: [wrongId] }, [vale], { bridge: {} })).npcs.length, 0);
     assert.notEqual(mergeScanResult({ npcs: [vale] }, { npcs: [wrongId] }).state.npcs[0].lifeState, 'deceased');
+    assert.equal(resolveKnowledgeKeys(new Map([['name:ari', [{ fact: 'private phrase' }]]]), state.npcs).size, 0);
+    assert.equal(resolveKnowledgeKeys(new Map([['name:ari vale', [{ fact: 'private phrase' }]]]), state.npcs).size, 1);
 });
 test('Ari: custom facts require this actor, this field and this whole value', () => {
     const base = { npcs: [{ ...ari(), customFields: { Level: '3' } }], candidates: [], turn: 1 };

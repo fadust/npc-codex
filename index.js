@@ -2275,7 +2275,7 @@ function flushCurrentChatOnPageHide() {
 function cleanMessage(message) {
     if (!message || message.is_system) return '';
     const speaker = message.name || (message.is_user ? getContext().name1 : getContext().name2) || '';
-    const body = stripUiNoise(message.mes || '');
+    const body = stripUiNoise(stripFlorisLog(message.mes || ''));
     return body ? `${speaker}: ${body}` : '';
 }
 
