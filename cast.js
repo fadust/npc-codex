@@ -326,7 +326,7 @@ export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation =
                 ...((npc.location || extra.location) ? { location: cleanText(npc.location || extra.location, 120) } : {}),
                 ...(npc.lifeState && npc.lifeState !== 'unknown' ? { lifeState: npc.lifeState } : {}),
                 ...(npc.canonRef ? { canon: `canon:${npc.canonRef.world}#${npc.canonRef.uid}` } : {}),
-                ...(npc.canonSeed && (!npc.canonSeed.world?.startsWith('Saga:') || canonEntries.some(e => e.world === npc.canonSeed.world)) ? { seeded: true } : {}),
+                ...(npc.canonSeed && (!npc.canonSeed.world?.startsWith('Saga:') || (npc.personality && npc.speech && canonEntries.some(e => e.world === npc.canonSeed.world))) ? { seeded: true } : {}),
                 ...(npc.sheet?.derivation?.emphasis?.dominant?.length || npc.sheet?.derivation?.emphasis?.weak?.length ? {} : { needsBuild: true }),
                 ...(renderFlorisReadout(npc) ? { floris: renderFlorisReadout(npc) } : {}),
                 ...(normalizeKnowledge(npc.knowledge).length ? { existingKnowledge: scannerKnowledgeContext(npc, 6) } : {}),
@@ -516,9 +516,10 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
         if (is.startsWith('canon:')) {
             const entry = canon.find(item => item.id === is);
             if (!entry) { report.rejected.push({ ref, reason: 'unknown canon entry' }); continue; }
-            const canonical = name || entry.name;
+            const canonical = entry.name;
             const dossier = live.find(npc => npc.id === entry.dossierId)
                 || live.find(npc => labelsOf(npc).some(label => norm(label) === norm(canonical)));
+            if (!dossier && person.present !== true) { report.rejected.push({ ref, reason: 'mentioned canon only' }); continue; }
             row = dossier
                 ? { id: dossier.id, name: dossier.name, sameIndividual: true }
                 : { name: canonical, identityKind: 'proper_name', dossierSignal: 'persistent', dossierReason: `canon entry ${entry.name}`, sameIndividual: true };
@@ -624,6 +625,27 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
 // Folds cast rows into the broad scanner's parsed result. A row for an NPC the scanner already
 // returned is merged into that row (the merge reads `present` per row, so a duplicate row would
 // undo the scanner's presence); other rows are appended. Edges are appended.
+export function canonIdentityConflict(a, b) {
+    const left = a?.canonRef, right = b?.canonRef;
+    if (!left?.world || !right?.world) return false;
+    if (left.world.startsWith('Saga:') && right.world.startsWith('Saga:')) {
+        return left.world.split('@')[0] !== right.world.split('@')[0];
+    }
+    return left.world === right.world && Number(left.uid) !== Number(right.uid);
+}
+
+export function distinctNamedPeople(a, b) {
+    if (canonIdentityConflict(a, b)) return true;
+    const left = norm(a?.name), right = norm(b?.name);
+    if (!left || !right || left === right) return false;
+    if (left.startsWith(`${right} `) || right.startsWith(`${left} `)) return false;
+    // Shared short aliases cannot merge two full names; explicit name reveals still can.
+    return /^[A-Z][\p{L}'’-]+\s+[A-Z][\p{L}'’-]+/u.test(a.name || '')
+        && /^[A-Z][\p{L}'’-]+\s+[A-Z][\p{L}'’-]+/u.test(b.name || '')
+        && !(a.aliases || []).some(label => norm(label) === right)
+        && !(b.aliases || []).some(label => norm(label) === left);
+}
+
 export function mergeCastIntoScan(parsed, cast) {
     const base = parsed && typeof parsed === 'object' ? parsed : {};
     const rows = (Array.isArray(base.npcs) ? base.npcs : []).map(row => ({ ...row }));
@@ -632,6 +654,7 @@ export function mergeCastIntoScan(parsed, cast) {
     const labelsOfItem = item => new Set([item.name, ...(item.aliases || []), ...(item.matchLabels || []),
         ...(item.roles || []).flatMap(role => [role.title, role.org ? `${role.title} of ${role.org}` : ''])].map(stripArticle).map(norm).filter(Boolean));
     const sameRow = (row, item) => {
+        if (distinctNamedPeople(row, item) || (row.id && item.id && row.id !== item.id)) return false;
         if (item.id && row.id === item.id) return true;
         const mine = labelsOfItem(item);
         return [row.name, ...(row.aliases || [])].map(stripArticle).map(norm).some(label => mine.has(label));

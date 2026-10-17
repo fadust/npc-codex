@@ -1,3 +1,4 @@
+import { distinctNamedPeople } from './cast.js';
 /* NPC State Delta Stage 4 continuity facade. */
 import * as mechanics from './core-mechanics.js';
 import {
@@ -19,12 +20,13 @@ function lockedAppearance(npc = {}) {
     return Array.isArray(npc.manualProfileFields) && npc.manualProfileFields.includes('appearance');
 }
 function sameNpc(raw = {}, npc = {}) {
+    if (distinctNamedPeople(raw, npc)) return false;
     if (raw?.id && String(raw.id) === String(npc.id)) return true;
     if (raw?.name && mechanics.npcMatchesLabel(npc, raw.name)) return true;
     return Array.isArray(raw?.aliases) && raw.aliases.some(alias => mechanics.npcMatchesLabel(npc, alias));
 }
 function matchingPrevious(npc, source = []) {
-    return (Array.isArray(source) ? source : []).filter(item => item && (
+    return (Array.isArray(source) ? source : []).filter(item => item && !distinctNamedPeople(item, npc) && (
         String(item.id || '') === String(npc?.id || '')
         || (npc?.name && mechanics.npcMatchesLabel(item, npc.name))
         || (item?.name && mechanics.npcMatchesLabel(npc, item.name))

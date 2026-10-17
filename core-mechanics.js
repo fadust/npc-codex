@@ -14,7 +14,7 @@ import { temperamentExpression, normalizeStances, renderStanceInjection } from '
 import { normalizeFloris, renderFlorisReadout } from './floris.js';
 import { renderStatusInjection, sappingStatus } from './status.js';
 import { isActionScene, abilityFlavour, clashComparison } from './derive.js';
-import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
+import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases, canonIdentityConflict, distinctNamedPeople } from './cast.js';
 import { emptySheet, normalizeSheet, readSheetDelta, sheetDeltaIsEmpty, applySheetDelta, sheetIsEmpty, renderSheetInjection } from './sheet.js';
 import { normalizeCanonSeed, normalizeCanonLocked, enforceCanonLocks } from './canon-seed.js';
 import {
@@ -4066,6 +4066,7 @@ function placesOverlap(a, b) {
 // record still named by a role keeps plain label matching so interim-identity promotion and name
 // reveals continue to work.
 export function scanLabelsMatch(record, incoming, presentIds = new Set()) {
+    if (distinctNamedPeople(record, incoming)) return false;
     const incomingLabels = [incoming.name, ...(incoming.aliases || [])].filter(label => normalizeName(label));
     const recordLabels = [record.name, ...(record.aliases || [])].filter(label => normalizeName(label));
     const sharedKeys = new Set(recordLabels.map(normalizeName).filter(key => incomingLabels.some(label => normalizeName(label) === key)));
@@ -5326,6 +5327,7 @@ export function resolveInterimIdentityPromotions(scanResult, existingNpcs = [], 
 
 function explicitAliasLink(a, b) {
     if (!a || !b || a.id === b.id) return false;
+    if (canonIdentityConflict(a, b)) return false;
     const aName = normalizeName(a.name);
     const bName = normalizeName(b.name);
     if (!aName || !bName) return false;
@@ -5553,6 +5555,10 @@ export function mergeScanResult(state, scanResult, options = {}) {
     for (const raw of incomingList) {
         const incoming = normalizeScanNpc(raw, { memoryInputLimit });
         let existingIndex = incoming.id ? next.npcs.findIndex(existing => existing.id === incoming.id) : -1;
+        if (existingIndex >= 0 && distinctNamedPeople(next.npcs[existingIndex], incoming)) {
+            report.skipped.push(incoming.name || incoming.id);
+            continue;
+        }
         if (existingIndex >= 0 && !incoming.name) incoming.name = next.npcs[existingIndex].name;
         const key = normalizeName(incoming.name);
         if (!key || excludeNames.has(key)) {

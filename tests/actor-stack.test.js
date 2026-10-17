@@ -4,11 +4,27 @@ import fs from 'node:fs';
 import { createNpcRecord, mergeScanResult, buildInjection } from '../core.js';
 import { resolveSagaAdmissions } from '../saga-canon.js';
 import { captureCanonRevision, canonRevisionCurrent } from '../saga-canon.js';
-import { buildCastShortlist } from '../cast.js';
+import { buildCastShortlist, mergeCastIntoScan } from '../cast.js';
+import { canonSeedTargets } from '../canon-seed.js';
 import { actorProfiles, resolveActor, readStoryContinuity } from '../actor-stack.js';
 import { acceptPortrayal, renderPortrayal, PORTRAYAL_REFERENCES } from '../actor-portrayal.js';
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/layer1-ari.json', import.meta.url)));
 const ari = () => ({ ...createNpcRecord(fixture.card.name), id: 'ari', personality: 'deliberate', speech: 'speaks softly', present: true });
+test('Ari live regression: a shared alias never transfers Senn death to Vale', async () => {
+    const vale = { ...ari(), aliases: ['Ari'], canonRef: { world: 'Saga:vale@r1', uid: 0, name: 'Ari Vale' } };
+    const senn = { name: 'Ari Senn', aliases: ['Ari'], present: true, identityKind: 'proper_name', dossierSignal: 'persistent', canonRef: { world: 'Saga:senn@r1', uid: 0, name: 'Ari Senn' } };
+    const folded = mergeCastIntoScan({ npcs: [{ id: vale.id, name: vale.name, aliases: ['Ari'] }] }, { npcs: [{ ...senn, matchLabels: ['Ari'] }] });
+    assert.equal(folded.npcs.length, 2);
+    const state = mergeScanResult({ npcs: [vale] }, { npcs: [senn] }, { turn: 1 }).state;
+    assert.equal(state.npcs.length, 2);
+    const dead = { ...senn, id: state.npcs.find(n => n.name === senn.name).id, lifeState: 'deceased', lifeStateCertainty: 'explicit', lifeStateReason: 'Ari Senn died under the arch.' };
+    const next = mergeScanResult(state, { npcs: [dead] }, { turn: 2, developmentContext: dead.lifeStateReason }).state;
+    assert.notEqual(next.npcs.find(n => n.name === vale.name).lifeState, 'deceased');
+    assert.equal(next.npcs.find(n => n.name === senn.name).lifeState, 'deceased');
+    const wrongId = { ...dead, id: vale.id };
+    assert.equal((await resolveSagaAdmissions({ npcs: [wrongId] }, [vale], { bridge: {} })).npcs.length, 0);
+    assert.notEqual(mergeScanResult({ npcs: [vale] }, { npcs: [wrongId] }).state.npcs[0].lifeState, 'deceased');
+});
 test('Ari: custom facts require this actor, this field and this whole value', () => {
     const base = { npcs: [{ ...ari(), customFields: { Level: '3' } }], candidates: [], turn: 1 };
     const scan = context => mergeScanResult(base, { npcs: [{ id: 'ari', name: fixture.card.name, customFields: { Level: '5' }, customFieldsReason: 'reached level 5' }] }, { turn: 2, customFieldNames: ['Level'], developmentContext: context }).state.npcs[0];
@@ -38,6 +54,12 @@ test('Ari: changed canon revision requests gap filling; profiles expose no secre
     assert.equal(shortlist[0].seeded, undefined);
     assert.doesNotMatch(JSON.stringify(actorProfiles([npc], 4)), /Hidden vault/);
     assert.equal(resolveActor([npc, { ...ari(), id: 'other' }], fixture.card.name), null);
+});
+
+test('Ari: an age-only Saga seed does not suppress personality and speech gap filling', () => {
+    const npc = { ...ari(), personality: '', speech: '', canonRef: { world: 'Saga:ari@r1', uid: 0 }, canonSeed: { world: 'Saga:ari@r1', fields: ['age'] } };
+    assert.equal(buildCastShortlist({ npcs: [npc], transcript: 'Ari Vale enters.', canonEntries: [{ world: npc.canonRef.world }] })[0].seeded, undefined);
+    assert.equal(canonSeedTargets([{ id: npc.id, name: npc.name, canonRef: npc.canonRef }], [npc]).length, 1);
 });
 test('Ari: approved portrayal shares the actor budget, cannot change facts, and invalidates on changes', () => {
     const npc = ari(); const original = structuredClone(npc);

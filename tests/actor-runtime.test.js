@@ -84,6 +84,7 @@ async function ariAutomaticChecks(mockState, eventSource, manualAddNpc, sleep, e
         mockState.context.chat.push({ is_user: false, name: fixture.card.name, mes: story, swipe_id: 0 });
         const messageId = mockState.context.chat.length - 1;
         eventSource.emit('message_received', messageId);
+        if (turn === 5) mockState.context.chat[messageId].mes += '\n[COLORS:Ari Vale=#9cb8c9]';
         for (let i = 0; i < 100 && runtime.getState().lastScannedMessageId !== messageId; i++) await sleep(20);
         assert.equal(runtime.getState().lastScannedMessageId, messageId, `automatic turn ${turn} must APPLY, not merely dispatch`);
         await runtime.flush();

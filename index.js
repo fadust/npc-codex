@@ -6946,14 +6946,24 @@ async function handleAssistantMessageReceived(messageId, { bypassSwipeGuard = fa
     if (eventChatKey === 'no-chat' || !Number.isInteger(messageId) || messageId < 0) return;
     const eventMessage = getContext().chat?.[messageId];
     if (!eventMessage || eventMessage.is_user || eventMessage.is_system || !String(eventMessage.mes || '').trim()) return;
-    const eventSourceKey = lineageCheckpointKey(chatLineage(getContext().chat || []), messageId);
+    let eventSourceKey = lineageCheckpointKey(chatLineage(getContext().chat || []), messageId);
+    const eventParentKey = lineageCheckpointKey(chatLineage(getContext().chat || []), messageId - 1);
     try { await ensureChatStateLoaded(eventChatKey); }
     catch (error) {
         console.error('[NPC State Delta] assistant event deferred because chat hydration failed.', error);
         globalThis.toastr?.error?.('NPC State Delta could not load this chat dossier. Existing sidecar data was preserved; retry after the server is available.');
         return;
     }
-    if (getChatKey() !== eventChatKey || eventSourceKey !== lineageCheckpointKey(chatLineage(getContext().chat || []), messageId)) return;
+    if (getChatKey() !== eventChatKey) return;
+    const settledChat = getContext().chat || [];
+    const settledSourceKey = lineageCheckpointKey(chatLineage(settledChat), messageId);
+    if (eventSourceKey !== settledSourceKey) {
+        // Host formatters can finish the same new message during hydration; never adopt a replaced branch.
+        if (settledChat[messageId] !== eventMessage || latestMessageId(true) !== messageId
+            || eventParentKey !== lineageCheckpointKey(chatLineage(settledChat), messageId - 1)
+            || isHostSwipeActive()) return;
+        eventSourceKey = settledSourceKey;
+    }
 
     // SillyTavern 1.18 emits MESSAGE_SWIPED before starting Generate('swipe'). Some
     // backends then emit MESSAGE_RECEIVED while swipeState is still SWIPING. Never run

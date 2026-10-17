@@ -1,4 +1,4 @@
-import { scanLabelsMatch } from './core-mechanics.js';
+import { distinctNamedPeople } from './cast.js';
 // Saga supplies evidence; canonical dossier admission and persistence remain in NPC Codex.
 import { CANON_SEED_FIELDS, parseCanonSeed } from './canon-seed.js';
 const norm = value => String(value || '').normalize('NFKC').toLowerCase().trim();
@@ -32,8 +32,9 @@ export async function resolveSagaAdmissions(parsed, existing, { bridge = sagaCan
     const rows = Array.isArray(parsed?.npcs) ? parsed.npcs : [];
     const lookups = new Map();
     const resolved = await Promise.all(rows.map(async row => {
-        const known = live.filter(npc => (row.id && npc.id === row.id)
-            || scanLabelsMatch(npc, row));
+        if (row.id && live.some(npc => npc.id === row.id && distinctNamedPeople(npc, row))) return null;
+        const known = live.filter(npc => !distinctNamedPeople(npc, row) && ((row.id && npc.id === row.id)
+            || norm(npc.name) === norm(row.name)));
         if (known.length === 1) return { ...row, id: known[0].id };
         if (known.length > 1 || !row.name) return null;
         try {
@@ -45,6 +46,7 @@ export async function resolveSagaAdmissions(parsed, existing, { bridge = sagaCan
             const name = result.candidates[0];
             const canonical = live.filter(npc => [npc.name, ...(npc.aliases || [])].some(label => norm(label) === norm(name)));
             if (canonical.length > 1) return null;
+            if (!canonical.length && row.present !== true && row.directInteraction !== true) return null;
             const evidence = sagaCanonEntries(result).find(entry => norm(entry.comment) === norm(name));
             if (!evidence) return null;
             const grounded = { ...row };
@@ -59,7 +61,7 @@ export async function resolveSagaAdmissions(parsed, existing, { bridge = sagaCan
         } catch { return null; }
     }));
     const admitted = resolved.filter(Boolean);
-    const allowed = row => live.some(npc => npc.id === row.id || norm(npc.name) === norm(row.name))
+    const allowed = row => live.some(npc => !distinctNamedPeople(npc, row) && (npc.id === row.id || norm(npc.name) === norm(row.name)))
         || admitted.some(npc => (row.id && npc.id === row.id) || norm(npc.name) === norm(row.name));
     return { ...parsed, npcs: admitted,
         ...(Array.isArray(parsed.profileUpdates) ? { profileUpdates: parsed.profileUpdates.filter(allowed) } : {}),

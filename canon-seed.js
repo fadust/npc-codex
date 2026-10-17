@@ -59,7 +59,7 @@ export function canonSeedTargets(castRows, npcs, limit = CANON_SEED_PER_SCAN) {
     for (const row of Array.isArray(castRows) ? castRows : []) {
         if (!row?.canonRef) continue;
         const existing = row.id ? live.find(npc => npc?.id === row.id) : live.find(npc => norm(npc?.name) === norm(row.name));
-        if (existing?.canonSeed && (!row.canonRef.world.startsWith('Saga:') || existing.canonSeed.world === row.canonRef.world)) continue;
+        if (existing?.canonSeed && (!row.canonRef.world.startsWith('Saga:') || (existing.canonSeed.world === row.canonRef.world && existing.personality && existing.speech))) continue;
         if (out.some(item => norm(item.name) === norm(row.name))) continue;
         out.push({ id: existing?.id || row.id || '', name: row.name, canonRef: row.canonRef });
         if (out.length >= limit) break;
