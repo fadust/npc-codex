@@ -3,6 +3,9 @@
   "applicationVersion": "2.0.0",
   "entrypoint": "bootstrap.js",
   "modules": [
+    { "path": "actor-stack.js", "role": "actor-ownership", "required": true },
+    { "path": "actor-portrayal.js", "role": "actor-portrayal", "required": true },
+    { "path": "portrayal-references.js", "role": "portrayal-references", "required": true },
     { "path": "bootstrap.js", "role": "bootstrap", "required": true },
     { "path": "index.js", "role": "runtime-controller", "required": true },
     { "path": "destructive-settlement.js", "role": "destructive-host-settlement", "required": true },

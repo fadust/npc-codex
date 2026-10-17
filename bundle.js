@@ -402,6 +402,8 @@ const IMPORT_LOCKED_FIELD_KEYS = Object.freeze({
     speech: ['speech'],
     behaviorProfile: ['behaviorProfile'],
     background: ['background'],
+    aliases: ['aliases'],
+    customFields: ['customFields'],
     mannerisms: ['mannerisms'],
     keyRelationships: ['keyRelationships'],
 });

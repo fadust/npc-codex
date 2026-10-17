@@ -264,7 +264,7 @@ function tokens(text) {
     return new Set(normAll(text).split(/[^\p{L}\p{N}]+/u).filter(token => token.length > 2));
 }
 
-export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation = '', baibaiNpcs = [], limit = SHORTLIST_LIMIT } = {}) {
+export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation = '', baibaiNpcs = [], canonEntries = [], limit = SHORTLIST_LIMIT } = {}) {
     const text = String(transcript || '');
     const words = tokens(text);
     const scene = tokens(sceneLocation);
@@ -315,7 +315,7 @@ export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation =
                 ...((npc.location || extra.location) ? { location: cleanText(npc.location || extra.location, 120) } : {}),
                 ...(npc.lifeState && npc.lifeState !== 'unknown' ? { lifeState: npc.lifeState } : {}),
                 ...(npc.canonRef ? { canon: `canon:${npc.canonRef.world}#${npc.canonRef.uid}` } : {}),
-                ...(npc.canonSeed ? { seeded: true } : {}),
+                ...(npc.canonSeed && (!npc.canonSeed.world?.startsWith('Saga:') || canonEntries.some(e => e.world === npc.canonSeed.world)) ? { seeded: true } : {}),
                 ...(npc.sheet?.derivation?.emphasis?.dominant?.length || npc.sheet?.derivation?.emphasis?.weak?.length ? {} : { needsBuild: true }),
                 ...(renderFlorisReadout(npc) ? { floris: renderFlorisReadout(npc) } : {}),
                 ...(normalizeKnowledge(npc.knowledge).length ? { existingKnowledge: scannerKnowledgeContext(npc, 6) } : {}),

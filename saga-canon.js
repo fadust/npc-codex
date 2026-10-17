@@ -1,3 +1,4 @@
+import { scanLabelsMatch } from './core-mechanics.js';
 // Saga supplies evidence; canonical dossier admission and persistence remain in NPC Codex.
 import { CANON_SEED_FIELDS, parseCanonSeed } from './canon-seed.js';
 const norm = value => String(value || '').normalize('NFKC').toLowerCase().trim();
@@ -32,7 +33,7 @@ export async function resolveSagaAdmissions(parsed, existing, { bridge = sagaCan
     const lookups = new Map();
     const resolved = await Promise.all(rows.map(async row => {
         const known = live.filter(npc => (row.id && npc.id === row.id)
-            || [npc.name, ...(npc.aliases || [])].some(label => norm(label) === norm(row.name)));
+            || scanLabelsMatch(npc, row));
         if (known.length === 1) return { ...row, id: known[0].id };
         if (known.length > 1 || !row.name) return null;
         try {
@@ -63,4 +64,13 @@ export async function resolveSagaAdmissions(parsed, existing, { bridge = sagaCan
     return { ...parsed, npcs: admitted,
         ...(Array.isArray(parsed.profileUpdates) ? { profileUpdates: parsed.profileUpdates.filter(allowed) } : {}),
         ...(Array.isArray(parsed.profile_updates) ? { profile_updates: parsed.profile_updates.filter(allowed) } : {}) };
+}
+
+export function captureCanonRevision(bridge = sagaCanonBridge()) {
+    if (!bridge) return null;
+    return typeof bridge.canonRevision === 'function' ? { bridge, revision: bridge.canonRevision() } : { bridge, revision: undefined };
+}
+export function canonRevisionCurrent(token) {
+    if (!token) return !sagaCanonBridge();
+    return token.revision !== undefined && sagaCanonBridge() === token.bridge && token.bridge.canonRevision() === token.revision;
 }
