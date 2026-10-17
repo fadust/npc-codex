@@ -6124,11 +6124,9 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
     const budgetChars = budget * APPROX_CHARS_PER_TOKEN;
     const headerFor = () => [
         'NPC STATE DELTA DOSSIER. Only confirmed-present NPCs are included. Treat these as established story facts; never mention the dossier or numeric values.',
-        'IDENTITY FIRST / DOMINATES: personality sets identity; behavioral profile translates it into target-general response/decision levers; speech/mannerisms shape expression; goals, duties, morality, independence, other bonds, and CURRENT mood/status determine behavior first.',
-        'VOICE FIDELITY: established Speech constrains actual dialogue wording and delivery. Preserve its sentence shape, vocabulary, formality, directness, hedging, cadence, question/explanation style, and recurring verbal habits; do not flatten distinct voices into generic polished prose.',
-        'PLAYER RELATIONSHIP IS SECONDARY: it may bias attention, interpretation, openness, tolerance, or willingness toward the player, but need not surface every scene. High scores never mean obedience, universal prioritization, clinginess, jealousy, tsundere behavior, or cruelty toward others.',
-        'Temporary mood, stress, intimacy, or player-specific behavior is not global identity. Durable identity changes gradually unless narration explicitly establishes lasting development or a developmental time skip.',
-        relevant.some(lowPlayerStanding) && 'LOW SCORES: the player is not uniquely important; no obligation, fixation, or "only them" thinking.',
+        'IDENTITY FIRST / DOMINATES: personality, values, morality, goals, duties, independence, other bonds and current mood/status govern action; behavioral profile translates it into target-general response/decision levers. Temporary mood or player-specific behavior does not rewrite identity; durable change needs lasting on-page development.',
+        'VOICE FIDELITY: preserve established Speech, mannerisms, vocabulary, sentence shape, formality, cadence, hedging and question/explanation style; never replace a distinct voice with generic polished prose.',
+        'PLAYER RELATIONSHIP IS SECONDARY: it may bias player-directed attention, interpretation and openness, but need not surface each scene. High scores never mean obedience, devotion, clinginess, jealousy, tsundere behavior, reduced empathy or cruelty toward others. Low scores create no obligation or fixation.',
         relevant.some(calledIn) && 'Exception: NPCs marked "named by player" are not yet confirmed on-screen; use their dossier if they appear.',
         relevant.some(npc => Array.isArray(npc?.knowledge) && npc.knowledge.length) && 'KNOWLEDGE GATES ARE HARD LIMITS: each NPC speaks and acts only on what they could know. A fact under "does NOT know" stays unknown to that NPC even if narration, the player, or another NPC\'s dossier contains it, until they learn it on-page. Secrets are revealed only with an on-page reason.',
     ].filter(Boolean).join('\n');
@@ -6170,10 +6168,9 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
         return truncateInjectionText(lines.join('\n'), budgetChars);
     }
 
-    // Relationship rubric is useful, but subordinate to the actual NPC. Stock wording is compiled
-    // to a tiny semantic rubric; custom user criteria are retained only as space permits.
+    // The header covers stock relationship rules; retain custom criteria as space permits.
     const rubricAllowance = Math.min(600, Math.max(100, Math.floor(budgetChars * 0.08)));
-    const rubricText = compactInjectionBehaviorRubric(behaviorCriteria, rubricAllowance);
+    const rubricText = String(behaviorCriteria || '').trim() === DEFAULT_BEHAVIOR_CRITERIA ? '' : compactInjectionBehaviorRubric(behaviorCriteria, rubricAllowance);
     if (rubricText) {
         const fullRubric = `RELATIONSHIP-TO-BEHAVIOR RUBRIC: ${rubricText}`;
         const room = budgetChars - currentLength - 1;

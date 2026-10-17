@@ -67,3 +67,22 @@ test('Ari: mentioned actors remain off-screen and confirmed deaths remain refere
     const dead = { ...npc, lifeState: 'deceased', lifeStateCertainty: 'explicit', archived: true, archiveReason: 'deceased', lifeStateReason: 'Died in the flood.' };
     assert.match(buildInjection([dead], 'We remember Ari Vale.', 1), /DECEASED, REFERENCED ONLY/);
 });
+
+test('portrayal removes redundant speech only, retains distinct guidance and respects negation', () => {
+    const npc = { ...ari(), speech: 'Speaks softly with deliberate pauses.' };
+    const approve = text => ({ ...npc, portrayal: acceptPortrayal(npc, { reference: PORTRAYAL_REFERENCES.entries[0].uid, text }) });
+    assert.equal(renderPortrayal(approve('Speak softly.')), '');
+    assert.match(renderPortrayal(approve('Use short sentences when explaining the remedy.')), /PORTRAYAL ONLY/);
+    assert.match(renderPortrayal(approve('Pause before answering.')), /PORTRAYAL ONLY/, 'deliberate pauses do not establish timing');
+    const negative = { ...npc, speech: "Don't speak softly; never pause before answering." };
+    negative.portrayal = acceptPortrayal(negative, { reference: PORTRAYAL_REFERENCES.entries[0].uid, text: 'Speak softly; pause before answering.' });
+    assert.match(renderPortrayal(negative), /PORTRAYAL ONLY/, 'a contradiction is not treated as redundant agreement');
+});
+
+test('compact default policy preserves custom relationship criteria and knowledge gates', () => {
+    const npc = { ...ari(), knowledge: [{ fact: 'Vault location', kind: 'secret', state: 'unknown' }] };
+    const standard = buildInjection([npc], 'Ari Vale speaks.', 1);
+    assert.doesNotMatch(standard, /RELATIONSHIP-TO-BEHAVIOR RUBRIC:/);
+    assert.match(standard, /KNOWLEDGE GATES ARE HARD LIMITS/);
+    assert.match(buildInjection([npc], 'Ari Vale speaks.', 1, 3, 'Custom: preserve professional distance.'), /Custom: preserve professional distance/);
+});
