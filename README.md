@@ -230,3 +230,7 @@ git diff --check
 ## License
 
 GPL-3.0. See [LICENSE](LICENSE). The seed and history records in `docs/` are preserved as provenance.
+
+### Main card actors and narrator-only cards
+
+The main character card is eligible for a dossier under the same evidence and admission safeguards as other actors. The player remains excluded. For a narrator-only card, put `[NPC Codex: narrator]` on its own line in the card **description**. The directive is case-insensitive; mentions of narration in ordinary prose do not activate it. Scenario, chat text, and lorebook text cannot designate a narrator. Existing dossiers are retained when the directive changes, but excluded narrator dossiers are not injected or exposed as owned actors. Removing the directive makes the character eligible again.

@@ -6354,6 +6354,7 @@ export function buildBackfillPrompt({
     existingNpc = null,
     userName = 'User',
     charName = 'Character',
+    excludeCardCharacter = false,
     memoryCriteria = DEFAULT_MEMORY_CRITERIA,
 }) {
     const target = cleanText(targetName, 120);
@@ -6386,7 +6387,7 @@ export function buildBackfillPrompt({
 
 Requested NPC: ${target || '(missing target)'}
 Player/main character to exclude: ${userName}
-Main card speaker to exclude: ${charName}
+Main card speaker: ${charName} (${excludeCardCharacter ? 'narrator only; exclude' : 'actor; eligible for a dossier'})
 Existing partial dossier (identity hint only): ${JSON.stringify(existing)}
 
 Rules:
@@ -6399,7 +6400,7 @@ Rules:
 7. NPC Inner Chatter may support durable personality, goals, attitude, or relationship-summary evidence, but do not store the moment-to-moment internal monologue itself.
 8. PRESENT is current-scene state, not historical presence. Set present=true only if the requested NPC physically appears or actively participates in the MOST RECENT ASSISTANT STORY MESSAGE contained in this history. An older appearance does not count. A World State mention alone does not establish presence. Set worldActive=true only for explicit current off-screen activity in the latest World State; present and worldActive are mutually exclusive.
 9. This is historical backfill. relationshipImpact MUST be "none" and every relationshipDelta value MUST be 0. Do not numerically replay old relationship events.
-10. Do not create a dossier for ${userName} or ${charName}.
+10. Do not create a dossier for ${userName}${excludeCardCharacter ? ` or narrator ${charName}` : ''}.
 11. HOME BASE / USUAL LOCATION is durable home, workplace, headquarters, or regular haunt, not the current scene location. Establish it only from grounded ongoing-life evidence; changing an established homeBase requires homeBaseState:"update"+homeBaseReason. Keep the JSON compact enough to finish reliably: homeBase<=300; appearance<=500; personality<=280; speech<=240; background<=320; relationshipSummary<=280; mannerism<=140; behaviorProfile max6/180; keyRelationship/memory<=180. Merge overlaps rather than append. Unknown facts may be empty.
 12. Output JSON only. No markdown, no code fence, no commentary. Finish and close every quoted string, array, and object before stopping.
 13. ${KNOWLEDGE_SCANNER_RULE}
@@ -6572,6 +6573,7 @@ export function buildScannerPrompt({
     candidates = [],
     userName = 'User',
     charName = 'Character',
+    excludeCardCharacter = false,
     maxNpcs = 40,
     relationshipBaseline = DEFAULT_RELATIONSHIP,
     relationshipCaps = DEFAULT_RELATIONSHIP_CAPS,
@@ -6701,7 +6703,7 @@ export function buildScannerPrompt({
     return `Private NPC dossier scanner.
 Admission: ${admissionPolicy}${fullScanRule}
 Rules:
-1. Exclude player (${userName}), main speaker (${charName}), extras.
+1. Exclude player (${userName})${excludeCardCharacter ? `, narrator (${charName})` : ''}, extras. ${excludeCardCharacter ? '' : `Main card actor (${charName}) is eligible; use the same evidence gates.`}
 2. EXISTING: match id/name/alias/role. Return compact JSON deltas: changed fields only; omitted persist. Identity promotion: role/interim dossier + grounded proper name => MUST reuse id; old label in aliases; identityKind:"proper_name"; never duplicate/downgrade.
 3. NEW/CANDIDATE: include name,identityKind,dossierSignal,dossierReason,sameIndividual,directInteraction,present,worldActive. Dossier-worthy NEW: populate every grounded field now; directInteraction affects admission/relationship only, NEVER enrichment. Incidental role candidates may stay lightweight.
 4. Candidates are not dossiers. sameIndividual=true only when proven. Use narration, World State, durable Inner Chatter; proper names there MUST be returned even when prose uses role.

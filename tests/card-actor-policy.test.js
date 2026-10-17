@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { cardActorPolicy, castSignals, castDecisionsToScan, buildCastPassPrompt } from '../cast.js';
+import { buildScannerPrompt, buildBackfillPrompt } from '../core.js';
+const { card } = JSON.parse(fs.readFileSync(new URL('./fixtures/layer1-ari.json', import.meta.url)));
+const policy = description => cardActorPolicy({ name1: 'Kai', name2: card.name, characterId: 0, characters: [{ ...card, description }] });
+test('Ari card: only a standalone description directive designates narrator', () => {
+    for (const description of [card.description, 'Ari narrates his life.', 'Do not use [NPC Codex: narrator].']) assert.equal(policy(description).excludeCardCharacter, false);
+    assert.equal(policy(card.description + '\n[NPC Codex: narrator]').excludeCardCharacter, true);
+    assert.equal(policy('  [npc codex: narrator]  ').excludeCardCharacter, true);
+    assert.equal(cardActorPolicy({ characterId: 0, characters: [{ description: '', scenario: '[NPC Codex: narrator]' }] }).excludeCardCharacter, false);
+    assert.equal(cardActorPolicy({ characterId: 0, characters: [{ description: '[NPC Codex: narrator]', data: { description: card.description } }] }).excludeCardCharacter, false);
+    assert.equal(cardActorPolicy({}).excludeCardCharacter, false);
+});
+test('Ari main actor is discovered and cast; narrator and player stay excluded', () => {
+    const transcript = 'At the door, Ari Vale speaks to Kai.';
+    const parsed = { people: ['Ari Vale', 'Kai'].map(name => ({ ref: name, name, is: 'new', present: true })) };
+    const actor = policy(card.description), narrator = policy('[NPC Codex: narrator]');
+    assert.ok(castSignals(transcript, actor).unknownNames.includes('Ari Vale'));
+    assert.ok(!castSignals(transcript, narrator).unknownNames.includes('Ari Vale'));
+    assert.deepEqual(castDecisionsToScan(parsed, { transcript, ...actor }).npcs.map(n => n.name), ['Ari Vale']);
+    assert.equal(castDecisionsToScan(parsed, { transcript, ...narrator }).npcs.length, 0);
+    assert.doesNotMatch(buildCastPassPrompt({ transcript, ...actor }), /not narrator Ari Vale/);
+    assert.match(buildCastPassPrompt({ transcript, ...narrator }), /not narrator Ari Vale/);
+    assert.match(buildScannerPrompt({ transcript, ...actor }), /Main card actor \(Ari Vale\) is eligible/);
+    assert.match(buildScannerPrompt({ transcript, ...narrator }), /Exclude player \(Kai\), narrator \(Ari Vale\)/);
+    assert.match(buildBackfillPrompt({ transcript, ...actor }), /actor; eligible for a dossier/);
+    assert.match(buildBackfillPrompt({ transcript, ...narrator }), /narrator only; exclude/);
+});

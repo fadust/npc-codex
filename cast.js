@@ -218,9 +218,20 @@ function midSentence(text, index) {
     return !/(^|[.!?…"“*\]\n]\s*)$/.test(before) && index > 0;
 }
 
-export function castSignals(transcript, { knownLabels = [], userName = '', charName = '' } = {}) {
+// Only an explicit description directive excludes a narrator; narrative prose is not configuration.
+export function cardActorPolicy(ctx = {}) {
+    const card = ctx.characterId != null ? ctx.characters?.[ctx.characterId] : null;
+    const description = card?.data?.description ?? card?.description ?? '';
+    return {
+        userName: ctx.name1 || 'User',
+        charName: ctx.name2 || card?.name || 'Character',
+        excludeCardCharacter: /^\s*\[NPC Codex: narrator\]\s*$/im.test(description),
+    };
+}
+
+export function castSignals(transcript, { knownLabels = [], userName = '', charName = '', excludeCardCharacter = false } = {}) {
     const text = String(transcript || '');
-    const known = new Set([...knownLabels, userName, charName].map(norm).filter(Boolean));
+    const known = new Set([...knownLabels, userName, ...(excludeCardCharacter ? [charName] : [])].map(norm).filter(Boolean));
     const knownTokens = new Set([...known].flatMap(label => label.split(/\s+/)));
     const unknownNames = [];
     for (const match of text.matchAll(NAME_RUN)) {
@@ -427,14 +438,14 @@ export function rankCanonEntries(entries, transcript, { npcs = [], limit = CANON
 
 /* ---------- The combined cast + knowledge request. ---------- */
 
-export function buildCastPassPrompt({ transcript, shortlist = [], canon = [], signals = {}, userName = 'User', charName = 'Character', schema = null }) {
+export function buildCastPassPrompt({ transcript, shortlist = [], canon = [], signals = {}, userName = 'User', charName = 'Character', excludeCardCharacter = false, schema = null }) {
     const hints = [
         signals.unknownNames?.length && `unlisted names: ${signals.unknownNames.join(', ')}`,
         signals.tiePhrases?.length && `tie references: ${signals.tiePhrases.join(' | ')}`,
         signals.titlePhrases?.length && `title references: ${signals.titlePhrases.join(' | ')}`,
     ].filter(Boolean).join('\n');
     return `Private NPC cast and knowledge evaluator.
-TASK A - CAST. List each individual person the CURRENT EXCHANGE refers to by name, title or tie (people only: not places or objects, not crowds, not ${userName}, not ${charName}). Resolve each to exactly one of, checked IN THIS ORDER:
+TASK A - CAST. List each individual person the CURRENT EXCHANGE refers to by name, title or tie (people only: not places or objects, not crowds, not ${userName}${excludeCardCharacter ? `, not narrator ${charName}` : ''}). Resolve each to exactly one of, checked IN THIS ORDER:
  1. a CANON entry that defines them: "is":"canon:<id>", "name" = the canonical name. source "card" is this story's own canon (it may be an AU) and outranks source "lorebook" when they disagree;
  2. an existing DOSSIER: "is":"<dossier id>";
  3. "is":"new".
@@ -483,10 +494,10 @@ function appearsIn(text, fragment) {
     return Boolean(needle) && haystack.includes(needle);
 }
 
-export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon = [], userName = '', charName = '', schema = null } = {}) {
+export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon = [], userName = '', charName = '', excludeCardCharacter = false, schema = null } = {}) {
     const report = { accepted: [], rejected: [] };
     const live = (Array.isArray(npcs) ? npcs : []).filter(npc => npc && !npc.archived);
-    const excluded = new Set([userName, charName].map(norm).filter(Boolean));
+    const excluded = new Set([userName, ...(excludeCardCharacter ? [charName] : [])].map(norm).filter(Boolean));
     const rows = [];
     const edges = [];
     const nameOf = new Map();

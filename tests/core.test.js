@@ -1362,7 +1362,7 @@ test('scanner prompt uses compact identity index, changed-only output, delta rel
         relationshipCriteria: 'CUSTOM TRUST RULE', impactCriteria: 'CUSTOM IMPACT RULE', memoryCriteria: 'CUSTOM MEMORY RULE',
     });
     assert.match(prompt, /Exclude player \(Kazuma\)/);
-    assert.match(prompt, /main speaker \(Megumin\)/);
+    assert.match(prompt, /Main card actor \(Megumin\) is eligible/);
     assert.match(prompt, /Return ONLY observed\/new\/meaningfully changed NPCs/i);
     assert.match(prompt, /Identity index \(matching only\)/i);
     assert.match(prompt, /include name,identityKind,dossierSignal/i);

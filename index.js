@@ -109,6 +109,7 @@ import { canonSeedTargets, canonTextFor, parseCanonSeed, applyCanonSeed } from '
 import { sagaCanonBridge, readSagaCanon, sagaCanonEntries, resolveSagaAdmissions, captureCanonRevision, canonRevisionCurrent } from './saga-canon.js';
 import {
     castSignals,
+    cardActorPolicy,
     buildCastShortlist,
     rankCanonEntries,
     cardCanonEntries,
@@ -2372,8 +2373,13 @@ function storyDaysForTranscript(transcript) {
 }
 
 function currentExclusions() {
-    const ctx = getContext();
-    return [ctx.name1, ctx.name2].filter(Boolean);
+    const { userName, charName, excludeCardCharacter } = cardActorPolicy(getContext());
+    return [userName, ...(excludeCardCharacter ? [charName] : [])].filter(Boolean);
+}
+
+function eligibleActors(npcs) {
+    const excluded = new Set(currentExclusions().map(normalizeName));
+    return (npcs || []).filter(npc => !excluded.has(normalizeName(npc.name)));
 }
 
 // The text last handed to the host for roleplay generation, with the reason when it is empty, so
@@ -2469,9 +2475,9 @@ function updateInjection() {
     const namedNpcIds = namedByPlayerNpcIds(state);
     const sceneText = recentTranscript(4);
     const recallScores = recallCache.chatKey === injectionKey ? recallCache.scores : null;
-    const prompt = buildInjection(state.npcs, sceneText, state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds, customFieldNames: settings.customFieldNames, recallScores, storyDay: storyDayAt(latestMessageId(true)) });
+    const prompt = buildInjection(eligibleActors(state.npcs), sceneText, state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds, customFieldNames: settings.customFieldNames, recallScores, storyDay: storyDayAt(latestMessageId(true)) });
     scheduleRecallRefresh(state, sceneText, injectionKey);
-    const present = (state.npcs || []).filter(npc => npc?.present && !npc?.archived);
+    const present = eligibleActors(state.npcs).filter(npc => npc?.present && !npc?.archived);
     const depth = Math.max(0, Math.min(20, Number(settings.injectDepth) || 1));
     lastInjection = {
         text: prompt,
@@ -2759,8 +2765,7 @@ async function scanNpcDossier(npcId) {
         dossierText: sourceText,
         targetName: existing.name,
         existingNpc: existing,
-        userName: ctx.name1 || 'User',
-        charName: ctx.name2 || 'Character',
+        ...cardActorPolicy(ctx),
     });
     const scanStateVersion = Number(stateVersions.get(chatKey) || 0);
     const operation = beginScanOperation(chatKey, `dossier import for ${existing.name}`, { npcId: id, indicator: 'dossier' });
@@ -2949,8 +2954,7 @@ async function refreshNpcFromChat(npcId) {
         customFieldNames: settings.customFieldNames,
         transcript,
         targetNpc: existing,
-        userName: ctx.name1 || 'User',
-        charName: ctx.name2 || 'Character',
+        ...cardActorPolicy(ctx),
         memoryCriteria: settings.memoryCriteria,
         turn: Number.isInteger(state.turn) ? state.turn : null,
         storyDay: storyDayAt(latestMessageId(true)),
@@ -3245,8 +3249,7 @@ async function backfillNpcFromHistory(request, messageId = null, { automatic = f
         transcript,
         targetName: request.label,
         existingNpc: existing,
-        userName: ctx.name1 || 'User',
-        charName: ctx.name2 || 'Character',
+        ...cardActorPolicy(ctx),
         memoryCriteria: settings.memoryCriteria,
     });
 
@@ -3640,7 +3643,7 @@ async function runCastPass(ctx, existingNpcs, transcript, options = {}) {
     const empty = { cast: null, canonRevision, used: false, responseChars: 0, shortlist: 0, canon: 0 };
     const npcs = Array.isArray(existingNpcs) ? existingNpcs : [];
     const knownLabels = npcs.flatMap(npc => [npc?.name, ...(npc?.aliases || [])]).filter(Boolean);
-    const signals = castSignals(transcript, { knownLabels, userName: ctx.name1 || '', charName: ctx.name2 || '' });
+    const signals = castSignals(transcript, { knownLabels, ...cardActorPolicy(ctx) });
     if (!signals.any) return empty;
     const [baibai, source] = await Promise.all([readBaiBaiCast(), saga ? readSagaCanon(transcript, { bridge: saga }) : readCanonEntries()]);
     const entries = saga ? sagaCanonEntries(source) : source;
@@ -3651,19 +3654,19 @@ async function runCastPass(ctx, existingNpcs, transcript, options = {}) {
     const cardEntries = saga ? [] : cardCanonEntries(cardText);
     const canon = saga ? entries.map(e => ({ id: `canon:${e.world}#${e.uid}`, world: e.world, uid: e.uid,
         source: 'applicable Saga canon', name: e.comment, keys: e.key, snippet: e.content }))
-        : rankCanonEntries([...cardEntries, ...entries], transcript, { npcs, exclude: [ctx.name1, ctx.name2] });
+        : rankCanonEntries([...cardEntries, ...entries], transcript, { npcs, exclude: currentExclusions() });
     const schema = findWorldSchema({ cardText: saga ? '' : cardText, entries });
     if (JSON.stringify(schema) !== JSON.stringify(lastWorldSchema)) { lastWorldSchema = schema; renderDossier(); }
     if (!shortlist.length && !canon.length && !signals.unknownNames.length && !signals.tiePhrases.length && !signals.titlePhrases.length) return empty;
     try {
         const { parsed, raw } = await generateParsedNpcJson(ctx, {
             systemPrompt: CAST_PASS_SYSTEM_PROMPT,
-            prompt: buildCastPassPrompt({ transcript, shortlist, canon, signals, userName: ctx.name1 || 'User', charName: ctx.name2 || 'Character', schema }),
+            prompt: buildCastPassPrompt({ transcript, shortlist, canon, signals, ...cardActorPolicy(ctx), schema }),
             responseLength: CAST_RESPONSE_LENGTH,
             label: 'cast pass',
             requestScope: options.requestScope,
         });
-        const cast = castDecisionsToScan(parsed, { transcript, npcs, canon, userName: ctx.name1 || '', charName: ctx.name2 || '', schema });
+        const cast = castDecisionsToScan(parsed, { transcript, npcs, canon, ...cardActorPolicy(ctx), schema });
         return { cast, canonRevision, continuity: { status: baibai.status, revision: baibai.revision }, used: true, responseChars: String(raw ?? '').length, shortlist: shortlist.length, canon: canon.length, canonSources: { entries, cardEntries } };
     } catch (error) {
         if (isScannerRoutingError(error)) throw error;
@@ -3955,8 +3958,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
         transcript,
         existingNpcs: state.npcs,
         candidates: state.candidates,
-        userName: ctx.name1 || 'User',
-        charName: ctx.name2 || 'Character',
+        ...cardActorPolicy(ctx),
         maxNpcs: settings.maxNpcs,
         relationshipBaseline: settings.relationshipBaseline,
         relationshipCaps: settings.relationshipCaps,
@@ -6854,7 +6856,7 @@ function bindUi() {
             turn: state.turn,
             relationshipBaseline: settings.relationshipBaseline,
         });
-        if (result.report.status === 'excluded') return globalThis.toastr?.warning?.('NPC State Delta: player/main character cannot be added as an NPC.');
+        if (result.report.status === 'excluded') return globalThis.toastr?.warning?.('NPC State Delta: player or explicitly designated narrator cannot be added as an NPC.');
         if (result.report.status === 'full') return globalThis.toastr?.warning?.(`NPC State Delta: active roster cap is ${settings.maxNpcs}. Archived dossiers do not count.`);
         if (['added', 'exists', 'restored'].includes(result.report.status)) clearUserDismissedSuppression(result.state, name);
         const targetMessageId = latestMessageId(false);
@@ -7458,8 +7460,8 @@ window.NPCStateDelta = Object.freeze({
     clearDiagnostics: () => diagnosticStore.clear(getChatKey()),
     getState: () => structuredClone(getChatState()),
     actorOwnership: () => ({ ...ACTOR_OWNERS, enabled: getSettings().enabled && getSettings().inject, revision: Number(stateVersions.get(getChatKey()) || 0) }),
-    ownsActor: name => getSettings().enabled && getSettings().inject && chatHydrationStatus(getChatKey()) === 'ready' && !!resolveActor(getChatState().npcs, name),
-    actorProfiles: () => chatHydrationStatus(getChatKey()) === 'ready' ? actorProfiles(getChatState().npcs, Number(stateVersions.get(getChatKey()) || 0)) : [],
+    ownsActor: name => getSettings().enabled && getSettings().inject && chatHydrationStatus(getChatKey()) === 'ready' && !!resolveActor(eligibleActors(getChatState().npcs), name),
+    actorProfiles: () => chatHydrationStatus(getChatKey()) === 'ready' ? actorProfiles(eligibleActors(getChatState().npcs), Number(stateVersions.get(getChatKey()) || 0)) : [],
     getNpc: npcId => {
         const npc = getChatState().npcs.find(item => item.id === String(npcId || ''));
         return npc ? structuredClone(npc) : null;
