@@ -102,6 +102,7 @@ import { parseFlorisReadout, applyFlorisReadout, stripFlorisLog } from './floris
 import { setBirthdayFallback } from './birthday.js';
 import { REFLECTION_SYSTEM_PROMPT, reflectionTarget, buildReflectionPrompt, applyReflection, beliefsToEditorText, beliefsFromEditorText, normalizePreferences } from './reflection.js';
 import { canonSeedTargets, canonTextFor, parseCanonSeed, applyCanonSeed } from './canon-seed.js';
+import { sagaCanonBridge, readSagaCanon, sagaCanonEntries, resolveSagaAdmissions } from './saga-canon.js';
 import {
     castSignals,
     buildCastShortlist,
@@ -3611,7 +3612,7 @@ function canonSeedsFromCast(castPass, existingNpcs) {
         const row = rows.find(item => item.canonSeedRaw && (target.id ? item.id === target.id : item.name === target.name));
         const canonText = canonTextFor(target.canonRef, castPass.canonSources || {});
         if (!row || !canonText) continue;
-        const { fields, rejected } = parseCanonSeed(row.canonSeedRaw, canonText);
+        const { fields, rejected } = parseCanonSeed(row.canonSeedRaw, canonText, { strict: target.canonRef.world.startsWith('Saga:') });
         if (Object.keys(fields).length) seeds.push({ ...target, fields, rejected });
     }
     return seeds;
@@ -3623,14 +3624,18 @@ async function runCastPass(ctx, existingNpcs, transcript, options = {}) {
     const knownLabels = npcs.flatMap(npc => [npc?.name, ...(npc?.aliases || [])]).filter(Boolean);
     const signals = castSignals(transcript, { knownLabels, userName: ctx.name1 || '', charName: ctx.name2 || '' });
     if (!signals.any) return empty;
-    const [baibai, entries] = await Promise.all([readBaiBaiCast(), readCanonEntries()]);
+    const saga = sagaCanonBridge();
+    const [baibai, source] = await Promise.all([readBaiBaiCast(), saga ? readSagaCanon(transcript, { bridge: saga }) : readCanonEntries()]);
+    const entries = saga ? sagaCanonEntries(source) : source;
     const shortlist = buildCastShortlist({ npcs, transcript, sceneLocation: baibai.location, baibaiNpcs: baibai.npcs });
     // Card canon (this story's own definitions, possibly an AU) ranks ahead of lorebook canon.
     const card = Number.isInteger(Number(ctx.characterId)) ? ctx.characters?.[ctx.characterId] : null;
     const cardText = [card?.description, card?.scenario].filter(Boolean).join('\n');
-    const cardEntries = cardCanonEntries(cardText);
-    const canon = rankCanonEntries([...cardEntries, ...entries], transcript, { npcs, exclude: [ctx.name1, ctx.name2] });
-    const schema = findWorldSchema({ cardText, entries });
+    const cardEntries = saga ? [] : cardCanonEntries(cardText);
+    const canon = saga ? entries.map(e => ({ id: `canon:${e.world}#${e.uid}`, world: e.world, uid: e.uid,
+        source: 'applicable Saga canon', name: e.comment, keys: e.key, snippet: e.content }))
+        : rankCanonEntries([...cardEntries, ...entries], transcript, { npcs, exclude: [ctx.name1, ctx.name2] });
+    const schema = findWorldSchema({ cardText: saga ? '' : cardText, entries });
     if (JSON.stringify(schema) !== JSON.stringify(lastWorldSchema)) { lastWorldSchema = schema; renderDossier(); }
     if (!shortlist.length && !canon.length && !signals.unknownNames.length && !signals.tiePhrases.length && !signals.titlePhrases.length) return empty;
     try {
@@ -4010,6 +4015,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
         );
         const castPass = await runCastPass(ctx, state.npcs, currentTranscript || transcript, { requestScope: operation.requestScope });
         const canonSeeds = canonSeedsFromCast(castPass, state.npcs);
+        const canonResolved = await resolveSagaAdmissions(castPass.cast ? mergeCastIntoScan(fullWindowRelationship.mergeSafe, castPass.cast) : fullWindowRelationship.mergeSafe, state.npcs);
         const scanFinishedAt = performance.now?.() ?? Date.now();
         lastScanMetrics = {
             label: manual ? 'manual' : (fullWindowScan ? 'automatic-full' : 'automatic'),
@@ -4046,7 +4052,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
         }
         const targetMessageId = Number.isInteger(messageId) ? messageId : latestMessageId(true);
         const compactWorldStateTurn = hasCompactMeguminWorldState(ctx.chat?.[targetMessageId]?.mes || '');
-        const parsedForMerge = suppressPrimaryRelationshipForFocusedDecisions(fullWindowRelationship.mergeSafe, relationshipPass.decisions);
+        const parsedForMerge = suppressPrimaryRelationshipForFocusedDecisions(canonResolved, relationshipPass.decisions);
         // If the registry is already full, free truly stale slots before admission so a new
         // current NPC is not rejected just because a long-gone dossier still occupies the cap.
         const preCleanup = applyStaleLifecycleAfterScan(state, parsedForMerge, currentTranscript || transcript, settings, { onlyWhenAtCap: true });
@@ -4055,7 +4061,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             npc.present = false;
             if (!compactWorldStateTurn) npc.worldActive = false;
         }
-        const merged = mergeScanResult(mergeBaseState, castPass.cast ? mergeCastIntoScan(parsedForMerge, castPass.cast) : parsedForMerge, {
+        const merged = mergeScanResult(mergeBaseState, parsedForMerge, {
             maxNpcs: settings.maxNpcs,
             excludeNames: [...currentExclusions(), ...(state.dismissed || [])],
             turn: state.turn,
@@ -4131,7 +4137,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             const seededReport = [];
             merged.state.npcs = merged.state.npcs.map(npc => {
                 const seed = canonSeeds.find(item => (item.id && item.id === npc?.id) || (!item.id && String(npc?.name || '').toLowerCase() === String(item.name || '').toLowerCase()));
-                if (!npc || !seed || npc.canonSeed) return npc;
+                if (!npc || !seed || (npc.canonSeed && !seed.canonRef?.world?.startsWith('Saga:'))) return npc;
                 const applied = applyCanonSeed(npc, seed.fields, { canonRef: npc.canonRef || seed.canonRef, turn: state.turn, isNew: !priorIds.has(npc.id) });
                 if (applied.seeded.length || applied.dropped.length) seededReport.push({ npcId: npc.id, fields: applied.seeded, ...(applied.dropped.length ? { dropped: applied.dropped } : {}) });
                 return applied.npc;

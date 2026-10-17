@@ -25,6 +25,7 @@
     { "path": "cast.js", "role": "cast-resolution-roles-and-canon", "required": true },
     { "path": "sheet.js", "role": "stat-sheet-items-and-conditions", "required": true },
     { "path": "canon-seed.js", "role": "canon-field-seeding-and-locks", "required": true },
+    { "path": "saga-canon.js", "role": "read-only-saga-canon-consumer", "required": true },
     { "path": "diagnostics-core.js", "role": "bounded-operation-diagnostics", "required": true },
     { "path": "appearance.js", "role": "appearance-forms", "required": true },
     { "path": "terminal-lifecycle.js", "role": "terminal-lifecycle", "required": true },
