@@ -121,3 +121,20 @@ test('compact default policy preserves custom relationship criteria and knowledg
     assert.match(standard, /KNOWLEDGE GATES ARE HARD LIMITS/);
     assert.match(buildInjection([npc], 'Ari Vale speaks.', 1, 3, 'Custom: preserve professional distance.'), /Custom: preserve professional distance/);
 });
+
+test('Ari presence shares the BunnyMo actor prompt without duplicate cues or forced reactions', () => {
+    const npc = { ...ari(), species: 'Human', age: '20', appearance: 'Dark hair; brown travelling coat; Impression: quietly imposing; Bearing: stands upright', mannerisms: ['stands upright'], knowledge: [{ fact: 'Hidden vault', kind: 'secret' }] };
+    npc.portrayal = acceptPortrayal(npc, { reference: PORTRAYAL_REFERENCES.entries[0].uid, text: 'Quietly imposing; pause before answering.' });
+    const before = structuredClone(npc);
+    const prompt = buildInjection([npc], 'Ari Vale enters.', 1, 3, undefined, 4000);
+    for (const cue of ['dark hair', 'brown travelling coat', 'quietly imposing', 'stands upright']) assert.equal(prompt.toLowerCase().split(cue).length - 1, 1, cue);
+    assert.match(prompt, /never dictate another character's feelings or reactions/);
+    assert.match(prompt, /pause before answering/);
+    assert.deepEqual(npc, before, 'portrayal never writes actor or continuity state');
+    const profile = actorProfiles([npc], 3)[0];
+    assert.equal(profile.appearance, 'Dark hair; brown travelling coat');
+    assert.deepEqual(profile.presentation.impression, ['quietly imposing']);
+    assert.doesNotMatch(JSON.stringify(profile), /Hidden vault/);
+    for (const actor of [{ ...npc, present: false }, { ...npc, lifeState: 'deceased', lifeStateCertainty: 'explicit', archived: true }]) assert.doesNotMatch(buildInjection([actor], 'Remember Ari Vale.', 2), /PRESENCE \(|PORTRAYAL ONLY/);
+    assert.ok(buildInjection([npc], 'Ari Vale enters.', 1, 3, undefined, 512).length <= 512 * 4);
+});

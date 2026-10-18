@@ -15,11 +15,18 @@ Version bumped on 18 October 2026 to package the integration and fixes below. 2.
 
 ## Our changes
 
+### Unreleased — appearance, impression and bearing in actor portrayal
+
+- The existing NPC Codex/BunnyMo actor prompt now separates accepted current-form physical appearance from impression and bearing. The dossier display and read-only actor profiles share the same projection; no second actor injector or model request is added.
+- Repeated bearing stays in established mannerisms. BunnyMo guide clauses already supplied by accepted speech, appearance or presence are omitted; distinct guidance remains. Presence describes this actor's expression and carriage, never mandates other characters' feelings or reactions, and establishes no personality, intent or facts.
+- Existing budget, knowledge, manual-lock, approval freshness, absence and terminal-death protections remain. Saga supplies canon; BaiBai keeps completed continuity. No persisted dossier schema or source migration.
+- Verification: 10-turn deterministic Ari full-stack payload, 203 assertions, with production Saga retrieval, Codex admission/merge/injection, BunnyMo guide rendering, BaiBai replay/injection and World Engine context. Synthetic provider/embedding responses and memory store; no live-model obedience claim.
+
 ### Unreleased — separate face and full-body images
 
 - Face portraits appear beside the NPC name and in the NPC list. A separate full-body render appears in the collapsed-list panel. Portrait tools select either composition with independent prompt drafts, preview, upload, replacement and removal. Each opens its own original resolution.
 - Existing portraits stay in the face slot; no image is duplicated or regenerated automatically. Both assets use the existing canonical portrait owner, appearance-form support, freshness guards, persistence, rollback retention and native binary bundle. Older extension versions do not display the new full-body asset.
-- **Presentations** is now overall impression and bearing: literal accepted impression/presence cues and carriage-related mannerisms. Physical traits, outfits and named forms remain under Appearance. No impression is inferred from personality, mood, demographics or clothing; absent cues stay unestablished. Existing appearance editor text can record `Impression:` and `Bearing:` clauses. This read-only projection adds no model request, stored authority or prompt content.
+- **Presentations** is now overall impression and bearing: literal accepted impression/presence cues and carriage-related mannerisms. Physical traits, outfits and named forms remain under Appearance. No impression is inferred from personality, mood, demographics or clothing; absent cues stay unestablished. Existing appearance editor text can record `Impression:` and `Bearing:` clauses. This read-only projection adds no model request or stored authority; its story handoff is described below.
 - Appearance starts collapsed with a visible disclosure arrow; expanding/collapsing uses the existing native details control and retains the chosen state during dossier refreshes.
 - Appearance now displays Gender, Age bracket, Skin color, Face, Facial hair, Hairstyle, Hair color, Accessories, Body, Proportions and Outfit from the resolved accepted description. Grouping is presentation-only; unmatched clauses remain under Other details, and missing categories say Not specified. Age brackets are display-only bands (kid 0–12, teen 13–17, young adult 18–29, adult 30–44, middle-aged 45–64, old 65–79, very old 80+), preferring apparent age; nonhuman chronological ages remain unclassified. The editor guides users to cover these details without creating a second appearance authority or extra model calls.
 - Tested with synthetic images and deterministic BaiBai responses; live image-provider likeness and framing quality remain unverified.

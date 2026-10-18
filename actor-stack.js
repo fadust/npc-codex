@@ -1,3 +1,5 @@
+import { resolveNpcAppearance } from './appearance.js';
+import { presentationDetails, physicalDescription } from './actor-portrayal.js';
 // Fixed ownership contract: this fork is the actor writer, not a second event recorder.
 export const ACTOR_OWNERS = Object.freeze({ canon: 'Saga', continuity: 'BaiBai', actor: 'NPC Codex', portrayal: 'NPC Codex / BunnyMo references' });
 const norm = value => String(value || '').normalize('NFKC').toLowerCase().trim();
@@ -11,6 +13,8 @@ export function resolveActor(npcs, value) {
 export function actorProfiles(npcs, revision) {
     return (npcs || []).map(n => ({ id: n.id, name: n.name, aliases: [...(n.aliases || [])], revision,
         present: !!n.present && !n.archived, archived: !!n.archived, lifeState: n.lifeState,
+        appearance: physicalDescription(resolveNpcAppearance(n)),
+        presentation: presentationDetails({ ...n, appearance: resolveNpcAppearance(n) }),
         role: n.role || '', personality: n.personality || '', speech: n.speech || '',
         provenance: n.canonRef ? { ...n.canonRef } : { source: 'accepted-dossier' } }));
 }

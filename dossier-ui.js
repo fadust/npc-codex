@@ -1,3 +1,5 @@
+import { presentationDetails, physicalDescription } from './actor-portrayal.js';
+export { presentationDetails } from './actor-portrayal.js';
 /* NPC Codex dossier surface: bounded presentation of canonical state. */
 import { appearanceFingerprint, currentPresentationText, normalizeAppearanceModel, resolveNpcAppearance } from './appearance.js';
 import { formatBirthDate } from './birthday.js';
@@ -344,34 +346,6 @@ function birthdayCard(npc) {
     const source = npc.birthdaySource === 'generated' ? 'Deterministic fallback'
         : npc.birthdaySource === 'established' ? 'Story established' : '';
     return `<div class="delta-current-card delta-continuity-birthday-card"><b>Birthday${changedMark(npc, 'birthDate')}</b><span>${escapeHtml(npc.birthday || 'Unknown')}</span>${source ? `<small class="delta-continuity-source">${escapeHtml(source)}</small>` : ''}</div>`;
-}
-
-// These are quoted accepted cues, not a generated judgment about personality or intent.
-function presentationCue(raw = '') {
-    const clause = String(raw).trim();
-    const labeled = clause.match(/^(overall impression|impression|presence|bearing|demeanou?r)\s*:\s*(.+)$/i);
-    const value = labeled ? labeled[2].trim() : clause;
-    // Mixed physical descriptions remain in Appearance rather than being repeated here.
-    if (/\b(hair|eyes?|skin|complexion|beard|moustache|mustache|outfit|coat|cloak|dress|shirt|boots?|robes?|armou?r|clothing|jewel\w*|earrings?|height|tall|muscular|slender)\b/i.test(value)) return null;
-    if (labeled) return { kind: /bearing|demean/i.test(labeled[1]) ? 'bearing' : 'impression', value };
-    if (/\b(comes across as|air of|impression of|presence feels|quietly imposing|effortlessly elegant|weathered yet dignified)\b/i.test(value)) return { kind: 'impression', value };
-    if (/\b(posture|gait|poise|bearing|stands? (?:upright|erect|relaxed)|carries (?:himself|herself|themselves)|moves? with (?:measured|quiet|relaxed|deliberate|easy))\b/i.test(value)) return { kind: 'bearing', value };
-    return null;
-}
-
-export function presentationDetails(npc = {}) {
-    const result = { impression: [], bearing: [] };
-    const clauses = String(npc.appearance || '').split(/;|\n/);
-    // Accepted mannerisms may describe visible carriage; personality and mood are not substitutes.
-    for (const raw of [...clauses, ...(Array.isArray(npc.mannerisms) ? npc.mannerisms : [])]) {
-        const cue = presentationCue(raw);
-        if (cue && cue.value && result[cue.kind].length < 3 && !result[cue.kind].includes(cue.value)) result[cue.kind].push(cue.value);
-    }
-    return result;
-}
-
-function physicalDescription(text = '') {
-    return String(text).split(/;|\n/).filter(clause => !presentationCue(clause)).join('; ').trim();
 }
 
 // Presentation-only grouping: retain every supplied clause; never infer missing anatomy.

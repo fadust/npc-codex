@@ -35,3 +35,11 @@ The compact actor header retains identity, voice, relationship and knowledge rul
 Saga labels evidence as source-era background, gives accepted actor development/lifecycle precedence, warns about unresolved names, and limits automatic story dependency expansion to relationship queries. Identity retrieval still expands dependencies. BaiBai shares memory rules between its history/state slots, preserves standalone state rules, and shortens time/ledger instructions while retaining full-date and no-double-accounting requirements. Original records and user-custom prompts are unchanged.
 
 The deterministic Ari replay captures each extension slot before the corresponding story turn: 101 assertions, ten turns, zero live provider calls. Offline o200k_base counting across those slots decreased from 21,672 to 8,221 tokens (13,451 / 62.1% saved). This excludes preset, card, visible chat, other extensions and message framing; it is not provider billing. Synthetic continuity leaves and hidden assistant messages limit realism. Live model interpretation, browser integration and live SQLite were not assessed by this replay. These changes await deployment review.
+
+## Appearance and presence handoff
+
+NPC Codex resolves accepted current-form appearance, separates literal impression and bearing cues, and supplies them through its existing actor prompt alongside approved BunnyMo guidance. The UI and read-only actor profiles use the same projection. No additional BunnyMo injector is enabled.
+
+Concrete physical details appear once. Bearing already in essential mannerisms is not repeated. Approved guide clauses duplicating accepted speech, appearance or presence are removed while distinct delivery guidance remains. Presence is an optional, budgeted cue for the actor's posture, movement and delivery; it cannot force audience reactions or establish personality or intent. Other actors respond according to their own accepted characterization, relationships and current context. Missing impressions remain unknown.
+
+Saga canon and BaiBai completed continuity retain their existing owners. Actor knowledge restrictions, manual locks, stale-guide rejection, off-screen status and confirmed death still govern portrayal. The deterministic 10-turn Ari payload audit passed 203 assertions; this verifies provider input, not live-model obedience.

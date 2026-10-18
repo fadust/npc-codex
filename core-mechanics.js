@@ -1,4 +1,4 @@
-import { renderPortrayal } from './actor-portrayal.js';
+import { renderPortrayal, renderActorPresence, physicalDescription } from './actor-portrayal.js';
 import { stripBaiBaiImageTags } from './destructive-settlement-core.js';
 import { isTerminalNpcDeath } from './terminal-lifecycle.js';
 import {
@@ -6034,9 +6034,9 @@ const INJECTED_PHYSICAL_LABEL = 'ENDURING PHYSICAL FEATURES (authoritative anato
 // remaining budget its enduring physical features still should, so the roleplay model is not left
 // to invent anatomy. Variants are tried in order; the last may be cut at a clause boundary.
 function injectionAppearanceVariants(npc) {
-    const appearance = cleanText(npc.appearance, 1200);
+    const appearance = cleanText(physicalDescription(npc.appearance), 1200);
     if (!appearance) return [];
-    const physical = !npc.currentForm && !npc.currentFormUnknown ? cleanText(npc.overallAppearance, 800) : '';
+    const physical = !npc.currentForm && !npc.currentFormUnknown ? cleanText(physicalDescription(npc.overallAppearance), 800) : '';
     const variants = [`${INJECTED_APPEARANCE_LABEL}${appearance}`];
     if (physical && normalizeName(physical) !== normalizeName(appearance)) variants.push(`${INJECTED_PHYSICAL_LABEL}${physical}`);
     return variants;
@@ -6066,6 +6066,7 @@ function injectionOptionalFields(npc, includeAppearance = false, turn = null, sc
         statusLine,
         abilityLine,
         appearanceVariants.length && appearanceVariants,
+        renderActorPresence(npc),
         includeAppearance && !npc.appearance && (npc.currentForm || npc.currentFormUnknown) && 'Current visible appearance is not established; do not infer anatomy from species or another form.',
         renderSheetInjection(npc.sheet),
         renderReflectionInjection(npc, { text: sceneText }),
