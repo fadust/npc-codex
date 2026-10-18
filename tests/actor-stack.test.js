@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { createNpcRecord, mergeScanResult, buildInjection } from '../core.js';
 import { resolveSagaAdmissions } from '../saga-canon.js';
 import { captureCanonRevision, canonRevisionCurrent } from '../saga-canon.js';
-import { buildCastShortlist, mergeCastIntoScan, resolveKnowledgeKeys } from '../cast.js';
+import { buildCastShortlist, mergeCastIntoScan, resolveKnowledgeKeys, castDecisionsToScan } from '../cast.js';
 import { canonSeedTargets } from '../canon-seed.js';
 import { actorProfiles, resolveActor, readStoryContinuity } from '../actor-stack.js';
 import { acceptPortrayal, renderPortrayal, PORTRAYAL_REFERENCES } from '../actor-portrayal.js';
@@ -90,6 +90,17 @@ test('Ari: mentioned actors remain off-screen and confirmed deaths remain refere
     assert.match(buildInjection([npc], 'We remember Ari Vale.', 1), /MENTIONED, NOT PRESENT/);
     const dead = { ...npc, lifeState: 'deceased', lifeStateCertainty: 'explicit', archived: true, archiveReason: 'deceased', lifeStateReason: 'Died in the flood.' };
     assert.match(buildInjection([dead], 'We remember Ari Vale.', 1), /DECEASED, REFERENCED ONLY/);
+});
+
+test('Ari: canon family ties fill bonds without admitting the mentioned relative', () => {
+    const npc = ari();
+    const cast = castDecisionsToScan({ people: [{ ref: 'Mira Vale', is: 'canon:mira', name: 'Mira Vale', present: false, ties: [{ is: 'mother', of: npc.name }] }] }, {
+        transcript: 'Ari Vale mentions his mother Mira Vale.', npcs: [npc], canon: [{ id: 'canon:mira', world: 'Saga:mira@r1', uid: 0, name: 'Mira Vale', keys: ['Mira Vale'], snippet: "Mira Vale is Ari Vale's mother." }],
+    });
+    assert.equal(cast.npcs.length, 0);
+    const result = mergeScanResult({ npcs: [npc] }, cast, { turn: 1, developmentContext: 'Ari Vale mentions his mother Mira Vale.' });
+    assert.equal(result.state.npcs.length, 1);
+    assert.match(result.state.npcs[0].keyRelationships.join(' '), /Mira Vale.*mother/i);
 });
 
 test('portrayal removes redundant speech only, retains distinct guidance and respects negation', () => {

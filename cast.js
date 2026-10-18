@@ -514,13 +514,14 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
         const gender = ['female', 'male'].includes(String(person?.gender || '').toLowerCase()) ? String(person.gender).toLowerCase() : '';
         const roles = normalizeRoles(person?.roles).map(role => ({ ...role }));
         let row = null;
+        let mentionedCanonOnly = false;
         if (is.startsWith('canon:')) {
             const entry = canon.find(item => item.id === is);
             if (!entry) { report.rejected.push({ ref, reason: 'unknown canon entry' }); continue; }
             const canonical = entry.name;
             const dossier = live.find(npc => npc.id === entry.dossierId)
                 || live.find(npc => labelsOf(npc).some(label => norm(label) === norm(canonical)));
-            if (!dossier && person.present !== true) { report.rejected.push({ ref, reason: 'mentioned canon only' }); continue; }
+            mentionedCanonOnly = !dossier && person.present !== true;
             row = dossier
                 ? { id: dossier.id, name: dossier.name, sameIndividual: true }
                 : { name: canonical, identityKind: 'proper_name', dossierSignal: 'persistent', dossierReason: `canon entry ${entry.name}`, sameIndividual: true };
@@ -576,7 +577,7 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
             if (decision.ops.length || decision.intents.length) row.memoryDecision = { ops: decision.ops, intents: decision.intents };
         }
         row.matchLabels = [...new Set([...(row.matchLabels || []), stripArticle(ref), ...(name ? [name] : [])])];
-        rows.push(row);
+        if (!mentionedCanonOnly) rows.push(row);
         nameOf.set(norm(ref), row.name);
         if (name) nameOf.set(norm(name), row.name);
         report.accepted.push({ ref, is, name: row.name });
