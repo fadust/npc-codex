@@ -56,11 +56,11 @@ test('editor and portrait workflows are chat-affine', () => {
     assert.match(index, /closePortraitGenerator\(\);\n\s*closeNpcEditor\(\);/);
 });
 
-test('Delta application metadata is v2.0.0 and active core ownership is semantic', () => {
-    assert.match(core, /NPC_STATE_VERSION = '2\.0\.0'/);
+test('Delta application metadata is v2.0.1 and active core ownership is semantic', () => {
+    assert.match(core, /NPC_STATE_VERSION = '2\.0\.1'/);
     assert.match(core, /export \* from '\.\/core-mechanics\.js'/);
     assert.doesNotMatch(core, /NPC_STATE_SOURCE_ENGINE_VERSION|core-v0218/);
-    assert.equal(manifest.version, '2.0.0');
+    assert.equal(manifest.version, '2.0.1');
     assert.equal(manifest.author, 'fadust (based on NPC State Delta by kohz87)');
 });
 

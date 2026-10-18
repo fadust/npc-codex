@@ -2,16 +2,20 @@
 
 This file tracks our maintained fork's changes and its relationship to [NPC State Delta](https://github.com/kohz87/npc_state_delta). It does not replace the inherited [CHANGELOG.md](CHANGELOG.md) or claim that every upstream release has been merged.
 
+## Current fork version — 2.0.1
+
+Version bumped on 18 October 2026 to package the integration and fixes below. Runtime behavior and persisted formats are unchanged by the bump. No GitHub release or tag is implied.
+
 ## Comparison checkpoint — 18 October 2026
 
 - Fork runtime reviewed: [`2e83180`](https://github.com/fadust/npc-codex/commit/2e8318067d8d4021b9d100df1df503ddb14eca30), merged into `main` as [`4ceb1f3`](https://github.com/fadust/npc-codex/commit/4ceb1f32303743c39a485de83c98af206567e03d) through [PR #2](https://github.com/fadust/npc-codex/pull/2). Both commits have identical file contents.
 - Upstream reviewed: [`e5ef4b6`, v1.2.8](https://github.com/kohz87/npc_state_delta/commit/e5ef4b6), including the October 17 changes and October 18 display updates. The earlier adaptation was pinned through upstream `136d55e`, v1.2.6.
 - At this checkpoint Git reported **42 ahead / 31 behind**. This counts commit ancestry, including merge and release commits; it is not a count of missing features. Adapted code retains different commit identities. Later documentation commits will change the count.
-- NPC Codex remains application version **2.0.0**. Our version sequence is independent of upstream's. The additions below are unreleased changes on main, not a new tagged release.
+- At this comparison checkpoint NPC Codex was application version **2.0.0**. Our version sequence is independent of upstream's; the changes below are now recorded under 2.0.1.
 
 ## Our changes
 
-### Unreleased — 18 October 2026
+### 2.0.1 — 18 October 2026
 
 | Commit | Change and purpose |
 |---|---|
