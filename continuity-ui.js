@@ -54,6 +54,8 @@ function injectStyles() {
       .delta-continuity-birthday-card .delta-continuity-source { display:block; opacity:.65; font-size:.78em; margin-top:2px; }
       .delta-appearance-form-summary { margin-top:10px; border:1px solid rgba(127,127,127,.22); border-radius:10px; padding:8px 10px; }
       .delta-appearance-form-summary > summary { cursor:pointer; display:flex; gap:8px; align-items:baseline; }
+      .delta-appearance-form-summary > summary::before { content:'▸'; display:inline-block; }
+      .delta-appearance-form-summary[open] > summary::before { transform:rotate(90deg); }
       .delta-appearance-form-summary > summary small { opacity:.7; }
       .delta-appearance-form-list { display:grid; gap:8px; margin-top:9px; }
       .delta-appearance-form-row { border-top:1px solid rgba(127,127,127,.18); padding-top:7px; }
