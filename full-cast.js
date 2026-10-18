@@ -1,4 +1,4 @@
-/* NPC State Delta optional full-cast scanning owner. */
+/* NPC Codex optional full-cast scanning owner. */
 import { extension_settings, getContext } from '../../../extensions.js';
 import { npcParticipatesInExchange } from './scan-context.js';
 
@@ -12,7 +12,7 @@ let sequence = 0;
 let userSnapshot = null;
 let userSnapshotChatKey = '';
 
-const api = () => globalThis.NPCStateDelta || null;
+const api = () => (globalThis.NPCCodex || globalThis.NPCStateDelta) || null;
 const cfg = () => {
     const root = extension_settings[EXTENSION_NAME] ||= {};
     if (root[FULL_CAST_KEY] === undefined) root[FULL_CAST_KEY] = false;
@@ -114,7 +114,7 @@ async function waitIdle(chatKey, token) {
         }
         await sleep(100);
     }
-    console.warn('[NPC State Delta] full cast scan timed out waiting for scanner idle.');
+    console.warn('[NPC Codex] full cast scan timed out waiting for scanner idle.');
     return false;
 }
 
@@ -149,12 +149,12 @@ export async function runFullCastScan(messageId = null, before = null, { manual 
     // Report what actually succeeded: a failed broad scan or refresh is never counted as done.
     const failed = targets.length - refreshed;
     const complete = broadScanOk && failed === 0;
-    console.info('[NPC State Delta] full exchange/present cast scan complete', { targets: targets.length, refreshed, failed, broadScanOk });
+    console.info('[NPC Codex] full exchange/present cast scan complete', { targets: targets.length, refreshed, failed, broadScanOk });
     if (manual) {
         const counts = `refreshed ${refreshed} of ${targets.length} exchange/present dossier${targets.length === 1 ? '' : 's'}`;
-        if (complete) globalThis.toastr?.success?.(`NPC State Delta: full cast scan ${counts}.`);
-        else if (!refreshed && (!broadScanOk || targets.length)) globalThis.toastr?.error?.(`NPC State Delta: full cast scan failed${broadScanOk ? '' : ' (the exchange scan failed)'}; ${counts}.`);
-        else globalThis.toastr?.warning?.(`NPC State Delta: full cast scan partly failed${broadScanOk ? '' : ' (the exchange scan failed)'}; ${counts}.`);
+        if (complete) globalThis.toastr?.success?.(`NPC Codex: full cast scan ${counts}.`);
+        else if (!refreshed && (!broadScanOk || targets.length)) globalThis.toastr?.error?.(`NPC Codex: full cast scan failed${broadScanOk ? '' : ' (the exchange scan failed)'}; ${counts}.`);
+        else globalThis.toastr?.warning?.(`NPC Codex: full cast scan partly failed${broadScanOk ? '' : ' (the exchange scan failed)'}; ${counts}.`);
     }
     return complete;
 }

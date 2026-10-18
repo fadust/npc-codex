@@ -47,7 +47,7 @@ export function createScanOperationRegistry({
                 active.delete(normalizedKey);
                 operation.expired = true;
                 operation.finished = true;
-                try { onExpire?.(operation); } catch (error) { console.warn('[NPC State Delta] scan timeout cleanup callback failed', error); }
+                try { onExpire?.(operation); } catch (error) { console.warn('[NPC Codex] scan timeout cleanup callback failed', error); }
             }, timeout);
             operation.timer?.unref?.();
         }

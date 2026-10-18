@@ -15,6 +15,19 @@ Version bumped on 18 October 2026 to package the integration and fixes below. 2.
 
 ## Our changes
 
+### Unreleased — BaiBai portraits and Codex presentation
+
+- Portrait tools can call the existing BaiBai Image API v1 using accepted dossier prompts and the user's configured backend. Originals are stored in BaiBai's gallery; Codex only applies a preview after **Use as Portrait**. Existing chat, form, appearance and stale-result checks remain shared with the native image route. No chat message or scanner request is created by the adapter.
+- Portrait boxes open an accessible full-size viewer with source dimensions and a 1:1 toggle. BaiBai originals are retained through the existing `generatedFrom` reference; older images without a retained original use their stored image. Deleting a gallery original makes that original unavailable.
+- A slate/teal Codex theme preserves all dossier sections. **Hide NPC list** expands the left portrait area and fits the whole image without cropping; **Show NPC list** restores search and actor selection. Fitting cannot recover body parts absent from the source image.
+- Dossier, Stat and Social Map share the layout. The expanded list restores the small portrait beside the actor name. **Refresh** beside **Edit dossier** delegates to the existing guarded recent-story refresh action.
+- Verification: automated adapter/error/source checks plus a browser fixture using the production UI and a deterministic BaiBai response. Confirmed 1200 × 1800 at 1:1, preview without mutation, and explicit application. Live image-provider quality has not been tested in this change.
+
+### Unreleased — NPC Codex runtime naming
+
+- Console labels, diagnostics, errors, notifications and model-facing dossier headers now identify NPC Codex. `window.NPCCodex` is the primary public API; internal consumers prefer it. `window.NPCStateDelta` remains an alias to the exact same object for existing Saga/BaiBai integrations.
+- Installation directory, settings/storage keys, writer locks, bundle identifiers, DOM/event identifiers and existing lifecycle hooks retain their compatibility names. Renaming those would require coordinated migration and could strand saved dossiers or split writers. Upstream attribution and historical records remain intact.
+
 ### Unreleased — BaiBai Image edit isolation
 
 - Complete `bbi_image` illustration blocks no longer change NPC story fingerprints or enter scanner evidence. Tag insertion/replacement/removal therefore does not require another NPC scan or invalidate an in-flight result; edits to surrounding prose still use normal reconciliation and rescan safeguards.

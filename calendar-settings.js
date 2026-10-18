@@ -1,4 +1,4 @@
-/* NPC State Delta fantasy-calendar settings adapter over the canonical Delta settings object. */
+/* NPC Codex fantasy-calendar settings adapter over the canonical Delta settings object. */
 import { extension_settings, getContext } from '../../../extensions.js';
 import {
     monthDefinitionsText,

@@ -1,4 +1,4 @@
-/* NPC State Delta: pure scan/backfill eligibility helpers. */
+/* NPC Codex: pure scan/backfill eligibility helpers. */
 
 export const AUTOMATIC_BACKFILL_QUEUE_VERSION = 1;
 export const AUTOMATIC_MISSED_PARTICIPANT_REPAIR_LIMIT = 1;

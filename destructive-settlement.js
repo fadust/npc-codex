@@ -4,7 +4,7 @@ import { createDestructiveSettlementController } from './destructive-settlement-
 const REGISTRY_KEY = '__NPCStateDeltaDestructiveSettlement';
 
 function npcStateDeltaApi() {
-    return globalThis.NPCStateDelta || globalThis.window?.NPCStateDelta || null;
+    return (globalThis.NPCCodex || globalThis.NPCStateDelta) || globalThis.window?.NPCStateDelta || null;
 }
 
 function activeChatKey() {
@@ -18,7 +18,7 @@ function hostSwipeActive() {
 function buildController() {
     const reconcile = options => {
         const api = npcStateDeltaApi();
-        if (!api?.reconcile) throw new Error('NPC State Delta reconcile API is unavailable.');
+        if (!api?.reconcile) throw new Error('NPC Codex reconcile API is unavailable.');
         return api.reconcile(options);
     };
     return createDestructiveSettlementController({
@@ -28,10 +28,10 @@ function buildController() {
         reconcile,
         probe: reconcile,
         onTimeout: pending => {
-            console.warn(`[NPC State Delta] ${pending.operation} event did not settle into a changed SillyTavern chat lineage within 5000ms; canonical dossier state was preserved rather than rolling back against stale host data.`);
+            console.warn(`[NPC Codex] ${pending.operation} event did not settle into a changed SillyTavern chat lineage within 5000ms; canonical dossier state was preserved rather than rolling back against stale host data.`);
         },
         onError: error => {
-            console.warn('[NPC State Delta] settled destructive branch reconciliation failed', error);
+            console.warn('[NPC Codex] settled destructive branch reconciliation failed', error);
         },
     });
 }

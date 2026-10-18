@@ -21,8 +21,8 @@ function commonPrefixChars(a, b) {
 function requestText(systemPrompt, userPrompt) {
   return `${String(systemPrompt)}\n${String(userPrompt)}`;
 }
-const system = "You are NPC State Delta's isolated dossier scanner. Use only the supplied scanner payload. Return only the requested JSON object.";
-const refreshSystem = "You are NPC State Delta's targeted dossier reconciliation scanner. Re-read the supplied recent-story window for exactly one existing NPC. Return only the requested JSON object.";
+const system = "You are NPC Codex's isolated dossier scanner. Use only the supplied scanner payload. Return only the requested JSON object.";
+const refreshSystem = "You are NPC Codex's targeted dossier reconciliation scanner. Re-read the supplied recent-story window for exactly one existing NPC. Return only the requested JSON object.";
 for (const fixture of cases) {
   const transcript = `USER: ${fixture.user}\nASSISTANT: ${fixture.assistant}`;
   const prompt = buildScannerPrompt({ transcript, currentTranscript: transcript, existingNpcs: fixture.npcs, userName: 'Ari', charName: 'Character' });

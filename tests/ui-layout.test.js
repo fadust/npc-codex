@@ -244,7 +244,7 @@ test('UI integration remounts inline cards on SillyTavern render lifecycle and c
 });
 
 test('visible inline rendering is latest-scene present cast only while historical snapshots remain internal', () => {
-    assert.match(index, /Visible NPC State Delta is a live present-cast view, not a historical dossier timeline/);
+    assert.match(index, /Visible NPC Codex is a live present-cast view, not a historical dossier timeline/);
     assert.match(index, /const latestAssistantId = latestMessageId\(true\)/);
     assert.match(index, /filter\(npc => !npc\.archived && npc\.present && !npc\.minor\)/);
     assert.match(index, /return \[\{[\s\S]*reason: 'live-present-grid'/s);
@@ -360,7 +360,7 @@ test('v0.2 portrait generation settings expose theme, positive/negative prompts,
     assert.match(index, /Painterly Fantasy/);
     assert.match(index, /Dark Medieval/);
     assert.match(index, /Semi-Realistic/);
-    assert.doesNotMatch(index, /sampler[^\n]*<select|checkpoint[^\n]*<select|cfg[^\n]*<input/i, 'NPC State Delta should not duplicate native backend controls');
+    assert.doesNotMatch(index, /sampler[^\n]*<select|checkpoint[^\n]*<select|cfg[^\n]*<input/i, 'NPC Codex should not duplicate native backend controls');
 });
 
 test('portrait generator is a review-before-apply workflow with per-NPC prompt overrides', () => {

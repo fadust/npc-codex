@@ -1826,5 +1826,5 @@ export function buildProfileRefreshPrompt(options = {}) {
     return appendCustomFieldRule(insertRefreshBirthdayRule(continuity.buildProfileRefreshPrompt(calendarPromptOptions(options)), options), options);
 }
 
-// NPC State Delta application version. Persisted bundle, branch, and data schemas are versioned independently.
+// NPC Codex application version. Persisted bundle, branch, and data schemas are versioned independently.
 export const NPC_STATE_VERSION = '2.0.2';

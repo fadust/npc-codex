@@ -1,4 +1,4 @@
-/* NPC State Delta deterministic fantasy-calendar primitives. */
+/* NPC Codex deterministic fantasy-calendar primitives. */
 
 export const MAX_CALENDAR_MONTHS = 64;
 export const MAX_CALENDAR_DAYS_PER_MONTH = 999;

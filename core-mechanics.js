@@ -1249,7 +1249,7 @@ export function stripUiNoise(text) {
         .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ');
 
     // Megumin Suite beta (2026-08-18+) emits one <Blocks> envelope. Preserve only the two
-    // sections NPC State Delta intentionally treats as story evidence; discard CYOA, Bonds, sheets,
+    // sections NPC Codex intentionally treats as story evidence; discard CYOA, Bonds, sheets,
     // NPC Bank dossiers/updates, Story Tracker, and unknown/custom children by removing the
     // entire envelope after extracting World State + NPC Inner Chatter.
     source = replaceMeguminMasterBlocks(source);
@@ -4685,7 +4685,7 @@ export function buildRelationshipPassPrompt({
     })).filter(npc => npc.id);
     const relationshipRubric = compactRelationshipRubric(relationshipCriteria);
     const impactRubric = compactImpactRubric(impactCriteria);
-    return `You are NPC State Delta's focused relationship evaluator. Assess ONLY how each target NPC's relationship toward ${userName} changes because of the supplied CURRENT exchange.
+    return `You are NPC Codex's focused relationship evaluator. Assess ONLY how each target NPC's relationship toward ${userName} changes because of the supplied CURRENT exchange.
 
 Rules:
 1. Return exactly one result for EACH target id. Never omit a target.
@@ -6134,7 +6134,7 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
     const budget = normalizeInjectionBudgetTokens(budgetTokens);
     const budgetChars = budget * APPROX_CHARS_PER_TOKEN;
     const headerFor = () => [
-        'NPC STATE DELTA DOSSIER. Only confirmed-present NPCs are included. Treat these as established story facts; never mention the dossier or numeric values.',
+        'NPC CODEX DOSSIER. Only confirmed-present NPCs are included. Treat these as established story facts; never mention the dossier or numeric values.',
         'IDENTITY FIRST / DOMINATES: personality, values, morality, goals, duties, independence, other bonds and current mood/status govern action; behavioral profile translates it into target-general response/decision levers. Temporary mood or player-specific behavior does not rewrite identity; durable change needs lasting on-page development.',
         'VOICE FIDELITY: preserve established Speech, mannerisms, vocabulary, sentence shape, formality, cadence, hedging and question/explanation style; never replace a distinct voice with generic polished prose.',
         'PLAYER RELATIONSHIP IS SECONDARY: it may bias player-directed attention, interpretation and openness, but need not surface each scene. High scores never mean obedience, devotion, clinginess, jealousy, tsundere behavior, reduced empathy or cruelty toward others. Low scores create no obligation or fixation.',
@@ -6394,7 +6394,7 @@ export function buildBackfillPrompt({
     } : null;
     const memoryRubric = compactMemoryRubric(memoryCriteria);
 
-    return `You are NPC State Delta's targeted dossier backfill extractor. The player EXPLICITLY chose to keep one NPC. Do not decide whether the NPC is important or dossier-worthy. Your only task is to find that requested individual in the supplied recent story history and recover grounded dossier facts.
+    return `You are NPC Codex's targeted dossier backfill extractor. The player EXPLICITLY chose to keep one NPC. Do not decide whether the NPC is important or dossier-worthy. Your only task is to find that requested individual in the supplied recent story history and recover grounded dossier facts.
 
 Requested NPC: ${target || '(missing target)'}
 Player/main character to exclude: ${userName}
@@ -6445,12 +6445,12 @@ export function buildDossierImportPrompt({
         background: cleanText(existingNpc.background, 320), keyRelationships: cleanList(existingNpc.keyRelationships, KEY_RELATIONSHIP_LIMIT, 180),
         relationshipSummary: cleanText(existingNpc.relationshipSummary, 280), mannerisms: cleanList(existingNpc.mannerisms, 4, 140),
     } : null;
-    return `NPC State Delta explicit DOSSIER IMPORT. The player deliberately asked to populate one existing NPC from the supplied structured dossier text. Use ONLY that dossier text, not outside knowledge. Return exactly one compact NPC object for the requested person, or {"npcs":[]} if it is clearly a different person.
+    return `NPC Codex explicit DOSSIER IMPORT. The player deliberately asked to populate one existing NPC from the supplied structured dossier text. Use ONLY that dossier text, not outside knowledge. Return exactly one compact NPC object for the requested person, or {"npcs":[]} if it is clearly a different person.
 
 Requested NPC: ${target}
 Player (exclude from Key Relationships): ${userName}
 Main card speaker: ${charName}
-Existing NPC State Delta record: ${JSON.stringify(existing)}
+Existing NPC Codex record: ${JSON.stringify(existing)}
 
 Mapping/rules:
 1. Inner Circle / family / close allies / rivals / mentors / partners => keyRelationships, max ${KEY_RELATIONSHIP_LIMIT}, one "Name — their role to this NPC | durable dynamic" entry each. Never dangling "(deceased)"; state who is late/surviving. Never put ${userName} there; player stance belongs relationshipSummary.
@@ -6542,7 +6542,7 @@ export function buildProfileRefreshPrompt({
     const staleHint = staleFields.length
         ? `\nStored ${staleFields.join('/')} ${staleReason}: check each clause against the window. A clause tied to an ended situation, former role or dead person is stale: cite the current tendency as evidence and return the changed FULL field (levers: same label, new level/effect); otherwise keep.`
         : '';
-    return `NPC State Delta TARGETED REFRESH FROM CHAT. Reconcile exactly one EXISTING NPC dossier against the supplied recent-story window. This is a deliberate user action, so inspect the whole window carefully instead of requiring a current-turn admission signal.
+    return `NPC Codex TARGETED REFRESH FROM CHAT. Reconcile exactly one EXISTING NPC dossier against the supplied recent-story window. This is a deliberate user action, so inspect the whole window carefully instead of requiring a current-turn admission signal.
 
 Player: ${userName}
 Main card speaker: ${charName}

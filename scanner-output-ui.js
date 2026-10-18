@@ -1,4 +1,4 @@
-/* NPC State Delta scanner-output setting and compact cast-card polish. */
+/* NPC Codex scanner-output setting and compact cast-card polish. */
 import { extension_settings, getContext } from '../../../extensions.js';
 import {
     normalizeScannerMaxOutputTokens,
@@ -57,8 +57,8 @@ function mountControl() {
             input.value = String(normalized);
             persistSettings();
             globalThis.toastr?.success?.(normalized
-                ? `NPC State Delta: scanner maximum output set to ${normalized} tokens.`
-                : 'NPC State Delta: scanner output returned to built-in per-request limits.');
+                ? `NPC Codex: scanner maximum output set to ${normalized} tokens.`
+                : 'NPC Codex: scanner output returned to built-in per-request limits.');
         });
     }
     return true;

@@ -85,7 +85,7 @@ test('dossier library starts collapsed and expands from its heading', () => {
     assert.match(source, /heading = document\.createElement\('button'\)/);
     assert.match(source, /heading\.dataset\.deltaLibraryToggle = '1'/);
     assert.match(source, /setAttribute\('aria-expanded', expanded\)/);
-    assert.match(source, /classList\?\.toggle\?\.\('delta-library-collapsed', libraryCollapsed\)/);
+    assert.match(source, /classList\?\.toggle\?\.\('delta-library-collapsed', libraryCollapsed && !toggle\)/);
     assert.match(source, /\.delta-library\.delta-library-collapsed\{grid-template-rows:minmax\(0,1fr\) auto!important\}/);
     assert.match(source, /\.delta-library-collapsed \.delta-search-label,[^{]*\.delta-library-collapsed \.delta-filters,[^{]*\.delta-library-collapsed \.delta-cast-rail-wrap\{display:none!important\}/);
     // Collapsed by default and again whenever the panel closes; presentation only, never stored.

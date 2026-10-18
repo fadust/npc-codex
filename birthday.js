@@ -1,4 +1,4 @@
-/* NPC State Delta deterministic birthday continuity policy. */
+/* NPC Codex deterministic birthday continuity policy. */
 import {
     calendarFingerprint,
     calendarPromptContext,

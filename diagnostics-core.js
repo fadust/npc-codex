@@ -1,4 +1,4 @@
-/* NPC State Delta bounded diagnostic telemetry.
+/* NPC Codex bounded diagnostic telemetry.
  * Records deterministic application decisions only. It never owns story/canonical state and
  * deliberately allowlists fields so prompts, full narration, credentials and provider payloads
  * cannot leak into the diagnostic bundle by accident.

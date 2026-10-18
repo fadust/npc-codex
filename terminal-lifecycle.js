@@ -1,4 +1,4 @@
-/* NPC State Delta terminal lifecycle helpers. */
+/* NPC Codex terminal lifecycle helpers. */
 import { normalizeLifeState } from './core-mechanics.js';
 
 export function isTerminalNpcDeath(npc = {}) {

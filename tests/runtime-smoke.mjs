@@ -409,6 +409,7 @@ try {
     await sleep(30);
     assert.equal(mounted, true, 'settings panel should mount');
     assert.equal(globalThis.NPCStateDelta?.version, JSON.parse(fs.readFileSync(path.join(sourceRoot, 'manifest.json'), 'utf8')).version);
+    assert.equal(globalThis.NPCCodex, globalThis.NPCStateDelta, 'fork API and compatibility alias must share one state owner');
     assert.ok(mockState.extensionSettings.npc_state_delta, 'settings namespace should initialize');
     assert.equal(mockState.extensionSettings.npc_state_delta.admissionMode, 'conservative');
     assert.equal(mockState.extensionSettings.npc_state_delta.chats, undefined, 'live NPC database should not be stored in extension_settings');
@@ -434,7 +435,7 @@ try {
     mockState.extensionSettings.npc_state_delta.behaviorCriteria = 'Runtime custom behavior rubric.';
 
     // Removed text commands are inert. The retained settings Add creates an off-screen dossier.
-    mockState.context.chat.push({ is_user: true, is_system: false, name: 'Kazuma', mes: '(OOC: NPC State Delta: add Yunyun)' });
+    mockState.context.chat.push({ is_user: true, is_system: false, name: 'Kazuma', mes: '(OOC: NPC Codex: add Yunyun)' });
     eventSource.emit('message_sent', 0);
     await sleep(20);
     assert.equal(globalThis.NPCStateDelta.processOoc, undefined, 'removed command API must not remain callable');
@@ -675,32 +676,32 @@ try {
     assert.equal(inlineAnchors.some(anchor => anchor.dataset.npcStateDeltaMessageId === '1'), false, 'Megumin-integrated message must not keep a duplicate standalone dossier anchor');
     const integratedTab = meguminBlock.card.querySelector('.npc-state-delta-megumin-tab');
     const integratedPane = meguminBlock.card.querySelector('.npc-state-delta-megumin-pane');
-    assert.ok(integratedTab, 'NPC State Delta tab should be inserted into Megumin master block');
-    assert.ok(integratedPane, 'NPC State Delta pane should be inserted into Megumin master block');
+    assert.ok(integratedTab, 'NPC Codex tab should be inserted into Megumin master block');
+    assert.ok(integratedPane, 'NPC Codex pane should be inserted into Megumin master block');
     assert.match(integratedPane.innerHTML, /Yunyun/);
     assert.equal(globalThis.NPCStateDelta.uiStatus().integratedMeguminBlocks, 1);
     integratedTab.click();
-    assert.equal(integratedPane.style.display, '', 'clicking NPC State Delta tab should show its pane');
-    assert.equal(meguminBlock.panel.style.display, '', 'clicking NPC State Delta tab should explicitly reopen the shared Megumin panel');
-    assert.equal(meguminBlock.nativePane.style.display, 'none', 'clicking NPC State Delta tab should hide native Megumin panes');
-    assert.equal(meguminBlock.current(), null, 'opening NPC State Delta should synchronize Megumin private selection to null');
-    assert.equal(integratedPane.dataset.key, integratedTab.dataset.key, 'foreign Megumin integrations should be able to restore NPC State Delta by the same tab/pane key');
+    assert.equal(integratedPane.style.display, '', 'clicking NPC Codex tab should show its pane');
+    assert.equal(meguminBlock.panel.style.display, '', 'clicking NPC Codex tab should explicitly reopen the shared Megumin panel');
+    assert.equal(meguminBlock.nativePane.style.display, 'none', 'clicking NPC Codex tab should hide native Megumin panes');
+    assert.equal(meguminBlock.current(), null, 'opening NPC Codex should synchronize Megumin private selection to null');
+    assert.equal(integratedPane.dataset.key, integratedTab.dataset.key, 'foreign Megumin integrations should be able to restore NPC Codex by the same tab/pane key');
 
     integratedTab.click();
-    assert.equal(meguminBlock.card.classList.contains('meg-blocks-shut'), true, 'clicking the active NPC State Delta tab again should collapse the master card like a native tab');
-    assert.equal(integratedPane.style.display, 'none', 'collapsing NPC State Delta should hide its pane');
-    assert.equal(integratedTab.classList.contains('active'), false, 'collapsing NPC State Delta should clear its active tab state');
+    assert.equal(meguminBlock.card.classList.contains('meg-blocks-shut'), true, 'clicking the active NPC Codex tab again should collapse the master card like a native tab');
+    assert.equal(integratedPane.style.display, 'none', 'collapsing NPC Codex should hide its pane');
+    assert.equal(integratedTab.classList.contains('active'), false, 'collapsing NPC Codex should clear its active tab state');
     meguminBlock.nativeTab.click();
-    assert.equal(meguminBlock.card.classList.contains('meg-blocks-shut'), false, 'a native Megumin tab should reopen in one click after NPC State Delta collapses');
+    assert.equal(meguminBlock.card.classList.contains('meg-blocks-shut'), false, 'a native Megumin tab should reopen in one click after NPC Codex collapses');
     assert.equal(meguminBlock.nativePane.style.display, '', 'native Megumin pane should reopen in that same click');
 
     integratedTab.click();
-    assert.equal(integratedPane.style.display, '', 'NPC State Delta should reopen from a native Megumin pane');
-    assert.equal(meguminBlock.current(), null, 'reopening NPC State Delta should reset the native selected-key closure again');
+    assert.equal(integratedPane.style.display, '', 'NPC Codex should reopen from a native Megumin pane');
+    assert.equal(meguminBlock.current(), null, 'reopening NPC Codex should reset the native selected-key closure again');
     meguminBlock.nativeTab.click();
-    assert.equal(meguminBlock.card.classList.contains('meg-blocks-shut'), false, 'switching directly from NPC State Delta to the prior native tab must open it, not close it');
-    assert.equal(meguminBlock.nativePane.style.display, '', 'switching from NPC State Delta should show the native pane on the first click');
-    assert.equal(integratedPane.style.display, 'none', 'switching to a native Megumin tab should dismiss the NPC State Delta pane');
+    assert.equal(meguminBlock.card.classList.contains('meg-blocks-shut'), false, 'switching directly from NPC Codex to the prior native tab must open it, not close it');
+    assert.equal(meguminBlock.nativePane.style.display, '', 'switching from NPC Codex should show the native pane on the first click');
+    assert.equal(integratedPane.style.display, 'none', 'switching to a native Megumin tab should dismiss the NPC Codex pane');
 
     integratedTab.click();
     const openedSnapshotHtml = integratedPane.innerHTML.replace('<details ', '<details open ');
@@ -708,7 +709,7 @@ try {
     globalThis.NPCStateDelta.renderInline();
     assert.equal(integratedPane.innerHTML, openedSnapshotHtml, 'repair renders must not replace unchanged pane HTML and collapse an opened NPC dossier');
     meguminBlock.nativeTab.click();
-    assert.equal(integratedPane.style.display, 'none', 'choosing a native Megumin tab should dismiss the NPC State Delta pane');
+    assert.equal(integratedPane.style.display, 'none', 'choosing a native Megumin tab should dismiss the NPC Codex pane');
     meguminBlocks.delete(1);
     eventSource.emit('message_updated', 1);
     await sleep(90);
@@ -801,7 +802,7 @@ try {
     assert.equal(globalThis.NPCStateDelta.uiStatus().editorMode, 'sillytavern-popup');
     assert.equal(mockState.popupCalls.at(-1)?.options?.large, true);
     assert.equal(mockState.popupCalls.at(-1)?.options?.allowVerticalScrolling, true);
-    const livePrompt = [...mockState.prompts].reverse().find(args => String(args?.[1] || '').includes('NPC STATE DELTA DOSSIER'))?.[1] || '';
+    const livePrompt = [...mockState.prompts].reverse().find(args => String(args?.[1] || '').includes('NPC CODEX DOSSIER'))?.[1] || '';
     assert.match(livePrompt, /Runtime custom behavior rubric/);
     assert.match(livePrompt, /species\/race: Crimson Demon/);
     assert.match(livePrompt, /age: 18/);
@@ -972,7 +973,7 @@ try {
     await staleScan;
     assert.equal(globalThis.NPCStateDelta.getState().npcs.some(n => n.name === 'Luna'), false);
 
-    mockState.context.chat.push({ is_user: true, is_system: false, name: 'Kazuma', mes: '(OOC: NPC State Delta: remove Yunyun)' });
+    mockState.context.chat.push({ is_user: true, is_system: false, name: 'Kazuma', mes: '(OOC: NPC Codex: remove Yunyun)' });
     const beforeRemovedCommand = globalThis.NPCStateDelta.getState();
     const callsBeforeRemovedCommand = mockState.rawCalls.length;
     eventSource.emit('message_sent', 2);

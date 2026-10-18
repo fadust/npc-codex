@@ -1,4 +1,4 @@
-/* NPC State Delta: cast resolution (fadust fork).
+/* NPC Codex: cast resolution (fadust fork).
  *
  * References are queries. "Martha's older daughter", "his first student", "her ex-wife", "the
  * headmaster of Hogwarts" each name an anchor, a tie or title, and qualifiers. Code narrows the
@@ -26,7 +26,7 @@ import { capPoolChanges } from './trust.js';
 import { resolveActor } from './actor-stack.js';
 import { renderFlorisReadout } from './floris.js';
 
-export const CAST_PASS_SYSTEM_PROMPT = "You are NPC State Delta's isolated cast and knowledge evaluator. Use only the supplied candidates, canon entries and current exchange. Return only the requested JSON object.";
+export const CAST_PASS_SYSTEM_PROMPT = "You are NPC Codex's isolated cast and knowledge evaluator. Use only the supplied candidates, canon entries and current exchange. Return only the requested JSON object.";
 export const ROLE_LIMIT = 6;
 export const SHORTLIST_LIMIT = 10;
 export const CANON_LIMIT = 6;

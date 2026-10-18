@@ -1,4 +1,4 @@
-/* NPC State Delta native transfer envelope. Keeps the established binary codec and adds declared Stage 8 metadata. */
+/* NPC Codex native transfer envelope. Keeps the established binary codec and adds declared Stage 8 metadata. */
 import { decodeNpcStateBundle, encodeNpcStateBundle } from './bundle.js';
 import { PORTRAIT_STYLE_PROMPT_LIMIT, PORTRAIT_COMPOSITION_PROMPT_LIMIT } from './core-mechanics.js';
 
@@ -28,17 +28,17 @@ function bytes(value) {
     if (value instanceof Uint8Array) return value;
     if (value instanceof ArrayBuffer) return new Uint8Array(value);
     if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-    throw new Error('NPC State Delta native import must be binary data.');
+    throw new Error('NPC Codex native import must be binary data.');
 }
 function parseEnvelope(input) {
     const value = bytes(input);
-    if (value.byteLength < HEADER_BYTES) throw new Error('NPC State Delta bundle is truncated.');
+    if (value.byteLength < HEADER_BYTES) throw new Error('NPC Codex bundle is truncated.');
     const manifestLength = new DataView(value.buffer, value.byteOffset, value.byteLength).getUint32(MAGIC_BYTES, true);
     const binaryStart = HEADER_BYTES + manifestLength;
-    if (!manifestLength || manifestLength > MAX_MANIFEST_BYTES || binaryStart > value.byteLength) throw new Error('NPC State Delta bundle manifest is truncated or exceeds the 2 MB safety limit.');
+    if (!manifestLength || manifestLength > MAX_MANIFEST_BYTES || binaryStart > value.byteLength) throw new Error('NPC Codex bundle manifest is truncated or exceeds the 2 MB safety limit.');
     let manifest;
     try { manifest = JSON.parse(textDecoder.decode(value.subarray(HEADER_BYTES, binaryStart))); }
-    catch { throw new Error('NPC State Delta bundle manifest is invalid JSON.'); }
+    catch { throw new Error('NPC Codex bundle manifest is invalid JSON.'); }
     return { value, manifest, binaryStart, binary: value.subarray(binaryStart) };
 }
 function withoutPortraitPayload(value) {
@@ -58,43 +58,43 @@ function withoutPortraitPayload(value) {
 }
 function validateDeclaredContents(value) {
     if (value === undefined) return null;
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('NPC State Delta native bundle has invalid declared-contents metadata.');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('NPC Codex native bundle has invalid declared-contents metadata.');
     for (const field of DECLARED_BOOLEAN_FIELDS) {
-        if (field in value && typeof value[field] !== 'boolean') throw new Error(`NPC State Delta native bundle has invalid declared field ${field}.`);
+        if (field in value && typeof value[field] !== 'boolean') throw new Error(`NPC Codex native bundle has invalid declared field ${field}.`);
     }
     if ('historyRestorePolicy' in value && value.historyRestorePolicy !== 'target-safe-baseline') {
-        throw new Error(`NPC State Delta native bundle requests unsupported history restore policy: ${String(value.historyRestorePolicy || 'empty')}.`);
+        throw new Error(`NPC Codex native bundle requests unsupported history restore policy: ${String(value.historyRestorePolicy || 'empty')}.`);
     }
     return structuredClone(value);
 }
 function validatePortableSettings(value) {
     if (value === undefined) return null;
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('NPC State Delta native bundle has invalid portable settings.');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('NPC Codex native bundle has invalid portable settings.');
     const output = {};
     for (const [key, item] of Object.entries(value)) {
         const rule = Object.hasOwn(PORTABLE_SETTING_SCHEMA, key) ? PORTABLE_SETTING_SCHEMA[key] : null;
-        if (!rule) throw new Error(`NPC State Delta native bundle contains unsupported portable setting: ${key}.`);
+        if (!rule) throw new Error(`NPC Codex native bundle contains unsupported portable setting: ${key}.`);
         if (rule.type === 'boolean') {
-            if (typeof item !== 'boolean') throw new Error(`NPC State Delta native portable setting ${key} must be boolean.`);
+            if (typeof item !== 'boolean') throw new Error(`NPC Codex native portable setting ${key} must be boolean.`);
             output[key] = item;
             continue;
         }
-        if (typeof item !== 'string' || item.length > rule.max) throw new Error(`NPC State Delta native portable setting ${key} is invalid or exceeds ${rule.max} characters.`);
+        if (typeof item !== 'string' || item.length > rule.max) throw new Error(`NPC Codex native portable setting ${key} is invalid or exceeds ${rule.max} characters.`);
         output[key] = item;
     }
     return output;
 }
 function validateHistoryArchive(value) {
     if (value === undefined) return null;
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('NPC State Delta native bundle has invalid source-history metadata.');
-    if (value.policy !== 'audit-only-source-history') throw new Error('NPC State Delta native bundle declares an unsupported source-history policy.');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('NPC Codex native bundle has invalid source-history metadata.');
+    if (value.policy !== 'audit-only-source-history') throw new Error('NPC Codex native bundle declares an unsupported source-history policy.');
     for (const field of ['lineage', 'checkpoints', 'inlineCards']) {
-        if (field in value && !Array.isArray(value[field])) throw new Error(`NPC State Delta native history field ${field} must be an array.`);
+        if (field in value && !Array.isArray(value[field])) throw new Error(`NPC Codex native history field ${field} must be an array.`);
     }
     if ('branchRootSnapshot' in value && value.branchRootSnapshot !== null && (typeof value.branchRootSnapshot !== 'object' || Array.isArray(value.branchRootSnapshot))) {
-        throw new Error('NPC State Delta native branchRootSnapshot is invalid.');
+        throw new Error('NPC Codex native branchRootSnapshot is invalid.');
     }
-    if ('truncated' in value && typeof value.truncated !== 'boolean') throw new Error('NPC State Delta native history truncated flag must be boolean.');
+    if ('truncated' in value && typeof value.truncated !== 'boolean') throw new Error('NPC Codex native history truncated flag must be boolean.');
     return structuredClone(value);
 }
 
@@ -182,8 +182,8 @@ export function augmentNativeBundle(input, { portableSettings = null, historyArc
         lastTotal = encoded.total;
         if (lastManifestBytes <= MAX_MANIFEST_BYTES && lastTotal <= MAX_NATIVE_BYTES) return encoded.build();
     }
-    if (lastManifestBytes > MAX_MANIFEST_BYTES) throw new Error('NPC State Delta native bundle manifest exceeds the 2 MB safety limit even without source-history audit data.');
-    throw new Error('NPC State Delta native bundle exceeds the 32 MB safety limit even without source-history audit data.');
+    if (lastManifestBytes > MAX_MANIFEST_BYTES) throw new Error('NPC Codex native bundle manifest exceeds the 2 MB safety limit even without source-history audit data.');
+    throw new Error('NPC Codex native bundle exceeds the 32 MB safety limit even without source-history audit data.');
 }
 
 export function decodeDeltaNativeBundle(input) {
@@ -192,8 +192,8 @@ export function decodeDeltaNativeBundle(input) {
     const declaredContents = validateDeclaredContents(manifest.declaredContents);
     const portableSettings = validatePortableSettings(manifest.portableSettings);
     const historyArchive = validateHistoryArchive(manifest.historyArchive);
-    if (declaredContents?.portablePortraitSettings === true && !portableSettings) throw new Error('NPC State Delta native bundle declares portable portrait settings but does not contain them.');
-    if (declaredContents?.sourceHistoryAudit === true && !historyArchive) throw new Error('NPC State Delta native bundle declares source history but does not contain it.');
+    if (declaredContents?.portablePortraitSettings === true && !portableSettings) throw new Error('NPC Codex native bundle declares portable portrait settings but does not contain them.');
+    if (declaredContents?.sourceHistoryAudit === true && !historyArchive) throw new Error('NPC Codex native bundle declares source history but does not contain it.');
     return { ...canonical, declaredContents, portableSettings, historyArchive };
 }
 
@@ -221,14 +221,14 @@ function scrubSourceMessageOwnership(value) {
 
 export function nativeStateForTarget(decoded, targetChatKey) {
     const target = String(targetChatKey || '').trim();
-    if (!target || target === 'no-chat') throw new Error('Open the target chat before importing NPC State Delta data.');
+    if (!target || target === 'no-chat') throw new Error('Open the target chat before importing NPC Codex data.');
     return decoded.metadata.sourceChatKey !== target ? scrubSourceMessageOwnership(decoded.state) : decoded.state;
 }
 
 export function prepareNativeImport(input, targetChatKey) {
     const decoded = decodeDeltaNativeBundle(input);
     const target = String(targetChatKey || '').trim();
-    if (!target || target === 'no-chat') throw new Error('Open the target chat before importing NPC State Delta data.');
+    if (!target || target === 'no-chat') throw new Error('Open the target chat before importing NPC Codex data.');
     const foreignOwnership = decoded.metadata.sourceChatKey !== target;
     const safeState = nativeStateForTarget(decoded, target);
     const base = encodeNpcStateBundle(safeState, {

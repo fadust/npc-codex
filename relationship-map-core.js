@@ -1,4 +1,4 @@
-/* NPC State Delta relationship map primitives: pure layout, selection and bond rules over the
+/* NPC Codex relationship map primitives: pure layout, selection and bond rules over the
    dossier projection. No DOM, host or state access. */
 import { parseKeyRelationshipEntry, resolveNpcReference } from './social.js';
 

@@ -107,7 +107,7 @@ test('data-file API writes JSON bytes, reads them back, and deletes the sidecar'
     assert.equal(await readNpcStateDataFile(pointer, { fetchFn }), null);
 });
 
-test('sidecar read rejects a valid NPC State Delta payload belonging to another chat', async () => {
+test('sidecar read rejects a valid NPC Codex payload belonging to another chat', async () => {
     const text = encodeStateFilePayload('chat:other', { npcs: [createNpcRecord('Wiz')] }, '0.2.7');
     const fetchFn = async () => ({ ok: true, status: 200, text: async () => text });
     await assert.rejects(

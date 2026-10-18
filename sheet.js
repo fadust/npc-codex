@@ -1,4 +1,4 @@
-/* NPC State Delta: per-NPC stat sheet (fadust fork). "Who" lives on the Dossier tab; this is
+/* NPC Codex: per-NPC stat sheet (fadust fork). "Who" lives on the Dossier tab; this is
  * "what": class and rank, attributes, resource pools, conditions, spells, skills, equipment and
  * key items. Values are recorded only when the story states them; unknown stays empty.
  *

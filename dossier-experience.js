@@ -1,4 +1,4 @@
-/* NPC State Delta cohesive dossier experience refinement.
+/* NPC Codex cohesive dossier experience refinement.
  * Keeps canonical state/runtime owners while refining dossier actions, cast carousel,
  * adaptive editing, extension-wide settings actions, and explicit manual life-state correction.
  */
@@ -111,7 +111,13 @@ function ensureLibraryChrome(root) {
     if (heading.getAttribute?.('aria-expanded') !== expanded) heading.setAttribute('aria-expanded', expanded);
     const title = libraryCollapsed ? 'Show the dossier library' : 'Hide the dossier library for more reading space';
     if (heading.title !== title) heading.title = title;
-    root.querySelector?.('.delta-library')?.classList?.toggle?.('delta-library-collapsed', libraryCollapsed);
+    const toggle = root.querySelector('.npc-codex-toggle-cast');
+    root.querySelector?.('.delta-library')?.classList?.toggle?.('delta-library-collapsed', libraryCollapsed && !toggle);
+    root.querySelector?.('.delta-library')?.classList?.toggle?.('npc-codex-cast-collapsed', libraryCollapsed && Boolean(toggle));
+    if (toggle) {
+        setNodeTextIfChanged(toggle, libraryCollapsed ? 'Show NPC list' : 'Hide NPC list');
+        if (toggle.getAttribute('aria-expanded') !== expanded) toggle.setAttribute('aria-expanded', expanded);
+    }
 
     if (!list.parentElement?.classList?.contains('delta-cast-rail-wrap')) {
         const wrap = document.createElement('div');
@@ -375,9 +381,9 @@ function bindDocumentEvents() {
                     if (!npc) return;
                     const preserveChoice = editor.querySelector('[data-delta-life-state]')?.value !== requested;
                     syncEditorLifecycle(editor, npc, { preserveChoice });
-                    toast('success', `NPC State Delta: ${npc.name || 'NPC'} life state set to ${lifeStateChoice(npc)}.`);
+                    toast('success', `NPC Codex: ${npc.name || 'NPC'} life state set to ${lifeStateChoice(npc)}.`);
                 })
-                .catch(error => toast('error', `NPC State Delta life-state update failed: ${error?.message || error}`))
+                .catch(error => toast('error', `NPC Codex life-state update failed: ${error?.message || error}`))
                 .finally(() => { if (apply.isConnected) apply.disabled = false; });
             return;
         }
@@ -400,7 +406,7 @@ function bindDocumentEvents() {
             event.preventDefault();
             const controller = uiRoot()?.__npcStateDeltaStage1Ui;
             if (typeof controller?.open === 'function') void controller.open();
-            else toast('warning', 'NPC State Delta dossier UI is still mounting.');
+            else toast('warning', 'NPC Codex dossier UI is still mounting.');
         }
     });
 }
@@ -472,7 +478,7 @@ function installStyles() {
 #npc_state_delta_dossier_root .delta-cast-card{position:relative!important;isolation:isolate;flex:0 0 118px!important;width:118px!important;min-width:118px!important;height:132px!important;display:block!important;padding:0!important;overflow:hidden!important;text-align:left!important;border-radius:10px!important;scroll-snap-align:start;background:rgba(0,0,0,.28)!important}
 #npc_state_delta_dossier_root .delta-cast-card.selected{box-shadow:inset 0 0 0 1px var(--delta-accent),0 0 0 1px var(--delta-accent)!important}
 #npc_state_delta_dossier_root .delta-cast-portrait{position:absolute!important;z-index:0;inset:0!important;display:block!important;width:100%!important;height:100%!important;min-width:0!important;max-width:none!important;border:0!important;border-radius:0!important;object-fit:cover!important;object-position:center 18%!important}
-#npc_state_delta_dossier_root .delta-cast-portrait.delta-portrait-placeholder{display:grid!important;place-items:center!important;background:radial-gradient(circle at 50% 24%,rgba(216,188,120,.16),rgba(0,0,0,.48))!important}
+#npc_state_delta_dossier_root .delta-cast-portrait.delta-portrait-placeholder{display:grid!important;place-items:center!important;background:radial-gradient(circle at 50% 24%,rgba(91,201,189,.16),rgba(0,0,0,.48))!important}
 #npc_state_delta_dossier_root .delta-cast-portrait.delta-portrait-placeholder span{font-size:2.4rem!important;opacity:.8}
 #npc_state_delta_dossier_root .delta-cast-copy{position:absolute!important;z-index:2;left:0;right:0;bottom:0;display:grid!important;align-content:end!important;gap:1px!important;min-width:0!important;padding:28px 7px 7px!important;color:#f6f1e7!important;background:linear-gradient(to bottom,transparent,rgba(5,6,8,.76) 44%,rgba(5,6,8,.96) 100%)}
 #npc_state_delta_dossier_root .delta-cast-copy b{font-size:.76rem!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff7e3!important;text-shadow:0 1px 2px rgba(0,0,0,.9)}
@@ -484,7 +490,7 @@ function installStyles() {
 #npc_state_delta_dossier_root .delta-cast-card[data-bucket="dead"] .delta-cast-portrait{filter:grayscale(.8)}
 #npc_state_delta_dossier_root .delta-cast-card[data-bucket="dead"] .delta-cast-portrait.delta-portrait-placeholder span{font-size:1.6rem!important}
 #npc_state_delta_dossier_root .delta-cast-card[data-bucket="dead"] .delta-cast-copy small{display:none!important}
-#npc_state_delta_dossier_root .delta-cast-card.delta-cast-first-dead{margin-left:14px!important;box-shadow:-9px 0 0 -8px rgba(218,193,148,.45)}
+#npc_state_delta_dossier_root .delta-cast-card.delta-cast-first-dead{margin-left:14px!important;box-shadow:-9px 0 0 -8px rgba(91,201,189,.45)}
 #npc_state_delta_dossier_root .delta-rail-arrow{appearance:none;border:0;background:transparent;color:var(--delta-muted);font-size:1.9rem;line-height:1;cursor:pointer;border-radius:7px;padding:0}
 #npc_state_delta_dossier_root .delta-rail-arrow:hover{color:var(--delta-accent-soft);background:rgba(255,255,255,.05)}
 
@@ -507,19 +513,19 @@ function installStyles() {
 .npc-state-delta-editor-popup .popup-content{display:flex!important;flex-direction:column!important;min-height:0!important;max-height:none!important;overflow:hidden!important}
 .npc-state-delta-editor-popup #npc_state_delta_editor_content{flex:1 1 auto!important;min-height:0!important;max-height:calc(var(--delta-editor-height) - 112px)!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain;padding-right:8px;scrollbar-gutter:stable}
 .npc-state-delta-editor-popup .npc-state-delta-editor-portrait-overrides{display:none!important}
-.npc-state-delta-editor-popup .npc-state-delta-editor-head{position:sticky;top:0;z-index:4;margin:-1px -1px 12px;padding:10px 2px 9px;background:color-mix(in srgb,var(--SmartThemeBlurTintColor,#18191d) 96%,black 4%);border-bottom:1px solid rgba(218,193,148,.14)}
-.npc-state-delta-editor-popup .delta-editor-section{margin:12px 0;padding:13px;border:1px solid rgba(218,193,148,.16);border-radius:10px;background:rgba(255,255,255,.025)}
+.npc-state-delta-editor-popup .npc-state-delta-editor-head{position:sticky;top:0;z-index:4;margin:-1px -1px 12px;padding:10px 2px 9px;background:color-mix(in srgb,var(--SmartThemeBlurTintColor,#18191d) 96%,black 4%);border-bottom:1px solid rgba(91,201,189,.14)}
+.npc-state-delta-editor-popup .delta-editor-section{margin:12px 0;padding:13px;border:1px solid rgba(91,201,189,.16);border-radius:10px;background:rgba(255,255,255,.025)}
 .npc-state-delta-editor-popup .delta-editor-section>h4{margin:0 0 11px;color:#e3c985;font-size:.84rem;letter-spacing:.08em;text-transform:uppercase}
 .npc-state-delta-editor-popup .delta-editor-section-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
 .npc-state-delta-editor-popup .delta-editor-section-grid>label{display:grid;gap:5px;margin:0;min-width:0}
 .npc-state-delta-editor-popup .delta-editor-section-grid>.delta-editor-wide{grid-column:1/-1}
 .npc-state-delta-editor-popup .delta-editor-section-grid textarea{resize:vertical;max-width:100%}
 .npc-state-delta-editor-popup .npc-state-delta-editor-stats{grid-column:1/-1;margin:2px 0 0}
-.npc-state-delta-editor-popup .delta-editor-advanced{margin:12px 0;border:1px solid rgba(218,193,148,.19);border-radius:10px;overflow:hidden}
-.npc-state-delta-editor-popup .delta-editor-advanced>summary{display:flex;align-items:baseline;gap:9px;padding:11px 13px;cursor:pointer;color:#e3c985;background:rgba(216,188,120,.045)}
+.npc-state-delta-editor-popup .delta-editor-advanced{margin:12px 0;border:1px solid rgba(91,201,189,.19);border-radius:10px;overflow:hidden}
+.npc-state-delta-editor-popup .delta-editor-advanced>summary{display:flex;align-items:baseline;gap:9px;padding:11px 13px;cursor:pointer;color:#e3c985;background:rgba(91,201,189,.045)}
 .npc-state-delta-editor-popup .delta-editor-advanced>summary small{color:var(--SmartThemeBodyColor,#ddd);opacity:.55;font-weight:400}
 .npc-state-delta-editor-popup .delta-editor-advanced-body{display:grid;gap:10px;padding:12px 13px}
-.npc-state-delta-editor-popup .delta-editor-life-control{display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:8px 10px;align-items:end;margin:0;padding:11px;border:1px solid rgba(218,193,148,.14);border-radius:9px;background:rgba(255,255,255,.035)}
+.npc-state-delta-editor-popup .delta-editor-life-control{display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:8px 10px;align-items:end;margin:0;padding:11px;border:1px solid rgba(91,201,189,.14);border-radius:9px;background:rgba(255,255,255,.035)}
 .npc-state-delta-editor-popup .delta-editor-life-control label{display:grid;gap:5px;margin:0}
 .npc-state-delta-editor-popup .delta-editor-life-control small{grid-column:1/-1;opacity:.72}
 .npc-state-delta-editor-popup .delta-editor-life-control>.menu_button{width:auto;white-space:nowrap;margin:0}

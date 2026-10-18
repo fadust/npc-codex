@@ -1,6 +1,6 @@
 import { ACTOR_OWNERS, resolveActor, actorProfiles, readStoryContinuity } from './actor-stack.js';
 import { PORTRAYAL_REFERENCES, acceptPortrayal, renderPortrayal } from './actor-portrayal.js';
-/* NPC State Delta - standalone SillyTavern extension */
+/* NPC Codex - standalone SillyTavern extension */
 import { extension_settings, getContext } from '../../../extensions.js';
 import { extension_prompt_types, extension_prompt_roles, getRequestHeaders, saveSettings as saveHostSettings } from '../../../../script.js';
 import {
@@ -277,7 +277,7 @@ const scanOperations = createScanOperationRegistry({
     timeoutMs: SCAN_OPERATION_TIMEOUT_MS,
     onExpire: operation => {
         operation.requestController?.abort(scannerRoutingError('The owning scan expired.', 'NPC_SCANNER_ROUTE_TIMEOUT'));
-        console.warn(`[NPC State Delta] ${operation.label} exceeded the scan timeout for ${operation.key}; the lock was released and any late result will be discarded.`);
+        console.warn(`[NPC Codex] ${operation.label} exceeded the scan timeout for ${operation.key}; the lock was released and any late result will be discarded.`);
         try {
             if (getChatKey() !== operation.key) return;
             setScanIndicator(false);
@@ -291,7 +291,7 @@ const scanOperations = createScanOperationRegistry({
                 }, 0);
             }
         } catch (error) {
-            console.debug('[NPC State Delta] scan-timeout indicator cleanup skipped', error);
+            console.debug('[NPC Codex] scan-timeout indicator cleanup skipped', error);
         }
     },
 });
@@ -345,7 +345,7 @@ async function scanCanonicalBaseCurrent(key, operation, label = 'scan') {
             serverRevision: hydratedStateMeta.get(key)?.latestObservedServerRevision ?? currentRevision,
             dirty: false,
         });
-        console.info(`[NPC State Delta] rejected stale ${label} result because the canonical sidecar advanced from revision ${baseRevision} to ${currentRevision}.`);
+        console.info(`[NPC Codex] rejected stale ${label} result because the canonical sidecar advanced from revision ${baseRevision} to ${currentRevision}.`);
     }
     return current;
 }
@@ -648,7 +648,7 @@ function resolveOwnedChatKey(rawId, kind = 'chat', ownerId = undefined) {
     const candidates = liveLifecycleCandidateKeys(settings, chatStateCache.keys(), kind, id);
     const resolved = resolveOwnedLifecycleKey(candidates, kind, id, resolvedOwner, ownerWasProvided);
     if (!resolved && candidates.length > 1) {
-        console.warn(`[NPC State Delta] refused ambiguous ${kind} lifecycle lookup for ${id}; ${candidates.length} live owner-qualified states share that chat id.`);
+        console.warn(`[NPC Codex] refused ambiguous ${kind} lifecycle lookup for ${id}; ${candidates.length} live owner-qualified states share that chat id.`);
     }
     return resolved;
 }
@@ -674,7 +674,7 @@ async function hostCharacterChatPresence(ownerId, rawId) {
         const chats = Array.isArray(data) ? data : Object.values(data);
         return chats.some(item => String(item?.file_name ?? item?.fileName ?? item?.name ?? '').replace(/\.jsonl$/i, '').trim() === id);
     } catch (error) {
-        console.debug(`[NPC State Delta] host ownership probe failed for ${owner}/${id}.`, error);
+        console.debug(`[NPC Codex] host ownership probe failed for ${owner}/${id}.`, error);
         return null;
     }
 }
@@ -711,16 +711,16 @@ async function resolveDeletedChatKey(rawId, kind = 'chat', ownerId = '') {
         presence.push({ key, value });
     }
     if (presence.some(item => item.value === null)) {
-        const error = new Error(`NPC State Delta could not prove deleted ${kind} ${id} ownership because the SillyTavern ownership probe was unavailable.`);
+        const error = new Error(`NPC Codex could not prove deleted ${kind} ${id} ownership because the SillyTavern ownership probe was unavailable.`);
         error.code = 'NPC_STATE_DELETE_OWNERSHIP_UNAVAILABLE';
         throw error;
     }
     const resolved = resolveDeletedLifecycleKeyFromPresence(candidates, presence);
     if (resolved) {
-        console.info(`[NPC State Delta] resolved deleted ${kind} ${id} from authoritative host ownership: ${resolved}.`);
+        console.info(`[NPC Codex] resolved deleted ${kind} ${id} from authoritative host ownership: ${resolved}.`);
         return resolved;
     }
-    console.warn(`[NPC State Delta] preserved deleted ${kind} ${id}; host ownership did not prove one unique removed owner.`);
+    console.warn(`[NPC Codex] preserved deleted ${kind} ${id}; host ownership did not prove one unique removed owner.`);
     return '';
 }
 
@@ -778,7 +778,7 @@ function ownershipEpochCurrent(key, epoch) {
 }
 
 function staleOwnershipError(key) {
-    const error = new Error(`NPC State Delta ownership changed while loading ${key}; stale completion was discarded.`);
+    const error = new Error(`NPC Codex ownership changed while loading ${key}; stale completion was discarded.`);
     error.code = 'NPC_STATE_STALE_OWNERSHIP';
     return error;
 }
@@ -956,7 +956,7 @@ function localWorkingStateDirty(key = getChatKey()) {
 }
 
 function makeRevisionConflict(key, expectedRevision, actualRevision, message = '') {
-    const error = new Error(message || `NPC State Delta sidecar changed in another session (expected revision ${expectedRevision}, found ${actualRevision}).`);
+    const error = new Error(message || `NPC Codex sidecar changed in another session (expected revision ${expectedRevision}, found ${actualRevision}).`);
     error.code = 'NPC_STATE_WRITE_CONFLICT';
     error.expectedRevision = Number.isFinite(Number(expectedRevision)) ? Math.max(0, Math.trunc(Number(expectedRevision))) : null;
     error.actualRevision = Number.isFinite(Number(actualRevision)) ? Math.max(0, Math.trunc(Number(actualRevision))) : null;
@@ -966,9 +966,9 @@ function makeRevisionConflict(key, expectedRevision, actualRevision, message = '
 
 function installCanonicalServerState(key, pointer, inspected, { reason = 'freshness-check', dirtyConflict = false } = {}) {
     const settings = getSettings();
-    if (!inspected?.exists || !inspected?.payload) throw new Error(`NPC State Delta canonical sidecar for ${key} is unavailable.`);
+    if (!inspected?.exists || !inspected?.payload) throw new Error(`NPC Codex canonical sidecar for ${key} is unavailable.`);
     if (inspected.retired) {
-        const error = new Error(`NPC State Delta sidecar for ${key} was retired by another session. Reload or switch chats before making dossier changes.`);
+        const error = new Error(`NPC Codex sidecar for ${key} was retired by another session. Reload or switch chats before making dossier changes.`);
         error.code = 'NPC_STATE_SIDECAR_RETIRED';
         retiredInSessionChats.set(key, error);
         holdRetiredLocalWork(key);
@@ -1033,7 +1033,7 @@ async function reconcileCrossSessionWriteConflict(key, error, snapshot, knownPoi
     });
     if (inspected.exists) {
         installCanonicalServerState(normalized, pointer, inspected, { reason: 'guarded-write-conflict', dirtyConflict: true });
-        if (getChatKey() === normalized) globalThis.toastr?.warning?.('NPC State Delta: another session saved a newer dossier first. This local change was preserved for recovery and was not allowed to overwrite the server copy.');
+        if (getChatKey() === normalized) globalThis.toastr?.warning?.('NPC Codex: another session saved a newer dossier first. This local change was preserved for recovery and was not allowed to overwrite the server copy.');
     }
     return inspected;
 }
@@ -1089,7 +1089,7 @@ async function ensureHydratedStateFresh(key = getChatKey(), { reason = 'boundary
         });
 
         if (!inspected.exists) {
-            const error = makeRevisionConflict(normalized, localRevision, null, `NPC State Delta canonical sidecar for ${normalized} disappeared from the SillyTavern server. Refusing to recreate it from a cached browser copy.`);
+            const error = makeRevisionConflict(normalized, localRevision, null, `NPC Codex canonical sidecar for ${normalized} disappeared from the SillyTavern server. Refusing to recreate it from a cached browser copy.`);
             recordFreshnessEvent(normalized, 'sidecar-missing', { reason, hydratedRevision: localRevision, serverRevision: 0, dirty: localWorkingStateDirty(normalized) });
             throw error;
         }
@@ -1107,8 +1107,8 @@ async function ensureHydratedStateFresh(key = getChatKey(), { reason = 'boundary
                 localRevision,
                 inspected.revision,
                 writerFork
-                    ? `NPC State Delta detected a same-revision writer conflict at revision ${localRevision}. Another session replaced that revision with a different writer; this session's working copy was preserved for recovery and was not republished.`
-                    : `NPC State Delta detected newer canonical server revision ${inspected.revision} while this session still had unsaved work based on revision ${localRevision}. The local work was preserved for recovery and was not published.`,
+                    ? `NPC Codex detected a same-revision writer conflict at revision ${localRevision}. Another session replaced that revision with a different writer; this session's working copy was preserved for recovery and was not republished.`
+                    : `NPC Codex detected newer canonical server revision ${inspected.revision} while this session still had unsaved work based on revision ${localRevision}. The local work was preserved for recovery and was not published.`,
             )
             : null;
 
@@ -1134,8 +1134,8 @@ async function ensureHydratedStateFresh(key = getChatKey(), { reason = 'boundary
             // another session, so it is always reported, even from a background freshness check.
             if (preserveLocal && (notify || writerFork)) globalThis.toastr?.warning?.(
                 writerFork
-                    ? 'NPC State Delta: another session replaced the same server revision. This session copy was preserved for recovery; the server copy is now active.'
-                    : 'NPC State Delta: another session advanced this chat. Unsaved local dossier work was preserved for recovery; the server copy is now active.',
+                    ? 'NPC Codex: another session replaced the same server revision. This session copy was preserved for recovery; the server copy is now active.'
+                    : 'NPC Codex: another session advanced this chat. Unsaved local dossier work was preserved for recovery; the server copy is now active.',
             );
             if (writerFork) recordFreshnessEvent(normalized, 'same-revision-writer-conflict', { reason, hydratedRevision: localRevision, serverRevision: inspected.revision, dirty: true });
             return state;
@@ -1153,13 +1153,13 @@ async function ensureHydratedStateFresh(key = getChatKey(), { reason = 'boundary
 async function ensureFreshMutationBoundary(action, key = getChatKey(), { notify = true } = {}) {
     const normalized = String(key || '');
     if (!normalized || normalized === 'no-chat' || !isCanonicalChatKey(normalized)) {
-        if (notify) globalThis.toastr?.warning?.(`NPC State Delta: open a chat before attempting to ${action}.`);
+        if (notify) globalThis.toastr?.warning?.(`NPC Codex: open a chat before attempting to ${action}.`);
         return false;
     }
     try {
         await ensureChatStateLoaded(normalized);
     } catch (error) {
-        if (notify) globalThis.toastr?.warning?.(`NPC State Delta: cannot ${action} because the canonical server dossier could not be verified. ${error?.message || error}`);
+        if (notify) globalThis.toastr?.warning?.(`NPC Codex: cannot ${action} because the canonical server dossier could not be verified. ${error?.message || error}`);
         return false;
     }
     if (getChatKey() !== normalized || !requireReadyChatMutation(action, normalized, { notify })) return false;
@@ -1182,17 +1182,17 @@ function chatHydrationStatus(key = getChatKey()) {
 function assertChatHydratedForWrite(key = getChatKey()) {
     if (!key || key === 'no-chat') return;
     const pointer = getSettings().dataFiles?.[key];
-    if (pointer?.path && !hydratedChatKeys.has(key)) throw new Error('Refusing to overwrite unhydrated NPC State Delta sidecar for ' + key + '.');
+    if (pointer?.path && !hydratedChatKeys.has(key)) throw new Error('Refusing to overwrite unhydrated NPC Codex sidecar for ' + key + '.');
 }
 
-function requireReadyChatMutation(action = 'modify NPC State Delta', key = getChatKey(), { notify = true } = {}) {
+function requireReadyChatMutation(action = 'modify NPC Codex', key = getChatKey(), { notify = true } = {}) {
     if (!key || key === 'no-chat' || !isCanonicalChatKey(key)) {
-        if (notify) globalThis.toastr?.warning?.(`NPC State Delta: open a chat before attempting to ${action}.`);
+        if (notify) globalThis.toastr?.warning?.(`NPC Codex: open a chat before attempting to ${action}.`);
         return false;
     }
     if (chatHydrationStatus(key) === 'ready') return true;
     const error = hydrationErrors.get(key);
-    if (notify) globalThis.toastr?.warning?.(`NPC State Delta: cannot ${action} until this chat dossier loads successfully.${error?.message ? ` ${error.message}` : ''}`);
+    if (notify) globalThis.toastr?.warning?.(`NPC Codex: cannot ${action} until this chat dossier loads successfully.${error?.message ? ` ${error.message}` : ''}`);
     return false;
 }
 
@@ -1204,11 +1204,11 @@ async function retryCurrentChatHydration() {
         if (getChatKey() !== key) return false;
         renderDossier();
         updateInjection();
-        globalThis.toastr?.success?.('NPC State Delta: chat dossier loaded successfully.');
+        globalThis.toastr?.success?.('NPC Codex: chat dossier loaded successfully.');
         return true;
     } catch (error) {
         if (getChatKey() === key) { renderDossier(); updateInjection(); }
-        globalThis.toastr?.error?.(`NPC State Delta still cannot load this chat dossier: ${error?.message || error}`);
+        globalThis.toastr?.error?.(`NPC Codex still cannot load this chat dossier: ${error?.message || error}`);
         return false;
     }
 }
@@ -1218,7 +1218,7 @@ async function detachBrokenSidecar() {
     const settings = getSettings();
     const pointer = settings.dataFiles?.[key] || null;
     if (!isCanonicalChatKey(key) || !pointer?.path || chatHydrationStatus(key) !== 'error') return false;
-    if (!window.confirm('Detach the broken NPC State Delta sidecar for this chat and start a fresh empty dossier? The old pointer is retained under recovery metadata and is not deleted automatically.')) return false;
+    if (!window.confirm('Detach the broken NPC Codex sidecar for this chat and start a fresh empty dossier? The old pointer is retained under recovery metadata and is not deleted automatically.')) return false;
     let preserved = null;
     let registered = false;
     const registerBackup = copy => {
@@ -1229,10 +1229,10 @@ async function detachBrokenSidecar() {
     try {
         preserved = await quarantineUnreadableNpcStateDataFile({ chatKey: key, pointer, appVersion: NPC_STATE_VERSION, headers: requestHeaders(), onPreserved: registerBackup });
     } catch (error) {
-        console.error('[NPC State Delta] broken sidecar detach did not complete.', error);
+        console.error('[NPC Codex] broken sidecar detach did not complete.', error);
         globalThis.toastr?.error?.(registered
-            ? `NPC State Delta: the broken sidecar was preserved and its backup registered, but detaching did not complete. Retry Detach. ${error?.message || error}`
-            : `NPC State Delta: the broken sidecar could not be preserved, so it was not detached. ${error?.message || error}`);
+            ? `NPC Codex: the broken sidecar was preserved and its backup registered, but detaching did not complete. Retry Detach. ${error?.message || error}`
+            : `NPC Codex: the broken sidecar could not be preserved, so it was not detached. ${error?.message || error}`);
         return false;
     }
     if (getChatKey() !== key) return false;
@@ -1262,7 +1262,7 @@ async function detachBrokenSidecar() {
     persistSettings();
     renderDossier();
     updateInjection();
-    globalThis.toastr?.warning?.('NPC State Delta: broken sidecar detached. The chat now has a fresh dossier; the previous pointer remains in recovery metadata.');
+    globalThis.toastr?.warning?.('NPC Codex: broken sidecar detached. The chat now has a fresh dossier; the previous pointer remains in recovery metadata.');
     return true;
 }
 
@@ -1325,7 +1325,7 @@ async function ensureChatStateLoaded(key = getChatKey()) {
             delete settings.dataFiles[key];
             pointer = null;
             persistSettings();
-            console.warn(`[NPC State Delta] ignored live sidecar pointer for tombstoned ${key}; destructive tombstone remains authoritative.`);
+            console.warn(`[NPC Codex] ignored live sidecar pointer for tombstoned ${key}; destructive tombstone remains authoritative.`);
         }
         if (!pointer?.path && !tombstoned) {
             const recoveryName = makeNpcStateDataFileName(key);
@@ -1348,7 +1348,7 @@ async function ensureChatStateLoaded(key = getChatKey()) {
                         pointer = recoveryPointer;
                         settings.dataFiles[key] = recoveryPointer;
                         persistSettings();
-                        console.info(`[NPC State Delta] recovered deterministic sidecar pointer for ${key}.`);
+                        console.info(`[NPC Codex] recovered deterministic sidecar pointer for ${key}.`);
                     }
                     break;
                 } catch (error) {
@@ -1362,7 +1362,7 @@ async function ensureChatStateLoaded(key = getChatKey()) {
             }
             if (discoveryError) {
                 hydrationErrors.set(key, discoveryError);
-                console.error(`[NPC State Delta] Could not read the existing data file for ${key}; blocking writes instead of starting an empty dossier.`, discoveryError);
+                console.error(`[NPC Codex] Could not read the existing data file for ${key}; blocking writes instead of starting an empty dossier.`, discoveryError);
                 throw discoveryError;
             }
         }
@@ -1383,7 +1383,7 @@ async function ensureChatStateLoaded(key = getChatKey()) {
                     if (payload?.state) {
                         loaded = payload.state;
                         loadedUndurable = payload.undurable === true;
-                    } else throw new Error('NPC State Delta sidecar returned no state payload.');
+                    } else throw new Error('NPC Codex sidecar returned no state payload.');
                 } catch (error) {
                     if (error?.code === 'NPC_STATE_STALE_OWNERSHIP') throw error;
                     lastError = error;
@@ -1394,9 +1394,9 @@ async function ensureChatStateLoaded(key = getChatKey()) {
                 }
             }
             if (pointer?.path && !loaded) {
-                hydrationErrors.set(key, lastError || new Error('NPC State Delta sidecar could not be loaded.'));
-                console.error(`[NPC State Delta] Could not hydrate data file for ${key}; preserving the sidecar and blocking writes.`, lastError);
-                throw lastError || new Error('NPC State Delta could not hydrate ' + key + '.');
+                hydrationErrors.set(key, lastError || new Error('NPC Codex sidecar could not be loaded.'));
+                console.error(`[NPC Codex] Could not hydrate data file for ${key}; preserving the sidecar and blocking writes.`, lastError);
+                throw lastError || new Error('NPC Codex could not hydrate ' + key + '.');
             }
         }
         assertOwnershipEpoch(key, epoch);
@@ -1430,7 +1430,7 @@ function markStateDirty(key = getChatKey()) {
 function queueStateFileWrite(key = getChatKey(), delay = STATE_WRITE_DELAY) {
     if (!key || key === 'no-chat' || !isCanonicalChatKey(key) || !chatStateCache.has(key)) return;
     if (chatHydrationStatus(key) !== 'ready') {
-        console.warn(`[NPC State Delta] refused to queue an unhydrated state write for ${key}.`);
+        console.warn(`[NPC Codex] refused to queue an unhydrated state write for ${key}.`);
         return;
     }
     markStateDirty(key);
@@ -1438,8 +1438,8 @@ function queueStateFileWrite(key = getChatKey(), delay = STATE_WRITE_DELAY) {
     stateWriteTimers.set(key, setTimeout(() => {
         stateWriteTimers.delete(key);
         flushStateFile(key).catch(error => {
-            console.error('[NPC State Delta] data-file persistence failed', error);
-            globalThis.toastr?.error?.('NPC State Delta could not save its chat data file. Check the browser/server console.');
+            console.error('[NPC Codex] data-file persistence failed', error);
+            globalThis.toastr?.error?.('NPC Codex could not save its chat data file. Check the browser/server console.');
         });
     }, Math.max(0, Number(delay) || 0)));
 }
@@ -1479,7 +1479,7 @@ async function flushStateFile(key = getChatKey()) {
             } catch (error) {
                 if (error?.code === 'NPC_STATE_WRITE_CONFLICT' && ownershipEpochCurrent(key, epoch)) {
                     try { await reconcileCrossSessionWriteConflict(key, error, snapshot, settings.dataFiles?.[key] || pointer); }
-                    catch (reconcileError) { console.warn('[NPC State Delta] write conflict recovery could not hydrate the newer canonical sidecar yet.', reconcileError); }
+                    catch (reconcileError) { console.warn('[NPC Codex] write conflict recovery could not hydrate the newer canonical sidecar yet.', reconcileError); }
                 }
                 throw error;
             }
@@ -1519,7 +1519,7 @@ async function settleStateFileWrite(key, { flush = false } = {}) {
 
 function persist(key = getChatKey()) {
     if (!requireReadyChatMutation('save chat dossier changes', key, { notify: false })) {
-        console.warn(`[NPC State Delta] refused to persist unhydrated chat state for ${key}.`);
+        console.warn(`[NPC Codex] refused to persist unhydrated chat state for ${key}.`);
         return false;
     }
     persistSettings();
@@ -1532,8 +1532,8 @@ function persistCritical(key = getChatKey()) {
     persistSettings();
     markStateDirty(key);
     void flushStateFile(key).catch(error => {
-        console.error('[NPC State Delta] critical data-file persistence failed', error);
-        globalThis.toastr?.error?.('NPC State Delta could not immediately save a critical dossier change.');
+        console.error('[NPC Codex] critical data-file persistence failed', error);
+        globalThis.toastr?.error?.('NPC Codex could not immediately save a critical dossier change.');
     });
     return true;
 }
@@ -1548,7 +1548,7 @@ async function persistCriticalDurable(key = getChatKey()) {
         await flushStateFile(key);
         return true;
     } catch (error) {
-        console.error('[NPC State Delta] critical data-file persistence failed', error);
+        console.error('[NPC Codex] critical data-file persistence failed', error);
         return false;
     }
 }
@@ -1645,7 +1645,7 @@ function queueSettledSwipeReconcile(options = {}) {
                 swipeSettlementTimer = null;
                 swipeSettlementPending = null;
                 deferredSwipeMessageId = null;
-                console.warn('[NPC State Delta] swipe stayed active too long; branch rescan was skipped to avoid hijacking the host generation pipeline.');
+                console.warn('[NPC Codex] swipe stayed active too long; branch rescan was skipped to avoid hijacking the host generation pipeline.');
                 return;
             }
             swipeSettlementTimer = setTimeout(poll, SWIPE_SETTLE_POLL_MS);
@@ -1676,12 +1676,12 @@ function queueSettledSwipeReconcile(options = {}) {
                 if (targetAssistant >= 0) await scanNow({ manual: false, messageId: targetAssistant, allowDuringSwipe: true });
             }
         } catch (error) {
-            console.warn('[NPC State Delta] settled swipe reconciliation failed', error);
+            console.warn('[NPC Codex] settled swipe reconciliation failed', error);
         }
     };
 
     // The host emits MESSAGE_SWIPED before Generate('swipe'). Polling the host's own
-    // swipe state keeps NPC State Delta completely out of that pre-generation gap.
+    // swipe state keeps NPC Codex completely out of that pre-generation gap.
     swipeSettlementTimer = setTimeout(poll, 0);
 }
 
@@ -1777,7 +1777,7 @@ async function maybeInheritKnownBranch() {
         const hasExplicitParent = Boolean(explicitParentKey && explicitParentKey !== key);
         if (!hasExplicitParent) return false;
 
-        await ensureChatStateLoaded(explicitParentKey).catch(error => console.debug(`[NPC State Delta] explicit branch parent ${explicitParentKey} could not be hydrated.`, error));
+        await ensureChatStateLoaded(explicitParentKey).catch(error => console.debug(`[NPC Codex] explicit branch parent ${explicitParentKey} could not be hydrated.`, error));
         if (getChatKey() !== key || firstLineageDivergence(lineageAtStart, chatLineage(getContext().chat || [])) !== -1) return false;
         const parentState = chatStateCache.get(explicitParentKey);
         const inherited = bestAncestorState(parentState ? { [explicitParentKey]: parentState } : {}, key, chat);
@@ -1870,7 +1870,7 @@ async function reconcileCurrentBranch({ explicitDivergence = null, rescan = true
     // A message deleted from the middle keeps the dossiers (later messages depend on them), except
     // what the deleted message itself changed and nothing later touched, which is undone exactly.
     if (result.rewoundToBoundary) {
-        globalThis.toastr?.info?.('NPC State Delta: a message was deleted from the middle of the chat, so every dossier was rewound to how it was just before it. Changes made by the messages after it were discarded.');
+        globalThis.toastr?.info?.('NPC Codex: a message was deleted from the middle of the chat, so every dossier was rewound to how it was just before it. Changes made by the messages after it were discarded.');
     } else if (result.failClosed && result.recoveryBlockedByRetainedDescendants && result.recoveryOperation === 'delete') {
         const names = list => {
             const values = (Array.isArray(list) ? list : []).map(item => item.name).filter(Boolean);
@@ -1882,8 +1882,8 @@ async function reconcileCurrentBranch({ explicitDivergence = null, rescan = true
         if (reverted.length) parts.push(`reverted what the deleted message changed for ${names(reverted)}`);
         if (removed.length) parts.push(`removed ${names(removed)}, who only appeared in it`);
         globalThis.toastr?.info?.(parts.length
-            ? `NPC State Delta: a message was deleted from the middle of the chat. Later messages depend on the dossiers, so they were kept, but Delta ${parts.join(' and ')}. Anything a later message also changed was left as it is.`
-            : 'NPC State Delta: a message was deleted from the middle of the chat. Later messages depend on the dossiers, so they were kept as they are; edit them manually if the deleted message had changed anything.');
+            ? `NPC Codex: a message was deleted from the middle of the chat. Later messages depend on the dossiers, so they were kept, but Delta ${parts.join(' and ')}. Anything a later message also changed was left as it is.`
+            : 'NPC Codex: a message was deleted from the middle of the chat. Later messages depend on the dossiers, so they were kept as they are; edit them manually if the deleted message had changed anything.');
     }
 
     const targetAssistant = findLatestAssistantAtOrAfter(result.divergence);
@@ -1968,7 +1968,7 @@ function queueBranchReconcile(options = {}, delay = 90) {
             if (pending.chatKey && getChatKey() !== pending.chatKey) return;
             await reconcileCurrentBranch(pending);
         } catch (error) {
-            console.warn('[NPC State Delta] branch reconciliation failed', error);
+            console.warn('[NPC Codex] branch reconciliation failed', error);
         }
     }, delay);
 }
@@ -2017,7 +2017,7 @@ async function loadLatestLifecycleState(key, pointer = null, inlineState = null,
             if (!fallbackOnMissing) return null;
         } catch (error) {
             if (!fallbackOnMissing) throw error;
-            console.warn(`[NPC State Delta] lifecycle recovery could not read ${pointer.path}; falling back to the settled cache/inline state.`, error);
+            console.warn(`[NPC Codex] lifecycle recovery could not read ${pointer.path}; falling back to the settled cache/inline state.`, error);
         }
     }
     if (hydratedChatKeys.has(key) && chatStateCache.has(key)) return structuredClone(getChatState(key));
@@ -2037,7 +2037,7 @@ async function removeDeletedChatState(rawId, kind = 'chat', ownerId = '') {
         try { await settleStateFileWrite(key, { flush: true }); }
         catch (error) {
             if (error?.code !== 'NPC_STATE_WRITE_CONFLICT') throw error;
-            console.info(`[NPC State Delta] delete observed a newer writer for ${key}; refreshing before retirement.`);
+            console.info(`[NPC Codex] delete observed a newer writer for ${key}; refreshing before retirement.`);
         }
         pointer = settings.dataFiles?.[key] || pointer;
 
@@ -2065,7 +2065,7 @@ async function removeDeletedChatState(rawId, kind = 'chat', ownerId = '') {
                 break;
             } catch (error) {
                 if (error?.retirementUncertain || error?.code !== 'NPC_STATE_WRITE_CONFLICT' || attempt >= 3) throw error;
-                console.info(`[NPC State Delta] delete retirement raced another writer for ${key}; retrying from the newest revision.`);
+                console.info(`[NPC Codex] delete retirement raced another writer for ${key}; retrying from the newest revision.`);
             }
         }
         if (!retired) return false;
@@ -2076,15 +2076,15 @@ async function removeDeletedChatState(rawId, kind = 'chat', ownerId = '') {
             if (recoveryPointer?.path) {
                 settings.recoveryFiles[key] = { ...recoveryPointer, reason: 'chat-delete-retirement-uncertain', retiredAt: Date.now() };
                 persistSettings();
-                try { await saveHostSettings(); } catch (saveError) { console.warn(`[NPC State Delta] recovery registration for ${key} could not be persisted immediately.`, saveError); }
+                try { await saveHostSettings(); } catch (saveError) { console.warn(`[NPC Codex] recovery registration for ${key} could not be persisted immediately.`, saveError); }
             }
-            console.warn(`[NPC State Delta] chat deletion could not confirm retirement of ${key}; kept the recovery copy.`, error);
+            console.warn(`[NPC Codex] chat deletion could not confirm retirement of ${key}; kept the recovery copy.`, error);
             throw error;
         }
         if (recoveryPointer?.path) {
             try { await deleteNpcStateDataFile(recoveryPointer, { headers: requestHeaders() }); } catch { queueRecoveryGarbagePointer(recoveryPointer, 'chat-lifecycle-temp'); }
         }
-        console.warn(`[NPC State Delta] refused destructive retirement for ${key}; live ownership remains intact.`, error);
+        console.warn(`[NPC Codex] refused destructive retirement for ${key}; live ownership remains intact.`, error);
         throw error;
     }
 
@@ -2098,11 +2098,11 @@ async function removeDeletedChatState(rawId, kind = 'chat', ownerId = '') {
         await saveHostSettings();
         tombstoneDurable = true;
     } catch (error) {
-        console.warn(`[NPC State Delta] chat deletion tombstone for ${key} could not be synchronously persisted; the retired sidecar is being retained as the crash-safe marker.`, error);
+        console.warn(`[NPC Codex] chat deletion tombstone for ${key} could not be synchronously persisted; the retired sidecar is being retained as the crash-safe marker.`, error);
     }
     if (tombstoneDurable && pointer?.path) {
         try { await deleteNpcStateDataFile(pointer, { headers: requestHeaders() }); }
-        catch (error) { console.warn(`[NPC State Delta] retired sidecar for ${key} could not be physically deleted; the durable tombstone still prevents recovery.`, error); }
+        catch (error) { console.warn(`[NPC Codex] retired sidecar for ${key} could not be physically deleted; the durable tombstone still prevents recovery.`, error); }
     }
     return true;
 }
@@ -2127,13 +2127,13 @@ async function moveRenamedChatState(eventData = {}) {
     let destinationState = null;
     if (destinationPointer?.path) {
         try { destinationState = await loadLatestLifecycleState(newKey, destinationPointer); }
-        catch (error) { console.warn(`[NPC State Delta] rename could not verify destination ${newKey}.`, error); return false; }
+        catch (error) { console.warn(`[NPC Codex] rename could not verify destination ${newKey}.`, error); return false; }
     }
     const destinationCache = chatStateCache.get(newKey) || null;
     const destinationRepresentations = [destinationState, destinationCache].filter(value => value && typeof value === 'object');
     const destinationEphemeral = destinationRepresentations.every(stateLooksEmptyForLifecycleRename);
     if ((destinationPointer?.path || chatStateCache.has(newKey)) && !destinationEphemeral) {
-        console.warn(`[NPC State Delta] refused to rename ${oldKey} onto existing non-empty state ${newKey}.`);
+        console.warn(`[NPC Codex] refused to rename ${oldKey} onto existing non-empty state ${newKey}.`);
         return false;
     }
 
@@ -2141,7 +2141,7 @@ async function moveRenamedChatState(eventData = {}) {
         try { await settleStateFileWrite(oldKey, { flush: true }); }
         catch (error) {
             if (error?.code !== 'NPC_STATE_WRITE_CONFLICT') throw error;
-            console.info(`[NPC State Delta] rename observed a newer writer for ${oldKey}; the newest durable state will be moved.`);
+            console.info(`[NPC Codex] rename observed a newer writer for ${oldKey}; the newest durable state will be moved.`);
         }
 
         let oldPointer = settings.dataFiles?.[oldKey] || oldPointerInitial;
@@ -2151,7 +2151,7 @@ async function moveRenamedChatState(eventData = {}) {
         let retired = false;
         for (let attempt = 0; attempt < 4; attempt += 1) {
             state = await loadLatestLifecycleState(oldKey, oldPointer);
-            if (!state) throw new Error(`NPC State Delta rename source ${oldKey} has no live state.`);
+            if (!state) throw new Error(`NPC Codex rename source ${oldKey} has no live state.`);
 
             newPointer = await writeNpcStateDataFile({
                 chatKey: newKey,
@@ -2162,7 +2162,7 @@ async function moveRenamedChatState(eventData = {}) {
                 headers: requestHeaders(),
             });
             const verified = await readNpcStateDataFile(newPointer, { expectedChatKey: newKey });
-            if (!verified?.state || verified.retired) throw new Error('NPC State Delta renamed sidecar verification failed.');
+            if (!verified?.state || verified.retired) throw new Error('NPC Codex renamed sidecar verification failed.');
 
             if (recoveryPointer?.path) {
                 try { await deleteNpcStateDataFile(recoveryPointer, { headers: requestHeaders() }); } catch { queueRecoveryGarbagePointer(recoveryPointer, 'chat-lifecycle-temp'); }
@@ -2184,7 +2184,7 @@ async function moveRenamedChatState(eventData = {}) {
                 break;
             } catch (error) {
                 if (error?.code !== 'NPC_STATE_WRITE_CONFLICT' || attempt >= 3) throw error;
-                console.info(`[NPC State Delta] rename retirement raced another writer for ${oldKey}; refreshing and retrying.`);
+                console.info(`[NPC Codex] rename retirement raced another writer for ${oldKey}; refreshing and retrying.`);
             }
         }
         if (!retired) return false;
@@ -2211,17 +2211,17 @@ async function moveRenamedChatState(eventData = {}) {
             await saveHostSettings();
             renameOwnershipDurable = true;
         } catch (error) {
-            console.warn(`[NPC State Delta] renamed ownership for ${newKey} could not be synchronously persisted; the retired predecessor is being retained as a crash-safe marker.`, error);
+            console.warn(`[NPC Codex] renamed ownership for ${newKey} could not be synchronously persisted; the retired predecessor is being retained as a crash-safe marker.`, error);
         }
         if (renameOwnershipDurable && oldPointer?.path) {
             try { await deleteNpcStateDataFile(oldPointer, { headers: requestHeaders() }); }
-            catch (error) { console.warn(`[NPC State Delta] retired rename predecessor for ${oldKey} could not be physically deleted.`, error); }
+            catch (error) { console.warn(`[NPC Codex] retired rename predecessor for ${oldKey} could not be physically deleted.`, error); }
         }
         renderDossier();
         updateInjection();
         return true;
     } catch (error) {
-        console.warn(`[NPC State Delta] transactional rename failed for ${oldKey}; original durable ownership remains recoverable and no tombstone was published.`, error);
+        console.warn(`[NPC Codex] transactional rename failed for ${oldKey}; original durable ownership remains recoverable and no tombstone was published.`, error);
         throw error;
     }
 }
@@ -2242,11 +2242,11 @@ async function flushLifecycleOwner(kind = 'chat', ownerId = '') {
         try { await settleStateFileWrite(key, { flush: true }); }
         catch (error) {
             failures.push({ key, error });
-            console.warn(`[NPC State Delta] lifecycle flush could not settle ${key}; owner lifecycle will fail closed and retry later.`, error);
+            console.warn(`[NPC Codex] lifecycle flush could not settle ${key}; owner lifecycle will fail closed and retry later.`, error);
         }
     }
     if (failures.length) {
-        const error = new AggregateError(failures.map(item => item.error), `NPC State Delta could not settle ${failures.length} owner chat(s) before lifecycle mutation.`);
+        const error = new AggregateError(failures.map(item => item.error), `NPC Codex could not settle ${failures.length} owner chat(s) before lifecycle mutation.`);
         error.code = 'NPC_STATE_OWNER_FLUSH_INCOMPLETE';
         error.failures = failures.map(item => item.key);
         throw error;
@@ -2269,7 +2269,7 @@ function invalidateLifecycleOwner(kind = 'chat', ownerId = '') {
 function flushCurrentChatOnPageHide() {
     const key = getChatKey();
     if (key === 'no-chat' || !hydratedChatKeys.has(key) || !chatStateCache.has(key)) return;
-    void settleStateFileWrite(key, { flush: true }).catch(error => console.debug('[NPC State Delta] page-hide flush deferred', error));
+    void settleStateFileWrite(key, { flush: true }).catch(error => console.debug('[NPC Codex] page-hide flush deferred', error));
 }
 
 function cleanMessage(message) {
@@ -2469,7 +2469,7 @@ function updateInjection() {
         return;
     }
     if (injectionKey === 'no-chat') return clear('No chat is open.');
-    if (!settings.enabled) return clear('NPC State Delta is disabled.');
+    if (!settings.enabled) return clear('NPC Codex is disabled.');
     if (!settings.inject) return clear('"Inject present NPC state" is off.');
     const state = getChatState();
     const namedNpcIds = namedByPlayerNpcIds(state);
@@ -2729,12 +2729,12 @@ async function prepareCanonicalScanBase(key, label = 'scan') {
         await settleStateFileWrite(key, { flush: true });
         await ensureHydratedStateFresh(key, { reason: `${label}-start` });
         if (staleHostActive(key)) {
-            globalThis.toastr?.warning?.('NPC State Delta: this chat has not loaded the newest messages another session added, so scanning it would roll the dossier back. Reload the chat first.');
+            globalThis.toastr?.warning?.('NPC Codex: this chat has not loaded the newest messages another session added, so scanning it would roll the dossier back. Reload the chat first.');
             return false;
         }
         return getChatKey() === key && chatHydrationStatus(key) === 'ready';
     } catch (error) {
-        console.info(`[NPC State Delta] ${label} did not start because its canonical server base could not be established.`, error);
+        console.info(`[NPC Codex] ${label} did not start because its canonical server base could not be established.`, error);
         return false;
     }
 }
@@ -2744,10 +2744,10 @@ async function scanNpcDossier(npcId) {
     const ctx = getContext();
     const chatKey = getChatKey();
     if (!id || chatKey === 'no-chat') return false;
-    try { await ensureChatStateLoaded(chatKey); } catch (error) { globalThis.toastr?.warning?.(`NPC State Delta: cannot scan this dossier until the canonical server state is available. ${error?.message || error}`); return false; }
+    try { await ensureChatStateLoaded(chatKey); } catch (error) { globalThis.toastr?.warning?.(`NPC Codex: cannot scan this dossier until the canonical server state is available. ${error?.message || error}`); return false; }
     if (getChatKey() !== chatKey || !requireReadyChatMutation('scan a dossier', chatKey)) return false;
     if (isScanBusy(chatKey)) {
-        globalThis.toastr?.info?.('NPC State Delta: another dossier scan is already running in this chat.');
+        globalThis.toastr?.info?.('NPC Codex: another dossier scan is already running in this chat.');
         return false;
     }
     if (!await prepareCanonicalScanBase(chatKey, 'dossier import')) return false;
@@ -2756,7 +2756,7 @@ async function scanNpcDossier(npcId) {
     if (!existing) return false;
     const sources = findMeguminDossierSources(existing, ctx.chat || []);
     if (!sources.length) {
-        globalThis.toastr?.info?.(`NPC State Delta: no matching Megumin dossier block found for ${existing.name}; scanning recent story context instead.`);
+        globalThis.toastr?.info?.(`NPC Codex: no matching Megumin dossier block found for ${existing.name}; scanning recent story context instead.`);
         return backfillNpcFromHistory({ npcId: existing.id, label: existing.name, requestedAt: Date.now() }, latestMessageId(true));
     }
     const sourceText = sources.map(item => `[message ${item.messageId + 1} · ${item.kind}]\n${item.text}`).join('\n\n');
@@ -2771,26 +2771,26 @@ async function scanNpcDossier(npcId) {
     const operation = beginScanOperation(chatKey, `dossier import for ${existing.name}`, { npcId: id, indicator: 'dossier' });
     if (operation) operation.sourceLineage = lineage;
     if (!operation) {
-        globalThis.toastr?.info?.('NPC State Delta: another dossier scan is already running in this chat.');
+        globalThis.toastr?.info?.('NPC Codex: another dossier scan is already running in this chat.');
         return false;
     }
     setScanIndicator(true);
     setNpcDossierScanIndicator(id, true);
     try {
         const { parsed } = await generateParsedNpcJson(ctx, {
-            systemPrompt: "You are NPC State Delta's isolated structured dossier importer. Use only the supplied dossier payload. Return only the requested JSON object.",
+            systemPrompt: "You are NPC Codex's isolated structured dossier importer. Use only the supplied dossier payload. Return only the requested JSON object.",
             prompt,
             responseLength: BACKFILL_RESPONSE_LENGTH,
             label: `dossier import for ${existing.name}`,
             requestScope: operation.requestScope,
         });
         if (!scanOperationCurrent(chatKey, operation) || !await scanCanonicalBaseCurrent(chatKey, operation, 'dossier import')) {
-            console.info('[NPC State Delta] discarded expired, superseded, or stale-canonical dossier import.');
+            console.info('[NPC Codex] discarded expired, superseded, or stale-canonical dossier import.');
             return false;
         }
         const currentLineage = chatLineage(getContext().chat || []);
         if (getChatKey() !== chatKey || firstLineageDivergence(lineage, currentLineage) !== -1 || Number(stateVersions.get(chatKey) || 0) !== scanStateVersion) {
-            globalThis.toastr?.info?.('NPC State Delta: chat changed during dossier import; stale result was discarded.');
+            globalThis.toastr?.info?.('NPC Codex: chat changed during dossier import; stale result was discarded.');
             return false;
         }
         const returned = Array.isArray(parsed.npcs) ? parsed.npcs : [];
@@ -2798,7 +2798,7 @@ async function scanNpcDossier(npcId) {
             || (returned.length === 1 && soleRowMayBeTarget(returned[0], { npcId: id, labels: [existing.name, ...(existing.aliases || [])] }, state.npcs) ? returned[0] : null);
         if (match && rowContradictsTarget(match, existing, state.npcs)) match = null;
         if (!match) {
-            globalThis.toastr?.warning?.(`NPC State Delta: the dossier importer did not return ${existing.name}.`);
+            globalThis.toastr?.warning?.(`NPC Codex: the dossier importer did not return ${existing.name}.`);
             return false;
         }
         parsed.npcs = [{
@@ -2841,11 +2841,11 @@ async function scanNpcDossier(npcId) {
         renderDossier();
         updateInjection();
         const saved = nextState.npcs.find(npc => npc.id === id);
-        globalThis.toastr?.success?.(`NPC State Delta: imported ${saved?.name || existing.name} from ${sources.length} Megumin dossier block${sources.length === 1 ? '' : 's'}.`);
+        globalThis.toastr?.success?.(`NPC Codex: imported ${saved?.name || existing.name} from ${sources.length} Megumin dossier block${sources.length === 1 ? '' : 's'}.`);
         return true;
     } catch (error) {
-        console.error('[NPC State Delta] structured dossier import failed', error);
-        globalThis.toastr?.warning?.(`NPC State Delta dossier import failed for ${existing.name}: ${error?.message || error}`);
+        console.error('[NPC Codex] structured dossier import failed', error);
+        globalThis.toastr?.warning?.(`NPC Codex dossier import failed for ${existing.name}: ${error?.message || error}`);
         return false;
     } finally {
         const owned = scanOperationCurrent(chatKey, operation);
@@ -2922,10 +2922,10 @@ async function refreshNpcFromChat(npcId) {
     const ctx = getContext();
     const chatKey = getChatKey();
     if (!id || chatKey === 'no-chat') return false;
-    try { await ensureChatStateLoaded(chatKey); } catch (error) { globalThis.toastr?.warning?.(`NPC State Delta: cannot refresh this dossier until the canonical server state is available. ${error?.message || error}`); return false; }
+    try { await ensureChatStateLoaded(chatKey); } catch (error) { globalThis.toastr?.warning?.(`NPC Codex: cannot refresh this dossier until the canonical server state is available. ${error?.message || error}`); return false; }
     if (getChatKey() !== chatKey || !requireReadyChatMutation('refresh a dossier', chatKey)) return false;
     if (isScanBusy(chatKey)) {
-        globalThis.toastr?.info?.('NPC State Delta: another dossier scan is already running in this chat.');
+        globalThis.toastr?.info?.('NPC Codex: another dossier scan is already running in this chat.');
         return false;
     }
     // Preserve any edits currently visible in this dossier before reading history. Otherwise
@@ -2944,7 +2944,7 @@ async function refreshNpcFromChat(npcId) {
     const developmentSourceMessageIds = [...transcript.matchAll(/^\[m(\d+)\]/gm)]
         .map(match => Number(match[1])).filter(Number.isInteger);
     if (!transcript) {
-        globalThis.toastr?.info?.(`NPC State Delta: no recent story text is available to refresh ${existing.name}.`);
+        globalThis.toastr?.info?.(`NPC Codex: no recent story text is available to refresh ${existing.name}.`);
         return false;
     }
     const before = structuredClone(existing);
@@ -2963,26 +2963,26 @@ async function refreshNpcFromChat(npcId) {
     const operation = beginScanOperation(chatKey, `chat refresh for ${existing.name}`, { npcId: id, indicator: 'refresh' });
     if (operation) operation.sourceLineage = lineage;
     if (!operation) {
-        globalThis.toastr?.info?.('NPC State Delta: another dossier scan is already running in this chat.');
+        globalThis.toastr?.info?.('NPC Codex: another dossier scan is already running in this chat.');
         return false;
     }
     setScanIndicator(true);
     setNpcChatRefreshIndicator(id, true);
     try {
         const { parsed, raw, retried } = await generateParsedNpcJson(ctx, {
-            systemPrompt: "You are NPC State Delta's targeted dossier reconciliation scanner. Re-read the supplied recent-story window for exactly one existing NPC. Return only the requested JSON object.",
+            systemPrompt: "You are NPC Codex's targeted dossier reconciliation scanner. Re-read the supplied recent-story window for exactly one existing NPC. Return only the requested JSON object.",
             prompt,
             responseLength: BACKFILL_RESPONSE_LENGTH,
             label: `chat refresh for ${existing.name}`,
             requestScope: operation.requestScope,
         });
         if (!scanOperationCurrent(chatKey, operation) || !await scanCanonicalBaseCurrent(chatKey, operation, 'dossier refresh')) {
-            console.info('[NPC State Delta] discarded expired, superseded, or stale-canonical dossier refresh.');
+            console.info('[NPC Codex] discarded expired, superseded, or stale-canonical dossier refresh.');
             return false;
         }
         const currentLineage = chatLineage(getContext().chat || []);
         if (getChatKey() !== chatKey || firstLineageDivergence(lineage, currentLineage) !== -1 || Number(stateVersions.get(chatKey) || 0) !== scanStateVersion) {
-            globalThis.toastr?.info?.('NPC State Delta: chat or dossier state changed during dossier refresh; stale result was discarded.');
+            globalThis.toastr?.info?.('NPC Codex: chat or dossier state changed during dossier refresh; stale result was discarded.');
             return false;
         }
         const returned = Array.isArray(parsed.npcs) ? parsed.npcs : [];
@@ -3033,7 +3033,7 @@ async function refreshNpcFromChat(npcId) {
                 npcIds: [id],
                 sourceMessageId: latestMessageId(true),
             });
-            globalThis.toastr?.info?.(`NPC State Delta: no grounded dossier changes found for ${existing.name} in the last ${settings.scanDepth} messages.`);
+            globalThis.toastr?.info?.(`NPC Codex: no grounded dossier changes found for ${existing.name} in the last ${settings.scanDepth} messages.`);
             return true;
         }
         const latest = getChatState(chatKey);
@@ -3087,7 +3087,7 @@ async function refreshNpcFromChat(npcId) {
         }
         Object.assign(refreshed, protectTerminalNpc(liveBefore, refreshed));
         if (!await scanCanonicalBaseCurrent(chatKey, operation, 'dossier refresh final commit')) {
-            globalThis.toastr?.info?.('NPC State Delta: another session updated this chat during the refresh; the stale result was discarded.');
+            globalThis.toastr?.info?.('NPC Codex: another session updated this chat during the refresh; the stale result was discarded.');
             return false;
         }
         if (targetMessageId >= 0) commitBranchCheckpoint(merged.state, targetMessageId, 'chat-refresh');
@@ -3121,14 +3121,14 @@ async function refreshNpcFromChat(npcId) {
             npcIds: [id],
             sourceMessageId: targetMessageId,
         });
-        console.info('[NPC State Delta] targeted refresh metrics', lastScanMetrics);
+        console.info('[NPC Codex] targeted refresh metrics', lastScanMetrics);
         globalThis.toastr?.success?.(changed.length
-            ? `NPC State Delta: refreshed ${saved?.name || existing.name} from the last ${settings.scanDepth} messages (${changed.join(', ')}).`
-            : `NPC State Delta: ${saved?.name || existing.name} is already consistent with the last ${settings.scanDepth} messages.`);
+            ? `NPC Codex: refreshed ${saved?.name || existing.name} from the last ${settings.scanDepth} messages (${changed.join(', ')}).`
+            : `NPC Codex: ${saved?.name || existing.name} is already consistent with the last ${settings.scanDepth} messages.`);
         return true;
     } catch (error) {
-        console.error('[NPC State Delta] targeted chat refresh failed', error);
-        globalThis.toastr?.warning?.(`NPC State Delta refresh failed for ${existing.name}: ${error?.message || error}`);
+        console.error('[NPC Codex] targeted chat refresh failed', error);
+        globalThis.toastr?.warning?.(`NPC Codex refresh failed for ${existing.name}: ${error?.message || error}`);
         return false;
     } finally {
         const owned = scanOperationCurrent(chatKey, operation);
@@ -3204,7 +3204,7 @@ async function generateParsedNpcJson(ctx, {
             const truncated = isTruncatedScannerJsonError(error);
             const reply = nonJsonReplyExcerpt(raw);
             if (!retry) {
-                console.warn(`[NPC State Delta] ${label} returned invalid JSON; retrying once with a compact correction prompt.`, {
+                console.warn(`[NPC Codex] ${label} returned invalid JSON; retrying once with a compact correction prompt.`, {
                     responseChars: String(raw ?? '').length,
                     truncated,
                     error: error?.message || String(error),
@@ -3260,19 +3260,19 @@ async function backfillNpcFromHistory(request, messageId = null, { automatic = f
     setScanIndicator(true);
     try {
         const { parsed } = await generateParsedNpcJson(ctx, {
-            systemPrompt: "You are NPC State Delta's isolated dossier backfill scanner. Use only the supplied scanner payload. Return only the requested JSON object.",
+            systemPrompt: "You are NPC Codex's isolated dossier backfill scanner. Use only the supplied scanner payload. Return only the requested JSON object.",
             prompt,
             responseLength: BACKFILL_RESPONSE_LENGTH,
             label: `backfill for ${request.label}`,
             requestScope: operation.requestScope,
         });
         if (!scanOperationCurrent(chatKey, operation) || !await scanCanonicalBaseCurrent(chatKey, operation, 'dossier backfill')) {
-            console.info('[NPC State Delta] discarded expired, superseded, or stale-canonical dossier backfill.');
+            console.info('[NPC Codex] discarded expired, superseded, or stale-canonical dossier backfill.');
             return false;
         }
         const currentLineage = chatLineage(getContext().chat || []);
         if (getChatKey() !== chatKey || firstLineageDivergence(scanLineage, currentLineage) !== -1 || Number(stateVersions.get(chatKey) || 0) !== scanStateVersion) {
-            console.info('[NPC State Delta] discarded stale dossier backfill after chat or dossier state changed.');
+            console.info('[NPC Codex] discarded stale dossier backfill after chat or dossier state changed.');
             return false;
         }
         const returned = Array.isArray(parsed.npcs) ? parsed.npcs : [];
@@ -3319,8 +3319,8 @@ async function backfillNpcFromHistory(request, messageId = null, { automatic = f
             }));
         if (!parsed.npcs.length) {
             const literalMention = transcriptMentionsBackfillTarget(transcript, request.label);
-            console.warn('[NPC State Delta] targeted backfill returned no accepted NPC', { target: request.label, literalMention, returnedCount: returned.length });
-            if (!request.silent) globalThis.toastr?.warning?.(`NPC State Delta: ${request.label} was added, but the backfill model returned no matching dossier details from the last ${settings.scanDepth} messages.`);
+            console.warn('[NPC Codex] targeted backfill returned no accepted NPC', { target: request.label, literalMention, returnedCount: returned.length });
+            if (!request.silent) globalThis.toastr?.warning?.(`NPC Codex: ${request.label} was added, but the backfill model returned no matching dossier details from the last ${settings.scanDepth} messages.`);
             return false;
         }
         const latestState = getChatState(chatKey);
@@ -3381,12 +3381,12 @@ async function backfillNpcFromHistory(request, messageId = null, { automatic = f
         renderDossier();
         updateInjection();
         const savedNpc = nextState.npcs.find(npc => npc.id === request.npcId);
-        if (!request.silent) globalThis.toastr?.success?.(`NPC State Delta: backfilled ${savedNpc?.name || request.label} from recent story context.`);
+        if (!request.silent) globalThis.toastr?.success?.(`NPC Codex: backfilled ${savedNpc?.name || request.label} from recent story context.`);
         return true;
     } catch (error) {
-        console.error('[NPC State Delta] dossier backfill failed', error);
+        console.error('[NPC Codex] dossier backfill failed', error);
         if (error?.code === 'NPC_SCANNER_ROUTE_CANCELLED' || error?.code === 'NPC_SCANNER_ROUTE_TIMEOUT') return null;
-        if (!request.silent || (isScannerRoutingError(error) && error.code !== 'NPC_SCANNER_ROUTE_CANCELLED')) globalThis.toastr?.warning?.(`NPC State Delta backfill failed for ${request.label}: ${error?.message || error}`);
+        if (!request.silent || (isScannerRoutingError(error) && error.code !== 'NPC_SCANNER_ROUTE_CANCELLED')) globalThis.toastr?.warning?.(`NPC Codex backfill failed for ${request.label}: ${error?.message || error}`);
         return false;
     } finally {
         endScanOperation(chatKey, operation);
@@ -3417,7 +3417,7 @@ async function processPendingBackfills(messageId = null) {
         if (attempts >= BACKFILL_MAX_ATTEMPTS) {
             state.pendingBackfills = state.pendingBackfills.filter(item => item.npcId !== request.npcId);
             persist();
-            if (!request.silent) globalThis.toastr?.warning?.(`NPC State Delta: stopped automatic backfill retries for ${request.label} after ${BACKFILL_MAX_ATTEMPTS} failed attempts. The bare dossier is preserved; use Scan dossier to retry manually.`);
+            if (!request.silent) globalThis.toastr?.warning?.(`NPC Codex: stopped automatic backfill retries for ${request.label} after ${BACKFILL_MAX_ATTEMPTS} failed attempts. The bare dossier is preserved; use Scan dossier to retry manually.`);
             continue;
         }
         const lastAttemptAt = Math.max(0, Number(request.lastAttemptAt || 0) || 0);
@@ -3436,7 +3436,7 @@ async function processPendingBackfills(messageId = null) {
                 queued.lastAttemptAt = Date.now();
                 if (queued.attempts >= BACKFILL_MAX_ATTEMPTS) {
                     latest.pendingBackfills = latest.pendingBackfills.filter(item => item.npcId !== request.npcId);
-                    if (!queued.silent) globalThis.toastr?.warning?.(`NPC State Delta: automatic backfill for ${queued.label} failed ${BACKFILL_MAX_ATTEMPTS} times and was removed from the retry queue. The dossier itself was not deleted.`);
+                    if (!queued.silent) globalThis.toastr?.warning?.(`NPC Codex: automatic backfill for ${queued.label} failed ${BACKFILL_MAX_ATTEMPTS} times and was removed from the retry queue. The dossier itself was not deleted.`);
                 }
             }
             persist();
@@ -3670,7 +3670,7 @@ async function runCastPass(ctx, existingNpcs, transcript, options = {}) {
         return { cast, canonRevision, continuity: { status: baibai.status, revision: baibai.revision }, used: true, responseChars: String(raw ?? '').length, shortlist: shortlist.length, canon: canon.length, canonSources: { entries, cardEntries } };
     } catch (error) {
         if (isScannerRoutingError(error)) throw error;
-        console.warn('[NPC State Delta] cast pass failed; the dossier scan continues without it.', error);
+        console.warn('[NPC Codex] cast pass failed; the dossier scan continues without it.', error);
         return { ...empty, used: true, shortlist: shortlist.length, canon: canon.length };
     }
 }
@@ -3705,7 +3705,7 @@ async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript,
                 relationshipCaps: settings.relationshipCaps,
             });
             const { parsed: relationshipParsed, raw, retried: batchRetried } = await generateParsedNpcJson(ctx, {
-                systemPrompt: "You are NPC State Delta's isolated relationship evaluator. Use only the supplied targets and current exchange. Return only the requested JSON object.",
+                systemPrompt: "You are NPC Codex's isolated relationship evaluator. Use only the supplied targets and current exchange. Return only the requested JSON object.",
                 prompt: relationshipPrompt,
                 responseLength: RELATIONSHIP_RESPONSE_LENGTH,
                 label: `relationship pass ${Math.floor(offset / 4) + 1}`,
@@ -3750,7 +3750,7 @@ async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript,
             }
             const missing = batch.filter(target => !decisions.has(target.id));
             if (missing.length) {
-                console.warn('[NPC State Delta] focused relationship pass omitted or malformed one or more target decisions.', {
+                console.warn('[NPC Codex] focused relationship pass omitted or malformed one or more target decisions.', {
                     targets: batch.map(npc => npc.id),
                     decided: batch.filter(npc => decisions.has(npc.id)).map(npc => npc.id),
                 });
@@ -3758,7 +3758,7 @@ async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript,
         } catch (error) {
             if (isScannerRoutingError(error)) throw error;
             failed = true;
-            console.warn('[NPC State Delta] focused relationship batch failed; retaining safe zero/primary output for that batch.', error);
+            console.warn('[NPC Codex] focused relationship batch failed; retaining safe zero/primary output for that batch.', error);
         }
     }
     return { decisions, used: true, responseChars, retried, targetCount: targets.length, failed };
@@ -3918,7 +3918,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
     const settings = getSettings();
     if (!settings.enabled) return false;
     if (!allowDuringSwipe && isHostSwipeActive()) {
-        if (manual) globalThis.toastr?.info?.('NPC State Delta: wait for the current swipe to finish before scanning.');
+        if (manual) globalThis.toastr?.info?.('NPC Codex: wait for the current swipe to finish before scanning.');
         return false;
     }
     const ctx = getContext();
@@ -3929,7 +3929,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
     await ensureChatStateLoaded(scanChatKey);
     if (getChatKey() !== scanChatKey || (sourceFingerprint !== null && sourceFingerprint !== fingerprintMessage(getContext().chat?.[messageId] || {}))) return false;
     if (isScanBusy(scanChatKey)) {
-        if (manual) globalThis.toastr?.info?.('NPC State Delta: another dossier scan is already running in this chat.');
+        if (manual) globalThis.toastr?.info?.('NPC Codex: another dossier scan is already running in this chat.');
         else if (Number.isInteger(messageId)) queuePendingAutoScan(scanChatKey, messageId, 'busy-auto-scan');
         return false;
     }
@@ -3943,7 +3943,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
         ? recentUserDevelopmentContext(settings.scanDepth, { messageIds: true })
         : currentExchangeUserDevelopmentContext(messageId);
     if (!transcript) {
-        if (manual) globalThis.toastr?.warning?.('NPC State Delta: no story text to scan yet.');
+        if (manual) globalThis.toastr?.warning?.('NPC Codex: no story text to scan yet.');
         return false;
     }
 
@@ -3976,7 +3976,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
     try {
         const scanStartedAt = performance.now?.() ?? Date.now();
         const { parsed, raw, retried } = await generateParsedNpcJson(ctx, {
-            systemPrompt: "You are NPC State Delta's isolated dossier scanner. Use only the supplied scanner payload. Return only the requested JSON object.",
+            systemPrompt: "You are NPC Codex's isolated dossier scanner. Use only the supplied scanner payload. Return only the requested JSON object.",
             prompt,
             responseLength: fullWindowScan ? FULL_SCAN_RESPONSE_LENGTH : SCAN_RESPONSE_LENGTH,
             label: manual ? 'manual dossier scan' : (fullWindowScan ? 'automatic full dossier scan' : 'automatic dossier scan'),
@@ -4006,8 +4006,8 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
                 stale: true,
                 at: Date.now(),
             };
-            console.info('[NPC State Delta] discarded stale dossier scan after chat or dossier state changed.');
-            if (manual) globalThis.toastr?.info?.('NPC State Delta: chat changed during scan; stale result was discarded.');
+            console.info('[NPC Codex] discarded stale dossier scan after chat or dossier state changed.');
+            if (manual) globalThis.toastr?.info?.('NPC Codex: chat changed during scan; stale result was discarded.');
             return false;
         }
 
@@ -4070,8 +4070,8 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
         if (!await scanCanonicalBaseCurrent(scanChatKey, operation, 'dossier scan relationship evaluation')
             || !scanOperationCurrent(scanChatKey, operation) || getChatKey() !== scanChatKey
             || firstLineageDivergence(scanLineage, currentLineage) !== -1 || Number(stateVersions.get(scanChatKey) || 0) !== scanStateVersion) {
-            console.info('[NPC State Delta] discarded stale dossier scan after chat, dossier, or canonical state changed during relationship evaluation.');
-            if (manual) globalThis.toastr?.info?.('NPC State Delta: chat changed during scan; stale result was discarded.');
+            console.info('[NPC Codex] discarded stale dossier scan after chat, dossier, or canonical state changed during relationship evaluation.');
+            if (manual) globalThis.toastr?.info?.('NPC Codex: chat changed during scan; stale result was discarded.');
             return false;
         }
         const targetMessageId = Number.isInteger(messageId) ? messageId : latestMessageId(true);
@@ -4148,15 +4148,15 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             || getChatKey() !== scanChatKey
             || firstLineageDivergence(scanLineage, currentLineage) !== -1
             || Number(stateVersions.get(scanChatKey) || 0) !== scanStateVersion) {
-            console.info('[NPC State Delta] discarded stale dossier scan after new-NPC relationship evaluation.');
-            if (manual) globalThis.toastr?.info?.('NPC State Delta: chat changed during scan; stale result was discarded.');
+            console.info('[NPC Codex] discarded stale dossier scan after new-NPC relationship evaluation.');
+            if (manual) globalThis.toastr?.info?.('NPC Codex: chat changed during scan; stale result was discarded.');
             return false;
         }
         if (lastScanMetrics) {
             lastScanMetrics.profileApplied = Number(merged.report?.profileUpdateStats?.applied || 0);
             lastScanMetrics.profileEvidenceAdded = Number(merged.report?.profileUpdateStats?.evidenceAdded || 0);
             lastScanMetrics.profileDevelopment = Array.isArray(merged.report?.profileDevelopment) ? structuredClone(merged.report.profileDevelopment) : [];
-            console.info('[NPC State Delta] dossier scan metrics', lastScanMetrics);
+            console.info('[NPC Codex] dossier scan metrics', lastScanMetrics);
         }
         applyFocusedRelationshipDecisions(merged.state, relationshipPass.decisions, settings.relationshipCaps, targetMessageId, merged.report);
         if (!canonRevisionCurrent(scanCanonRevision) || !canonRevisionCurrent(castPass.canonRevision)) return false;
@@ -4292,7 +4292,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
                     });
                 }
             } else {
-                console.warn('[NPC State Delta] suppressed automatic per-NPC continuity fan-out after broad scan omitted multiple apparent participants.', {
+                console.warn('[NPC Codex] suppressed automatic per-NPC continuity fan-out after broad scan omitted multiple apparent participants.', {
                     omittedParticipants: missedParticipants.length,
                     limit: AUTOMATIC_MISSED_PARTICIPANT_REPAIR_LIMIT,
                 });
@@ -4318,7 +4318,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             if (inlineIds.length) recordInlineCardsInState(nextState, targetMessageId, inlineIds, 'scan');
         }
         if (!await scanCanonicalBaseCurrent(scanChatKey, operation, 'dossier scan final commit')) {
-            if (manual) globalThis.toastr?.info?.('NPC State Delta: another session updated this chat during the scan; the stale result was discarded.');
+            if (manual) globalThis.toastr?.info?.('NPC Codex: another session updated this chat during the scan; the stale result was discarded.');
             return false;
         }
         if (!canonRevisionCurrent(scanCanonRevision) || !canonRevisionCurrent(castPass.canonRevision)) return false;
@@ -4329,7 +4329,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
         updateInjection();
         if (manual) {
             const { created, updated, candidates, promoted, skipped, staleArchived = [], stalePruned = [] } = merged.report;
-            globalThis.toastr?.success?.(`NPC State Delta scan complete: ${created.length} new, ${updated.length} updated${promoted.length ? `, ${promoted.length} promoted` : ''}${candidates.length ? `, ${candidates.length} candidate${candidates.length === 1 ? '' : 's'} held` : ''}${staleArchived.length ? `, ${staleArchived.length} stale archived` : ''}${stalePruned.length ? `, ${stalePruned.length} stale deleted` : ''}${skipped.length ? `, ${skipped.length} skipped` : ''}.`);
+            globalThis.toastr?.success?.(`NPC Codex scan complete: ${created.length} new, ${updated.length} updated${promoted.length ? `, ${promoted.length} promoted` : ''}${candidates.length ? `, ${candidates.length} candidate${candidates.length === 1 ? '' : 's'} held` : ''}${staleArchived.length ? `, ${staleArchived.length} stale archived` : ''}${stalePruned.length ? `, ${stalePruned.length} stale deleted` : ''}${skipped.length ? `, ${skipped.length} skipped` : ''}.`);
         } else if ((merged.report.staleArchived || []).length || (merged.report.stalePruned || []).length) {
             const archivedCount = (merged.report.staleArchived || []).length;
             const removed = merged.report.stalePruned || [];
@@ -4338,12 +4338,12 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             const parts = [];
             if (archivedCount) parts.push(`${archivedCount} stale archived`);
             if (removed.length) parts.push(`${removed.length} stale deleted${names ? ` (${names}${extra})` : ''}`);
-            globalThis.toastr?.info?.(`NPC State Delta: ${parts.join(', ')}. Deleted stale NPCs can be rediscovered if they return.`);
+            globalThis.toastr?.info?.(`NPC Codex: ${parts.join(', ')}. Deleted stale NPCs can be rediscovered if they return.`);
         }
         return true;
     } catch (error) {
-        console.error('[NPC State Delta] dossier scan failed', error);
-        if (manual || (isScannerRoutingError(error) && error.code !== 'NPC_SCANNER_ROUTE_CANCELLED')) globalThis.toastr?.error?.(`NPC State Delta scan failed: ${error?.message || error}`);
+        console.error('[NPC Codex] dossier scan failed', error);
+        if (manual || (isScannerRoutingError(error) && error.code !== 'NPC_SCANNER_ROUTE_CANCELLED')) globalThis.toastr?.error?.(`NPC Codex scan failed: ${error?.message || error}`);
         return false;
     } finally {
         endScanOperation(scanChatKey, operation);
@@ -4506,7 +4506,7 @@ function buildSettingsHtml() {
         <div class="inline-drawer-content npc-state-delta-drawer">
           <div class="delta-settings-quickbar">
             <div class="delta-settings-quick-toggles">
-              ${settingRow('npc_state_delta_enabled', 'Enable NPC State Delta', '<input id="npc_state_delta_enabled" type="checkbox">')}
+              ${settingRow('npc_state_delta_enabled', 'Enable NPC Codex', '<input id="npc_state_delta_enabled" type="checkbox">')}
               ${settingRow('npc_state_delta_auto', 'Auto scan', '<input id="npc_state_delta_auto" type="checkbox">', 'Runs after assistant replies.')}
             </div>
             <div class="npc-state-delta-actions delta-settings-quick-actions">
@@ -4861,7 +4861,7 @@ function presentCastDisplayMode() {
 function inlineEntriesForRender(state) {
     // Presentation only: Off renders nothing, while inlineCards history is still recorded below.
     if (presentCastDisplayMode() === 'off') return [];
-    // Visible NPC State Delta is a live present-cast view, not a historical dossier timeline.
+    // Visible NPC Codex is a live present-cast view, not a historical dossier timeline.
     // Keep inlineCards internally for branch/rollback safety, but render only the latest
     // assistant message and only NPCs physically present in the current merged state.
     const latestAssistantId = latestMessageId(true);
@@ -4985,7 +4985,7 @@ function mountNpcStateInsideMeguminBlock(message, messageId, html) {
         panel.appendChild?.(pane);
     }
     // Keep the foreign tab/pane key pair compatible with other Megumin card integrations
-    // (notably Inventory Ledger) so they can restore NPC State Delta as the prior active pane.
+    // (notably Inventory Ledger) so they can restore NPC Codex as the prior active pane.
     pane.dataset.key = button.dataset.key;
     const snapshotSignature = meguminSnapshotSignature(html);
     // Do not compare pane.innerHTML with the source string. Browsers serialize an opened
@@ -4998,7 +4998,7 @@ function mountNpcStateInsideMeguminBlock(message, messageId, html) {
 
     // Megumin owns its native tab state through private closure variables. Bind a small bridge
     // after those native listeners: choosing any native tab/collapse simply hides our foreign pane,
-    // while choosing NPC State Delta hides Megumin's panes. No message.mes rewrite or Megumin import needed.
+    // while choosing NPC Codex hides Megumin's panes. No message.mes rewrite or Megumin import needed.
     for (const control of [...(card.querySelectorAll?.('.meg-blocks-tab, .meg-blocks-collapse') || [])]) {
         if (control === button || control?.dataset?.npcStateDeltaDismissBound === '1') continue;
         if (control?.dataset) control.dataset.npcStateDeltaDismissBound = '1';
@@ -5045,7 +5045,7 @@ function ensureInlineObserver() {
         inlineObserver.observe(chat, { childList: true, subtree: true });
         return true;
     } catch (error) {
-        console.debug('[NPC State Delta] inline MutationObserver could not attach', error);
+        console.debug('[NPC Codex] inline MutationObserver could not attach', error);
         inlineObserver = null;
         inlineObserverChat = null;
         return false;
@@ -5093,7 +5093,7 @@ function startInlineWatchdog() {
             ensureInlineObserver();
             if (inlineMountNeedsRepair()) queueInlineRender(0);
         } catch (error) {
-            console.debug('[NPC State Delta] inline watchdog check failed', error);
+            console.debug('[NPC Codex] inline watchdog check failed', error);
         }
     }, 2200);
     inlineWatchdogTimer?.unref?.();
@@ -5171,7 +5171,7 @@ function queueInlineRender(delay = 0, retryIndex = 0) {
                 queueInlineRender(INLINE_RENDER_RETRY_DELAYS[retryIndex], retryIndex + 1);
             }
         } catch (error) {
-            console.warn('[NPC State Delta] inline render failed', error);
+            console.warn('[NPC Codex] inline render failed', error);
         }
     }, Math.max(0, Number(delay) || 0));
 }
@@ -5190,7 +5190,7 @@ function openLauncherDossier(npcId) {
     if (!id || !currentNpcById(id)) return false;
     const request = { npcId: id, handled: false };
     document.dispatchEvent?.(new CustomEvent('npc-state-delta:open-dossier', { detail: request }));
-    if (!request.handled) globalThis.toastr?.warning?.('NPC State Delta dossier UI is still mounting.');
+    if (!request.handled) globalThis.toastr?.warning?.('NPC Codex dossier UI is still mounting.');
     return request.handled;
 }
 
@@ -5244,8 +5244,8 @@ async function openNpcEditorSafely(npcId) {
         if (!editor) throw new Error('SillyTavern editor popup could not be created.');
         return true;
     } catch (error) {
-        console.error('[NPC State Delta] dossier editor failed to open', error);
-        globalThis.toastr?.error?.(`NPC State Delta editor failed: ${error?.message || error}`);
+        console.error('[NPC Codex] dossier editor failed to open', error);
+        globalThis.toastr?.error?.(`NPC Codex editor failed: ${error?.message || error}`);
         return false;
     }
 }
@@ -5308,14 +5308,14 @@ function renderSettingsRoster() {
     const key = getChatKey();
     const hydration = chatHydrationStatus(key);
     if (key === 'no-chat') {
-        holder.html('<span class="npc-state-delta-muted">Open a chat to load its NPC State Delta dossier.</span>');
+        holder.html('<span class="npc-state-delta-muted">Open a chat to load its NPC Codex dossier.</span>');
         return;
     }
     if (hydration !== 'ready') {
         const error = hydrationErrors.get(key);
         const message = hydration === 'error'
-            ? `NPC State Delta could not load this chat dossier. Existing sidecar data is preserved and all dossier writes are locked.${error?.message ? ` ${escapeHtml(error.message)}` : ''}`
-            : (hydration === 'pending' ? 'NPC State Delta is waiting for SillyTavern to assign a stable chat identity. No dossier writes will occur yet.' : 'NPC State Delta is loading this chat dossier. Dossier writes remain locked until loading succeeds.');
+            ? `NPC Codex could not load this chat dossier. Existing sidecar data is preserved and all dossier writes are locked.${error?.message ? ` ${escapeHtml(error.message)}` : ''}`
+            : (hydration === 'pending' ? 'NPC Codex is waiting for SillyTavern to assign a stable chat identity. No dossier writes will occur yet.' : 'NPC Codex is loading this chat dossier. Dossier writes remain locked until loading succeeds.');
         const retry = hydration === 'error' ? '<div class="menu_button npc-state-delta-retry-hydration"><i class="fa-solid fa-rotate"></i> Retry Load</div>' : '';
         const detach = hydration === 'error' && getSettings().dataFiles?.[key]?.path ? '<div class="menu_button npc-state-delta-detach-sidecar"><i class="fa-solid fa-link-slash"></i> Detach Broken Sidecar</div>' : '';
         holder.html(`<div class="npc-state-delta-hydration-warning"><b>${hydration === 'error' ? 'Dossier load failed' : (hydration === 'pending' ? 'Waiting for chat identity...' : 'Loading dossier...')}</b><span>${message}</span>${retry}${detach}</div>`);
@@ -5382,7 +5382,7 @@ function openNpcEditor(npcId) {
     const POPUP_TYPE = ctx.POPUP_TYPE;
     const POPUP_RESULT = ctx.POPUP_RESULT;
     if (typeof Popup !== 'function' || !POPUP_TYPE?.TEXT || !POPUP_RESULT) {
-        throw new Error('SillyTavern Popup API is unavailable. NPC State Delta requires SillyTavern 1.18+ for dossier editing.');
+        throw new Error('SillyTavern Popup API is unavailable. NPC Codex requires SillyTavern 1.18+ for dossier editing.');
     }
     const rel = npc.relationship || DEFAULT_RELATIONSHIP;
     const locked = new Set(npc.manualProfileFields || []);
@@ -5393,7 +5393,7 @@ function openNpcEditor(npcId) {
     content.dataset.npcId = npc.id;
     content.innerHTML = `
       <div class="npc-state-delta-editor-head"><div><span class="npc-state-delta-kicker">LIVE DOSSIER</span><h3 id="npc_state_delta_editor_title">Edit ${editorValue(npc.name)}</h3></div></div>
-      <p class="npc-state-delta-muted">Edits save to NPC State Delta's extension-owned JSON data. Relationship numbers are authoritative current values on a -100 to +100 scale where 0 is neutral; future story deltas continue from them.</p>
+      <p class="npc-state-delta-muted">Edits save to NPC Codex's extension-owned JSON data. Relationship numbers are authoritative current values on a -100 to +100 scale where 0 is neutral; future story deltas continue from them.</p>
       <div class="npc-state-delta-editor-lifecycle"><b>Lifecycle</b><span>${isTerminalNpcDeath(npc) ? 'Confirmed deceased' : (npc.archived ? 'Archived' : (npc.present ? 'Active · Present' : (npc.worldActive ? 'Active · Off-screen' : 'Active')))}${npc.archiveReason === 'deceased' ? ' · Deceased' : (npc.archiveReason === 'stale' ? ' · Stale auto-archive' : '')}</span>${npc.lifeStateReason ? `<small>${editorValue(npc.lifeStateReason)}</small>` : ''}</div>
       <div class="npc-state-delta-editor-grid npc-state-delta-editor-profile">
         <label>Name<input id="npc_state_delta_edit_name" class="text_pole" value="${editorValue(npc.name)}"></label>
@@ -5471,8 +5471,8 @@ function openNpcEditor(npcId) {
     activeEditorPopup = popup;
     Promise.resolve(popup.show()).catch(error => {
         if (activeEditorPopup === popup) activeEditorPopup = null;
-        console.error('[NPC State Delta] native dossier popup failed', error);
-        globalThis.toastr?.error?.(`NPC State Delta editor failed: ${error?.message || error}`);
+        console.error('[NPC Codex] native dossier popup failed', error);
+        globalThis.toastr?.error?.(`NPC Codex editor failed: ${error?.message || error}`);
     });
     return popup;
 }
@@ -5585,12 +5585,12 @@ function openPortraitGenerator(npcId) {
     const npc = currentNpcById(id);
     if (!npc) return false;
     if (getSettings().portraitGenerationEnabled === false) {
-        globalThis.toastr?.info?.('NPC State Delta: Generate Portrait is disabled in settings.');
+        globalThis.toastr?.info?.('NPC Codex: Generate Portrait is disabled in settings.');
         return false;
     }
     const prompts = npcImagePromptPair(npc);
     if (!prompts.positive) {
-        globalThis.toastr?.warning?.(`NPC State Delta: ${npc.name} needs an Appearance description or a per-NPC positive prompt before image generation.`);
+        globalThis.toastr?.warning?.(`NPC Codex: ${npc.name} needs an Appearance description or a per-NPC positive prompt before image generation.`);
         return false;
     }
     closePortraitGenerator();
@@ -5662,7 +5662,7 @@ async function generatePortraitFromDialog() {
     const positive = String(overlay.querySelector?.('#npc_state_delta_portrait_positive')?.value || '').trim();
     const negative = String(overlay.querySelector?.('#npc_state_delta_portrait_negative')?.value || '').trim();
     if (!positive) {
-        globalThis.toastr?.warning?.('NPC State Delta: positive portrait prompt is empty.');
+        globalThis.toastr?.warning?.('NPC Codex: positive portrait prompt is empty.');
         return false;
     }
     const revision = Number(stateVersions.get(originChatKey) || 0);
@@ -5687,9 +5687,9 @@ async function generatePortraitFromDialog() {
         return true;
     } catch (error) {
         if (activePortraitGeneratorOverlay !== overlay || getChatKey() !== originChatKey) return false;
-        console.error('[NPC State Delta] portrait generation failed', error);
+        console.error('[NPC Codex] portrait generation failed', error);
         setPortraitGeneratorBusy(false, 'Generation failed.');
-        globalThis.toastr?.error?.(`NPC State Delta portrait generation: ${error?.message || error}`);
+        globalThis.toastr?.error?.(`NPC Codex portrait generation: ${error?.message || error}`);
         return false;
     }
 }
@@ -5729,12 +5729,12 @@ async function useGeneratedPortrait() {
         await flushStateFile(originChatKey);
         if (!current()) return false;
         closePortraitGenerator();
-        globalThis.toastr?.success?.(`NPC State Delta: generated portrait applied to ${npc.name} and saved.`);
+        globalThis.toastr?.success?.(`NPC Codex: generated portrait applied to ${npc.name} and saved.`);
         return true;
     } catch (error) {
         if (!current()) return false;
         setPortraitGeneratorBusy(false, applied ? 'Applied locally; durable save failed.' : 'Could not import the generated result.');
-        globalThis.toastr?.[applied ? 'warning' : 'error']?.(`NPC State Delta portrait import: ${error?.message || error}`);
+        globalThis.toastr?.[applied ? 'warning' : 'error']?.(`NPC Codex portrait import: ${error?.message || error}`);
         return false;
     } finally {
         if (current()) setPortraitGeneratorBusy(false);
@@ -5747,7 +5747,7 @@ function closeNpcEditor() {
     activeEditorChatKey = '';
     activeEditorBaseRevision = null;
     if (popup?.completeCancelled) {
-        Promise.resolve(popup.completeCancelled()).catch(error => console.debug('[NPC State Delta] editor popup close failed', error));
+        Promise.resolve(popup.completeCancelled()).catch(error => console.debug('[NPC Codex] editor popup close failed', error));
     }
 }
 
@@ -5764,7 +5764,7 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     const originChatKey = activeEditorChatKey || getChatKey();
     const editorAtStart = activeEditorPopup;
     if (getChatKey() !== originChatKey || !await ensureFreshMutationBoundary('save dossier edits', originChatKey)) {
-        globalThis.toastr?.warning?.('NPC State Delta: this editor belongs to a different or unloaded chat. Reopen the dossier in the active chat.');
+        globalThis.toastr?.warning?.('NPC Codex: this editor belongs to a different or unloaded chat. Reopen the dossier in the active chat.');
         return false;
     }
     // Cancel/Escape during the freshness wait (or a replaced editor) invalidates this Save: the
@@ -5777,7 +5777,7 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
         || (popup && popup.result !== affirmative)
         || (!popup && editorAtStart && editorAtStart.result !== undefined && editorAtStart.result !== affirmative)) return false;
     if (activeEditorBaseRevision !== null && Number(activeEditorBaseRevision) !== workingCopyAdoption(originChatKey)) {
-        globalThis.toastr?.warning?.('NPC State Delta: this editor was opened on an older server revision. Your typed draft is still open, but it was not applied. Review the newly loaded dossier and reopen the editor before saving.');
+        globalThis.toastr?.warning?.('NPC Codex: this editor was opened on an older server revision. Your typed draft is still open, but it was not applied. Review the newly loaded dossier and reopen the editor before saving.');
         return false;
     }
     const state = getChatState(originChatKey);
@@ -5805,7 +5805,7 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     };
     const nameCollision = state.npcs.some((item, i) => i !== index && npcMatchesLabel(item, stableInputs.name));
     if (nameCollision) {
-        globalThis.toastr?.warning?.(`NPC State Delta: another dossier already matches ${stableInputs.name}.`);
+        globalThis.toastr?.warning?.(`NPC Codex: another dossier already matches ${stableInputs.name}.`);
         return false;
     }
     if (stableInputs.name !== current.name && current.name) {
@@ -5818,12 +5818,12 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     const currentBirthdayDisplay = String(current.birthDateDisplay || '').trim();
     if (birthdayInput !== currentBirthdayDisplay) {
         if (!birthdayInput) {
-            globalThis.toastr?.warning?.('NPC State Delta: birthday cannot be cleared here. Enter a valid date or cancel the edit.');
+            globalThis.toastr?.warning?.('NPC Codex: birthday cannot be cleared here. Enter a valid date or cancel the edit.');
             return false;
         }
         const normalizedBirthday = normalizeBirthDate(birthdayInput);
         if (!normalizedBirthday) {
-            globalThis.toastr?.warning?.('NPC State Delta: birthday is not valid for the active calendar.');
+            globalThis.toastr?.warning?.('NPC Codex: birthday is not valid for the active calendar.');
             return false;
         }
         const correctedBirthday = applyNpcBirthdayUpdate(next, {
@@ -5925,11 +5925,11 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     // with the draft; the edit stays applied in this browser and the pending write is retried.
     const savedName = state.npcs[index].name;
     if (!await persistCriticalDurable(originChatKey)) {
-        if (!silent) globalThis.toastr?.warning?.(`NPC State Delta: the edits for ${savedName} are applied in this browser but could not be saved to the server yet. Save again to retry.`);
+        if (!silent) globalThis.toastr?.warning?.(`NPC Codex: the edits for ${savedName} are applied in this browser but could not be saved to the server yet. Save again to retry.`);
         return false;
     }
     if (close) closeNpcEditor();
-    if (!silent) globalThis.toastr?.success?.(`NPC State Delta: saved manual dossier edits for ${savedName}.`);
+    if (!silent) globalThis.toastr?.success?.(`NPC Codex: saved manual dossier edits for ${savedName}.`);
     return true;
 }
 
@@ -5972,7 +5972,7 @@ function updateNpcAppearance(npcId, draft, { chatKey, lockAppearance = false } =
     // newer server copy adopted after the editor opened.
     if (editorIsMounted() && activeEditorChatKey === chatKey && activeEditorBaseRevision !== null
         && Number(activeEditorBaseRevision) !== workingCopyAdoption(chatKey)) {
-        globalThis.toastr?.warning?.('NPC State Delta: this editor was opened on an older server revision. The appearance draft was not applied; review the newly loaded dossier and reopen the editor.');
+        globalThis.toastr?.warning?.('NPC Codex: this editor was opened on an older server revision. The appearance draft was not applied; review the newly loaded dossier and reopen the editor.');
         return false;
     }
     const state = getChatState(chatKey);
@@ -6181,8 +6181,8 @@ function deleteNpcById(npcId, { confirmAction = true } = {}) {
     updateInjection();
     // The deletion is applied now; completion is announced only once the server holds it.
     reportDurableOutcome(deleteKey,
-        `NPC State Delta: deleted ${result.report.name}; older branch snapshots cannot restore that identity.`,
-        `NPC State Delta: ${result.report.name} was removed in this browser, but the deletion could not be saved to the server yet. It will be retried; the server copy still contains the dossier until then.`);
+        `NPC Codex: deleted ${result.report.name}; older branch snapshots cannot restore that identity.`,
+        `NPC Codex: ${result.report.name} was removed in this browser, but the deletion could not be saved to the server yet. It will be retried; the server copy still contains the dossier until then.`);
     return true;
 }
 
@@ -6223,9 +6223,9 @@ function setNpcArchiveStateById(npcId, archived, { reason = 'manual', confirmAct
     updateInjection();
     reportDurableOutcome(getChatKey(),
         archived
-            ? `NPC State Delta: archived ${current.name}. Their dossier and history are preserved.`
-            : (correctingDeath ? `NPC State Delta: corrected ${current.name}'s erroneous death record; presence remains unconfirmed.` : `NPC State Delta: restored ${current.name} to the active roster.`),
-        `NPC State Delta: the change to ${current.name} is applied in this browser but could not be saved to the server yet. It will be retried; the server copy is unchanged until then.`);
+            ? `NPC Codex: archived ${current.name}. Their dossier and history are preserved.`
+            : (correctingDeath ? `NPC Codex: corrected ${current.name}'s erroneous death record; presence remains unconfirmed.` : `NPC Codex: restored ${current.name} to the active roster.`),
+        `NPC Codex: the change to ${current.name} is applied in this browser but could not be saved to the server yet. It will be retried; the server copy is unchanged until then.`);
     return true;
 }
 
@@ -6292,7 +6292,7 @@ function safeFilenamePart(value) {
 }
 
 function exportBundleBytes() {
-    if (!requireReadyChatMutation('export a dossier', getChatKey(), { notify: false })) throw new Error('NPC State Delta chat dossier is not loaded.');
+    if (!requireReadyChatMutation('export a dossier', getChatKey(), { notify: false })) throw new Error('NPC Codex chat dossier is not loaded.');
     return encodeNpcStateBundle(getChatState(), {
         appVersion: NPC_STATE_VERSION,
         chatKey: getChatKey(),
@@ -6300,7 +6300,7 @@ function exportBundleBytes() {
 }
 
 function importBundleBytes(bytes) {
-    if (!requireReadyChatMutation('import a dossier')) throw new Error('NPC State Delta chat dossier is not loaded.');
+    if (!requireReadyChatMutation('import a dossier')) throw new Error('NPC Codex chat dossier is not loaded.');
     const settings = getSettings();
     const decoded = decodeDeltaNativeBundle(bytes);
     const targetChatKey = getChatKey();
@@ -6493,16 +6493,16 @@ async function savePortraitSettingsDraft(explicitDraft = null) {
         portraitSettingsSaveBusy = false;
         syncSettingsControls();
         globalThis.toastr?.success?.(next.portraitThemePreset === 'custom'
-            ? `NPC State Delta: saved custom portrait preset ${portraitCustomPresetFor(next).name}.`
-            : 'NPC State Delta: portrait settings saved.');
+            ? `NPC Codex: saved custom portrait preset ${portraitCustomPresetFor(next).name}.`
+            : 'NPC Codex: portrait settings saved.');
         return true;
     } catch (error) {
         Object.assign(settings, before);
         portraitSettingsSaveBusy = false;
         portraitSettingsDirty = true;
         updatePortraitSettingsSaveUi();
-        console.error('[NPC State Delta] portrait settings save failed', error);
-        globalThis.toastr?.error?.(`NPC State Delta portrait settings were not saved: ${error?.message || error}`);
+        console.error('[NPC Codex] portrait settings save failed', error);
+        globalThis.toastr?.error?.(`NPC Codex portrait settings were not saved: ${error?.message || error}`);
         return false;
     }
 }
@@ -6553,8 +6553,8 @@ async function persistPortraitCustomPresetLibrary(settings, presets, selectedId,
         portraitSettingsSaveBusy = false;
         portraitSettingsDirty = true;
         updatePortraitSettingsSaveUi();
-        console.error('[NPC State Delta] custom portrait preset save failed', error);
-        globalThis.toastr?.error?.(`NPC State Delta custom portrait preset was not saved: ${error?.message || error}`);
+        console.error('[NPC Codex] custom portrait preset save failed', error);
+        globalThis.toastr?.error?.(`NPC Codex custom portrait preset was not saved: ${error?.message || error}`);
         return null;
     }
 }
@@ -6681,7 +6681,7 @@ function bindUi() {
         const snapshot = portraitSettingsDraftFromUi();
         const presets = portraitCustomPresetLibrary(settings.portraitCustomPresets);
         if (presets.length >= PORTRAIT_CUSTOM_PRESET_LIMIT) {
-            globalThis.toastr?.warning?.(`NPC State Delta: custom portrait preset limit is ${PORTRAIT_CUSTOM_PRESET_LIMIT}.`);
+            globalThis.toastr?.warning?.(`NPC Codex: custom portrait preset limit is ${PORTRAIT_CUSTOM_PRESET_LIMIT}.`);
             return;
         }
         const duplicate = this.id.endsWith('_duplicate');
@@ -6701,7 +6701,7 @@ function bindUi() {
         const name = String(globalThis.window?.prompt?.('Custom portrait preset name:', suggested) || '').trim().slice(0, 80);
         if (!name) return;
         if (portraitCustomPresetNameTaken(presets, name)) {
-            globalThis.toastr?.warning?.(`NPC State Delta: a custom portrait preset named "${name}" already exists.`);
+            globalThis.toastr?.warning?.(`NPC Codex: a custom portrait preset named "${name}" already exists.`);
             return;
         }
         const id = nextPortraitCustomPresetId(presets);
@@ -6709,7 +6709,7 @@ function bindUi() {
         const saved = await persistPortraitCustomPresetLibrary(settings, [...presets, created], id, {
             operational: snapshot,
         });
-        if (saved) globalThis.toastr?.success?.(`NPC State Delta: saved custom portrait preset ${created.name}.`);
+        if (saved) globalThis.toastr?.success?.(`NPC Codex: saved custom portrait preset ${created.name}.`);
     });
     $(document).on('click.npcStateDelta', '#npc_state_delta_portrait_custom_rename', async function () {
         if (portraitSettingsSaveBusy) return;
@@ -6722,7 +6722,7 @@ function bindUi() {
         const name = String(globalThis.window?.prompt?.('Rename custom portrait preset:', current.name) || '').trim().slice(0, 80);
         if (!name || name === current.name) return;
         if (portraitCustomPresetNameTaken(snapshot.portraitCustomPresets, name, id)) {
-            globalThis.toastr?.warning?.(`NPC State Delta: a custom portrait preset named "${name}" already exists.`);
+            globalThis.toastr?.warning?.(`NPC Codex: a custom portrait preset named "${name}" already exists.`);
             return;
         }
         if (portraitSettingsDirty && !(await savePortraitSettingsDraft())) return;
@@ -6734,14 +6734,14 @@ function bindUi() {
         const presets = structuredClone(snapshot.portraitCustomPresets);
         presets[index] = { ...current, name };
         const saved = await persistPortraitCustomPresetLibrary(settings, presets, id, { theme: snapshot.portraitThemePreset });
-        if (saved) globalThis.toastr?.success?.(`NPC State Delta: renamed portrait preset to ${name}.`);
+        if (saved) globalThis.toastr?.success?.(`NPC Codex: renamed portrait preset to ${name}.`);
     });
     $(document).on('click.npcStateDelta', '#npc_state_delta_portrait_custom_delete', async function () {
         if (portraitSettingsSaveBusy) return;
         const settings = getSettings();
         let snapshot = portraitSettingsSnapshot(settings);
         if (snapshot.portraitCustomPresets.length <= 1) {
-            globalThis.toastr?.warning?.('NPC State Delta: keep at least one custom portrait preset.');
+            globalThis.toastr?.warning?.('NPC Codex: keep at least one custom portrait preset.');
             return;
         }
         let id = String($('#npc_state_delta_portrait_custom_preset').val() || snapshot.portraitCustomPresetId);
@@ -6761,7 +6761,7 @@ function bindUi() {
         const saved = await persistPortraitCustomPresetLibrary(getSettings(), presets, nextId, {
             theme: snapshot.portraitThemePreset === 'custom' ? 'custom' : snapshot.portraitThemePreset,
         });
-        if (saved) globalThis.toastr?.success?.(`NPC State Delta: deleted custom portrait preset ${target.name}.`);
+        if (saved) globalThis.toastr?.success?.(`NPC Codex: deleted custom portrait preset ${target.name}.`);
     });
     $(document).on('click.npcStateDelta', '#npc_state_delta_reset_portrait_theme', () => {
         writePortraitSettingsDraftToUi({
@@ -6777,7 +6777,7 @@ function bindUi() {
             portraitSaveToGallery: false,
         });
         markPortraitSettingsDirty();
-        globalThis.toastr?.info?.('NPC State Delta: Fantasy Anime defaults loaded as an unsaved portrait-settings draft.');
+        globalThis.toastr?.info?.('NPC Codex: Fantasy Anime defaults loaded as an unsaved portrait-settings draft.');
     });
     $(document).on('click.npcStateDelta', '#npc_state_delta_save_portrait_settings', () => { void savePortraitSettingsDraft(); });
     bindSettingsNumber('#npc_state_delta_scan_every', 'scanEvery', 1, 20, 2);
@@ -6828,17 +6828,17 @@ function bindUi() {
         settings.relationshipCriteria = DEFAULT_RELATIONSHIP_CRITERIA;
         settings.relationshipImpactCriteria = DEFAULT_IMPACT_CRITERIA;
         syncSettingsControls(); persistSettings();
-        globalThis.toastr?.success?.('NPC State Delta: relationship tuning reset to defaults.');
+        globalThis.toastr?.success?.('NPC Codex: relationship tuning reset to defaults.');
     });
     $(document).on('click.npcStateDelta', '#npc_state_delta_reset_memory_rules', () => {
         getSettings().memoryCriteria = DEFAULT_MEMORY_CRITERIA;
         syncSettingsControls(); persistSettings();
-        globalThis.toastr?.success?.('NPC State Delta: important memory criteria reset to default.');
+        globalThis.toastr?.success?.('NPC Codex: important memory criteria reset to default.');
     });
     $(document).on('click.npcStateDelta', '#npc_state_delta_reset_behavior_rules', () => {
         getSettings().behaviorCriteria = DEFAULT_BEHAVIOR_CRITERIA;
         syncSettingsControls(); persistSettings(); updateInjection();
-        globalThis.toastr?.success?.('NPC State Delta: behavior rubric reset to default.');
+        globalThis.toastr?.success?.('NPC Codex: behavior rubric reset to default.');
     });
     $(document).on('click.npcStateDelta', '.npc-state-delta-retry-hydration', () => { void retryCurrentChatHydration(); });
     $(document).on('click.npcStateDelta', '.npc-state-delta-detach-sidecar', () => { void detachBrokenSidecar(); });
@@ -6847,7 +6847,7 @@ function bindUi() {
         if (!await ensureFreshMutationBoundary('add an NPC')) return;
         const settings = getSettings();
         const state = getChatState();
-        if (state.npcs.filter(npc => !npc?.archived).length >= settings.maxNpcs) return globalThis.toastr?.warning?.(`NPC State Delta: active roster cap is ${settings.maxNpcs}. Archived dossiers do not count.`);
+        if (state.npcs.filter(npc => !npc?.archived).length >= settings.maxNpcs) return globalThis.toastr?.warning?.(`NPC Codex: active roster cap is ${settings.maxNpcs}. Archived dossiers do not count.`);
         const name = window.prompt('NPC name to add to this chat dossier:')?.trim();
         if (!name) return;
         const result = applyNpcStateCommand(state, { action: 'add', name }, {
@@ -6856,15 +6856,15 @@ function bindUi() {
             turn: state.turn,
             relationshipBaseline: settings.relationshipBaseline,
         });
-        if (result.report.status === 'excluded') return globalThis.toastr?.warning?.('NPC State Delta: player or explicitly designated narrator cannot be added as an NPC.');
-        if (result.report.status === 'full') return globalThis.toastr?.warning?.(`NPC State Delta: active roster cap is ${settings.maxNpcs}. Archived dossiers do not count.`);
+        if (result.report.status === 'excluded') return globalThis.toastr?.warning?.('NPC Codex: player or explicitly designated narrator cannot be added as an NPC.');
+        if (result.report.status === 'full') return globalThis.toastr?.warning?.(`NPC Codex: active roster cap is ${settings.maxNpcs}. Archived dossiers do not count.`);
         if (['added', 'exists', 'restored'].includes(result.report.status)) clearUserDismissedSuppression(result.state, name);
         const targetMessageId = latestMessageId(false);
         if (targetMessageId >= 0) commitBranchCheckpoint(result.state, targetMessageId, 'manual-add');
         setChatState(getChatKey(), result.state);
         persistCritical(); renderDossier(); updateInjection();
         const addedNpc = result.report.npcId ? result.state.npcs.find(npc => npc.id === result.report.npcId) : null;
-        if (addedNpc) globalThis.toastr?.success?.(`NPC State Delta: ${addedNpc.name} created. Use the wand beside the dossier to Scan dossier and populate it.`);
+        if (addedNpc) globalThis.toastr?.success?.(`NPC Codex: ${addedNpc.name} created. Use the wand beside the dossier to Scan dossier and populate it.`);
     });
     $(document).on('click.npcStateDelta', '.npc-state-delta-roster-edit', function (event) { event.preventDefault?.(); event.stopPropagation?.(); openNpcEditorSafely(this.dataset.npcId); });
     $(document).on('click.npcStateDelta', '.npc-state-delta-scan-dossier', function (event) { event.preventDefault?.(); event.stopPropagation?.(); void scanNpcDossier(String(this.dataset.npcId || '')); });
@@ -6896,7 +6896,7 @@ function bindUi() {
     });
     $(document).on('click.npcStateDelta', '#npc_state_delta_clear_chat', async () => {
         if (!await ensureFreshMutationBoundary('clear this chat dossier')) return;
-        if (!window.confirm('Clear every NPC State Delta dossier for this chat? Portraits and inline dossier cards will also be removed.')) return;
+        if (!window.confirm('Clear every NPC Codex dossier for this chat? Portraits and inline dossier cards will also be removed.')) return;
         closePortraitGenerator();
         const cleared = freshChatState();
         cleared.lineage = chatLineage(getContext().chat || []);
@@ -6911,7 +6911,7 @@ function attachSettingsPanel() {
     if (!host.length) host = $('#extensions_settings');
     if (!host.length) host = $('#extensionsMenu');
     if (!host.length) {
-        console.warn('[NPC State Delta] Could not find SillyTavern extensions settings host yet.');
+        console.warn('[NPC Codex] Could not find SillyTavern extensions settings host yet.');
         return false;
     }
     host.append(buildSettingsHtml());
@@ -6933,7 +6933,7 @@ function scheduleSettingsMountRetries() {
             clearInterval(mountRetryTimer);
             mountRetryTimer = null;
             if (attempts >= 40 && !$(`#${UI_ID}`).length) {
-                console.error('[NPC State Delta] Settings panel host never appeared; extension logic is loaded but UI could not mount.');
+                console.error('[NPC Codex] Settings panel host never appeared; extension logic is loaded but UI could not mount.');
             }
         }
     }, 250);
@@ -6950,8 +6950,8 @@ async function handleAssistantMessageReceived(messageId, { bypassSwipeGuard = fa
     const eventParentKey = lineageCheckpointKey(chatLineage(getContext().chat || []), messageId - 1);
     try { await ensureChatStateLoaded(eventChatKey); }
     catch (error) {
-        console.error('[NPC State Delta] assistant event deferred because chat hydration failed.', error);
-        globalThis.toastr?.error?.('NPC State Delta could not load this chat dossier. Existing sidecar data was preserved; retry after the server is available.');
+        console.error('[NPC Codex] assistant event deferred because chat hydration failed.', error);
+        globalThis.toastr?.error?.('NPC Codex could not load this chat dossier. Existing sidecar data was preserved; retry after the server is available.');
         return;
     }
     if (getChatKey() !== eventChatKey) return;
@@ -7024,7 +7024,7 @@ async function refreshCurrentChatFromServer(reason = 'resume') {
         updateInjection();
         return true;
     } catch (error) {
-        console.warn(`[NPC State Delta] ${reason} freshness check failed safely; cached state will not be used for mutation until the server can be verified.`, error);
+        console.warn(`[NPC Codex] ${reason} freshness check failed safely; cached state will not be used for mutation until the server can be verified.`, error);
         return false;
     }
 }
@@ -7045,7 +7045,7 @@ async function runBoundedLifecycleEvent(operationKey, label, task) {
         operation = Promise.resolve().then(task);
         lifecycleEventOperations.set(key, operation);
         void operation.catch(error => {
-            console.warn(`[NPC State Delta] ${label} background transaction failed; scheduling retry.`, error);
+            console.warn(`[NPC Codex] ${label} background transaction failed; scheduling retry.`, error);
             scheduleLifecycleRetry(key, label, task);
         });
         operation.then(
@@ -7064,11 +7064,11 @@ async function runBoundedLifecycleEvent(operationKey, label, task) {
     const outcome = await Promise.race([observed, timeout]);
     if (timer) clearTimeout(timer);
     if (outcome.timedOut) {
-        console.warn(`[NPC State Delta] ${label} exceeded ${LIFECYCLE_EVENT_WAIT_MS / 1000}s; SillyTavern may continue while the fail-closed transaction retries in the background.`);
+        console.warn(`[NPC Codex] ${label} exceeded ${LIFECYCLE_EVENT_WAIT_MS / 1000}s; SillyTavern may continue while the fail-closed transaction retries in the background.`);
         return false;
     }
     if (outcome.error) {
-        console.error(`[NPC State Delta] ${label} failed safely; scheduling a background retry.`, outcome.error);
+        console.error(`[NPC Codex] ${label} failed safely; scheduling a background retry.`, outcome.error);
         scheduleLifecycleRetry(key, label, task);
         return false;
     }
@@ -7100,7 +7100,7 @@ function registerEvents() {
                 && chatHydrationStatus(key) === 'ready';
             generationFreshness = { key: '', at: 0 };
             if (!recentlyChecked) {
-                try { await ensureChatStateLoaded(key); } catch (error) { console.error('[NPC State Delta] user-turn lineage update skipped because chat hydration failed.', error); return; }
+                try { await ensureChatStateLoaded(key); } catch (error) { console.error('[NPC Codex] user-turn lineage update skipped because chat hydration failed.', error); return; }
             }
             if (getChatKey() !== key) return;
             // This listener maintains branch lineage and refreshes the injection so an off-screen NPC
@@ -7123,7 +7123,7 @@ function registerEvents() {
             try {
                 await ensureChatStateLoaded(key);
                 generationFreshness = { key, at: Date.now() };
-            } catch (error) { console.warn('[NPC State Delta] pre-generation freshness check failed; the injection keeps the last verified dossier.', error); }
+            } catch (error) { console.warn('[NPC Codex] pre-generation freshness check failed; the injection keeps the last verified dossier.', error); }
             if (getChatKey() !== key) return;
             updateInjection();
         });
@@ -7146,7 +7146,7 @@ function registerEvents() {
             renderDossier(); ensureInlineObserver(); queueInlineRender(0);
         } catch (error) {
             if (getChatKey() === key) { renderDossier(); updateInjection(); }
-            console.error('[NPC State Delta] post-load hydration/render failed; durable data was not overwritten.', error);
+            console.error('[NPC Codex] post-load hydration/render failed; durable data was not overwritten.', error);
         }
     });
 
@@ -7226,7 +7226,7 @@ function registerEvents() {
                 evictDormantChatStates(key);
             } catch (error) {
                 if (getChatKey() === key) { renderDossier(); updateInjection(); }
-                console.error('[NPC State Delta] chat change hydration failed; durable state was preserved.', error);
+                console.error('[NPC Codex] chat change hydration failed; durable state was preserved.', error);
             } finally {
                 openingHostChats.delete(key);
             }
@@ -7293,12 +7293,12 @@ async function init() {
             seedBranchTracking(getChatState(key));
         }
     } catch (error) {
-        console.error('[NPC State Delta] startup hydration failed; extension remains mounted in read-only recovery mode.', error);
+        console.error('[NPC Codex] startup hydration failed; extension remains mounted in read-only recovery mode.', error);
         if (getChatKey() === key) renderDossier();
     }
     updateInjection();
     evictDormantChatStates(getChatKey());
-    console.log(`[NPC State Delta] v${NPC_STATE_VERSION} loaded`);
+    console.log(`[NPC Codex] v${NPC_STATE_VERSION} loaded`);
 }
 
 async function safeInit() {
@@ -7306,7 +7306,7 @@ async function safeInit() {
         await init();
     } catch (error) {
         initialized = false;
-        console.error('[NPC State Delta] initialization failed', error);
+        console.error('[NPC Codex] initialization failed', error);
     }
 }
 
@@ -7322,7 +7322,7 @@ try {
         if (bootEvents.EXTENSION_SETTINGS_LOADED) bootContext.eventSource.on(bootEvents.EXTENSION_SETTINGS_LOADED, safeInit);
     }
 } catch (error) {
-    console.debug('[NPC State Delta] lifecycle bootstrap will rely on DOM ready.', error);
+    console.debug('[NPC Codex] lifecycle bootstrap will rely on DOM ready.', error);
 }
 
 globalThis.__NPCStateDeltaLifecycle = Object.freeze({
@@ -7333,7 +7333,7 @@ globalThis.__NPCStateDeltaLifecycle = Object.freeze({
 });
 
 // Small debug surface for deployment tests.
-window.NPCStateDelta = Object.freeze({
+window.NPCCodex = Object.freeze({
     version: NPC_STATE_VERSION,
     scan: () => scanNow({ manual: true }),
     cancelScan: () => { const key = getChatKey(); pendingAutoScans.delete(key); return cancelScanOperation(key, 'user cancelled'); },
@@ -7435,7 +7435,7 @@ window.NPCStateDelta = Object.freeze({
     exportBytes: async ({ chatKey = '' } = {}) => {
         const key = getChatKey();
         if (chatKey && chatKey !== key) throw new Error('The active chat changed before export; nothing was exported.');
-        if (!await ensureFreshMutationBoundary('export a dossier', key, { notify: false })) throw new Error('NPC State Delta canonical server dossier is unavailable.');
+        if (!await ensureFreshMutationBoundary('export a dossier', key, { notify: false })) throw new Error('NPC Codex canonical server dossier is unavailable.');
         if (getChatKey() !== key) throw new Error('The active chat changed before export; nothing was exported.');
         return exportBundleBytes();
     },
@@ -7481,7 +7481,7 @@ window.NPCStateDelta = Object.freeze({
         const formPortraits = {};
         for (const [npcId, forms] of Object.entries(state.formPortraitAssets || {})) {
             formPortraits[npcId] = Object.fromEntries(Object.values(forms || {}).filter(portrait => portrait?.dataUrl)
-                .map(portrait => [portrait.form, { dataUrl: portrait.dataUrl, appearanceFingerprint: portrait.appearanceFingerprint || '' }]));
+                .map(portrait => [portrait.form, { dataUrl: portrait.dataUrl, generatedFrom: portrait.generatedFrom || '', appearanceFingerprint: portrait.appearanceFingerprint || '' }]));
         }
         return { turn: state.turn, npcs: structuredClone(state.npcs), portraitAssets: {}, formPortraits };
     },
@@ -7519,3 +7519,6 @@ window.NPCStateDelta = Object.freeze({
     restore: npcId => runFreshMutation('restore a dossier', getChatKey(), () => setNpcArchiveStateById(npcId, false, { confirmAction: false })),
     deleteNpc: npcId => runFreshMutation('delete a dossier', getChatKey(), () => deleteNpcById(npcId, { confirmAction: false })),
 });
+
+// Existing integrations share the same API and canonical state; no second owner.
+window.NPCStateDelta = window.NPCCodex;

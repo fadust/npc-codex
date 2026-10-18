@@ -1,4 +1,4 @@
-/* NPC State Delta: per-NPC knowledge ledger and information gating (fadust fork).
+/* NPC Codex: per-NPC knowledge ledger and information gating (fadust fork).
  *
  * Each dossier carries `knowledge`: what this NPC knows, which of those facts it keeps secret,
  * and which facts it explicitly does NOT know. A fact lives only on the NPC that holds it; an NPC

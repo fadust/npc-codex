@@ -1,4 +1,4 @@
-/* NPC State Delta continuity UI adapter for the appearance-form editor surface.
+/* NPC Codex continuity UI adapter for the appearance-form editor surface.
  * Calendar settings mount through calendar-settings.js into the settings panel's calendar slot. */
 import {
     currentPresentationText,
@@ -207,7 +207,7 @@ function scheduleNormalize() {
         try {
             document.querySelectorAll('.npc-state-delta-editor-popup').forEach(ensureAppearanceEditor);
         } catch (error) {
-            console.debug('[NPC State Delta] continuity UI normalization skipped', error);
+            console.debug('[NPC Codex] continuity UI normalization skipped', error);
         }
     });
 }
@@ -225,11 +225,11 @@ function bindEvents() {
         const status = editorAppearanceSection(editor)?.querySelector('[data-delta-appearance-status]');
         if (status) status.textContent = 'Applying…';
         void applyAppearanceEditor(editor)
-            .then(npc => { if (npc) globalThis.toastr?.success?.('NPC State Delta: appearance updated and saved.'); })
+            .then(npc => { if (npc) globalThis.toastr?.success?.('NPC Codex: appearance updated and saved.'); })
             .catch(error => {
-                console.error('[NPC State Delta] appearance-form edit failed', error);
+                console.error('[NPC Codex] appearance-form edit failed', error);
                 if (status) status.textContent = error?.message || String(error);
-                globalThis.toastr?.error?.(`NPC State Delta appearance forms were not updated: ${error?.message || error}`);
+                globalThis.toastr?.error?.(`NPC Codex appearance forms were not updated: ${error?.message || error}`);
             })
             .finally(() => { apply.disabled = false; });
     });

@@ -11,7 +11,7 @@ function toUint8Array(value) {
     if (value instanceof Uint8Array) return value;
     if (value instanceof ArrayBuffer) return new Uint8Array(value);
     if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-    throw new Error('NPC State Delta bundle must be binary data.');
+    throw new Error('NPC Codex bundle must be binary data.');
 }
 
 function bytesEqual(a, b) {
@@ -114,10 +114,10 @@ export function encodeNpcStateBundle(state, { appVersion = 'unknown', chatKey = 
     };
 
     const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
-    if (manifestBytes.length > MAX_MANIFEST_BYTES) throw new Error('NPC State Delta bundle manifest is too large.');
+    if (manifestBytes.length > MAX_MANIFEST_BYTES) throw new Error('NPC Codex bundle manifest is too large.');
 
     const totalBytes = HEADER_SIZE + manifestBytes.length + binaryOffsetRef.value;
-    if (totalBytes > MAX_BUNDLE_BYTES) throw new Error('NPC State Delta bundle exceeds the 32 MB safety limit.');
+    if (totalBytes > MAX_BUNDLE_BYTES) throw new Error('NPC Codex bundle exceeds the 32 MB safety limit.');
 
     const output = new Uint8Array(totalBytes);
     output.set(MAGIC, 0);
@@ -138,15 +138,15 @@ function validateManifest(manifest) {
     while (queue.length) {
         const { value, depth } = queue.pop();
         if (!value || typeof value !== 'object') continue;
-        if (depth > 64) throw new Error('NPC State Delta bundle nesting exceeds the 64-level safety limit.');
+        if (depth > 64) throw new Error('NPC Codex bundle nesting exceeds the 64-level safety limit.');
         for (const [key, item] of Object.entries(value)) {
-            if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('NPC State Delta bundle contains unsafe object metadata.');
+            if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('NPC Codex bundle contains unsafe object metadata.');
             if (item && typeof item === 'object') queue.push({ value: item, depth: depth + 1 });
         }
     }
-    if (!manifest || manifest.format !== 'npc_state_delta_bundle') throw new Error('Not an NPC State Delta bundle.');
-    if (manifest.formatVersion !== FORMAT_VERSION) throw new Error(`Unsupported NPC State Delta bundle version: ${manifest.formatVersion}.`);
-    if (!manifest.state || !Array.isArray(manifest.state.npcs)) throw new Error('NPC State Delta bundle is missing its dossier registry.');
+    if (!manifest || manifest.format !== 'npc_state_delta_bundle') throw new Error('Not an NPC Codex bundle.');
+    if (manifest.formatVersion !== FORMAT_VERSION) throw new Error(`Unsupported NPC Codex bundle version: ${manifest.formatVersion}.`);
+    if (!manifest.state || !Array.isArray(manifest.state.npcs)) throw new Error('NPC Codex bundle is missing its dossier registry.');
     const ids = new Set();
     for (const npc of manifest.state.npcs) {
         if (!npc || typeof npc !== 'object' || Array.isArray(npc)) throw new Error('Every Delta dossier must be an object.');
@@ -165,30 +165,30 @@ function validateManifest(manifest) {
             }
         }
         const id = String(npc?.id || '').trim();
-        if (['__proto__', 'constructor', 'prototype'].includes(id)) throw new Error('NPC State Delta dossier id is reserved.');
+        if (['__proto__', 'constructor', 'prototype'].includes(id)) throw new Error('NPC Codex dossier id is reserved.');
         if (!id) continue;
-        if (ids.has(id)) throw new Error(`NPC State Delta bundle contains duplicate NPC id: ${id}.`);
+        if (ids.has(id)) throw new Error(`NPC Codex bundle contains duplicate NPC id: ${id}.`);
         ids.add(id);
     }
 }
 
 export function decodeNpcStateBundle(input) {
     const bytes = toUint8Array(input);
-    if (bytes.length < HEADER_SIZE) throw new Error('NPC State Delta bundle is truncated.');
-    if (bytes.length > MAX_BUNDLE_BYTES) throw new Error('NPC State Delta bundle exceeds the 32 MB safety limit.');
-    if (!bytesEqual(bytes.subarray(0, MAGIC.length), MAGIC)) throw new Error('Invalid NPC State Delta bundle signature.');
+    if (bytes.length < HEADER_SIZE) throw new Error('NPC Codex bundle is truncated.');
+    if (bytes.length > MAX_BUNDLE_BYTES) throw new Error('NPC Codex bundle exceeds the 32 MB safety limit.');
+    if (!bytesEqual(bytes.subarray(0, MAGIC.length), MAGIC)) throw new Error('Invalid NPC Codex bundle signature.');
 
     const manifestLength = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(MAGIC.length, true);
-    if (!manifestLength || manifestLength > MAX_MANIFEST_BYTES) throw new Error('NPC State Delta bundle has an invalid manifest length.');
+    if (!manifestLength || manifestLength > MAX_MANIFEST_BYTES) throw new Error('NPC Codex bundle has an invalid manifest length.');
     const manifestStart = HEADER_SIZE;
     const binaryStart = manifestStart + manifestLength;
-    if (binaryStart > bytes.length) throw new Error('NPC State Delta bundle manifest is truncated.');
+    if (binaryStart > bytes.length) throw new Error('NPC Codex bundle manifest is truncated.');
 
     let manifest;
     try {
         manifest = JSON.parse(new TextDecoder().decode(bytes.subarray(manifestStart, binaryStart)));
     } catch {
-        throw new Error('NPC State Delta bundle manifest is invalid JSON.');
+        throw new Error('NPC Codex bundle manifest is invalid JSON.');
     }
     validateManifest(manifest);
 
@@ -200,12 +200,12 @@ export function decodeNpcStateBundle(input) {
         const offset = Number(bin.offset);
         const length = Number(bin.length);
         if (!Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length <= 0) {
-            throw new Error(`NPC State Delta bundle has invalid portrait metadata for ${record.name || 'an NPC'}.`);
+            throw new Error(`NPC Codex bundle has invalid portrait metadata for ${record.name || 'an NPC'}.`);
         }
         const start = binaryStart + offset;
         const end = start + length;
         if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end < start || end > bytes.length) {
-            throw new Error(`NPC State Delta bundle portrait is truncated for ${record.name || 'an NPC'}.`);
+            throw new Error(`NPC Codex bundle portrait is truncated for ${record.name || 'an NPC'}.`);
         }
         portraitRanges.push({ start, end, name: record.name || 'an NPC' });
         const mime = record.portrait.mime || 'application/octet-stream';
@@ -216,7 +216,7 @@ export function decodeNpcStateBundle(input) {
     const npcIds = new Set(npcs.map(npc => String(npc?.id || '')).filter(Boolean));
     const formPortraitAssets = {};
     const declaredForms = manifest.state.formPortraits;
-    if (declaredForms !== undefined && !Array.isArray(declaredForms)) throw new Error('NPC State Delta bundle has invalid form portrait metadata.');
+    if (declaredForms !== undefined && !Array.isArray(declaredForms)) throw new Error('NPC Codex bundle has invalid form portrait metadata.');
     for (const entry of Array.isArray(declaredForms) ? declaredForms : []) {
         const npcId = typeof entry?.npcId === 'string' ? entry.npcId : '';
         const form = typeof entry?.form === 'string' ? entry.form.trim().slice(0, 120) : '';
@@ -225,12 +225,12 @@ export function decodeNpcStateBundle(input) {
         const length = Number(bin?.length);
         if (!npcId || !form || !entry.portrait || typeof entry.portrait !== 'object' || Array.isArray(entry.portrait)
             || !Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length <= 0) {
-            throw new Error('NPC State Delta bundle has invalid form portrait metadata.');
+            throw new Error('NPC Codex bundle has invalid form portrait metadata.');
         }
         const start = binaryStart + offset;
         const end = start + length;
         if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end < start || end > bytes.length) {
-            throw new Error(`NPC State Delta bundle form portrait is truncated for ${form}.`);
+            throw new Error(`NPC Codex bundle form portrait is truncated for ${form}.`);
         }
         portraitRanges.push({ start, end, name: `${form} form portrait` });
         if (!npcIds.has(npcId)) continue;
@@ -243,7 +243,7 @@ export function decodeNpcStateBundle(input) {
     portraitRanges.sort((a, b) => a.start - b.start || a.end - b.end);
     for (let i = 1; i < portraitRanges.length; i += 1) {
         if (portraitRanges[i].start < portraitRanges[i - 1].end) {
-            throw new Error(`NPC State Delta bundle contains overlapping portrait data for ${portraitRanges[i].name}.`);
+            throw new Error(`NPC Codex bundle contains overlapping portrait data for ${portraitRanges[i].name}.`);
         }
     }
 

@@ -1,4 +1,4 @@
-/* NPC State Delta Stage 1 launcher refinement: movable, mobile-safe, UI-only position state. */
+/* NPC Codex Stage 1 launcher refinement: movable, mobile-safe, UI-only position state. */
 
 const ROOT_ID = 'npc_state_delta_dossier_root';
 const LAUNCHER_ID = 'npc_state_delta_dossier_launcher';
@@ -447,7 +447,7 @@ class DeltaLauncherRefinement {
         event.preventDefault?.();
         const controller = this.controller();
         if (typeof controller?.open === 'function') void controller.open();
-        else globalThis.toastr?.warning?.('NPC State Delta dossier UI is still mounting.');
+        else globalThis.toastr?.warning?.('NPC Codex dossier UI is still mounting.');
     }
 
     onBackdropClick(event) {
@@ -477,7 +477,7 @@ function start(attempt = 0) {
         return;
     }
     if (attempt < START_RETRY_LIMIT) setTimeout(() => start(attempt + 1), START_RETRY_MS);
-    else console.error('[NPC State Delta] launcher refinement could not find the mounted Stage 1 dossier UI.');
+    else console.error('[NPC Codex] launcher refinement could not find the mounted Stage 1 dossier UI.');
 }
 
 if (typeof document !== 'undefined') {

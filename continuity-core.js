@@ -1,5 +1,5 @@
 import { distinctNamedPeople } from './cast.js';
-/* NPC State Delta Stage 4 continuity facade. */
+/* NPC Codex Stage 4 continuity facade. */
 import * as mechanics from './core-mechanics.js';
 import {
     APPEARANCE_MODEL_VERSION,

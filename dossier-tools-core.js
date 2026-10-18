@@ -1,4 +1,4 @@
-/* NPC State Delta supporting tools: portrait manager, native data transfer, and diagnostics. */
+/* NPC Codex supporting tools: portrait manager, native data transfer, and diagnostics. */
 import { PORTRAIT_STYLE_PROMPT_LIMIT, PORTRAIT_COMPOSITION_PROMPT_LIMIT } from './core-mechanics.js';
 
 const OVERLAY_ID = 'npc_state_delta_tools_overlay';
@@ -112,7 +112,39 @@ export function recordToolEvent(type, values = {}) {
     boundedAppend(toolEvents, safeToolEvent(type, values), TOOL_EVENT_LIMIT);
 }
 
-export function api() { return globalThis.NPCStateDelta || null; }
+export function api() { return (globalThis.NPCCodex || globalThis.NPCStateDelta) || null; }
+
+export function originalPortraitSource(asset = {}) {
+    const original = String(asset.generatedFrom || '');
+    return /^(?:\/user\/images\/|data:image\/(?:png|jpeg|webp);base64,)/i.test(original) ? original : String(asset.dataUrl || '');
+}
+
+export function openPortraitImage(source, name = 'NPC') {
+    if (!source) return null;
+    const previous = document.activeElement;
+    const dialog = document.createElement('dialog');
+    dialog.className = 'npc-codex-image-viewer';
+    dialog.setAttribute('aria-label', `${name} original portrait`);
+    dialog.style.cssText = 'width:96vw;height:94dvh;max-width:96vw;max-height:94dvh;padding:16px;background:#101f29;color:#e7f1f4;border:1px solid #5bc9bd;border-radius:16px;';
+    dialog.innerHTML = `<header style="display:flex;gap:12px;align-items:center;margin-bottom:12px"><strong>${escapeHtml(name)}</strong><span data-image-size></span><button type="button" data-image-zoom aria-pressed="false">Original size (1:1)</button><button type="button" data-image-close>Close</button></header><div style="height:calc(100% - 48px);overflow:auto"><img alt="${escapeHtml(name)} full portrait" style="display:block;margin:auto;max-width:100%;max-height:100%;object-fit:contain"></div>`;
+    const image = dialog.querySelector('img');
+    image.onload = () => { dialog.querySelector('[data-image-size]').textContent = `${image.naturalWidth} × ${image.naturalHeight}`; };
+    image.onerror = () => { dialog.querySelector('[data-image-size]').textContent = 'Original image unavailable'; };
+    image.src = source;
+    dialog.querySelector('[data-image-zoom]').onclick = event => {
+        const full = event.currentTarget.getAttribute('aria-pressed') !== 'true';
+        event.currentTarget.setAttribute('aria-pressed', String(full));
+        event.currentTarget.textContent = full ? 'Fit to window' : 'Original size (1:1)';
+        image.style.maxWidth = full ? 'none' : '100%';
+        image.style.maxHeight = full ? 'none' : '100%';
+    };
+    dialog.querySelector('[data-image-close]').onclick = () => dialog.close();
+    dialog.addEventListener('keydown', event => { if (event.key === 'Escape') event.stopPropagation(); });
+    dialog.addEventListener('close', () => { dialog.remove(); previous?.focus?.(); }, { once: true });
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    return dialog;
+}
 export function uiRoot() { return document.getElementById(DOSSIER_ROOT_ID); }
 export function overlayMountHost() { return globalThis.document?.body || null; }
 export function modalTopLayerSupported(doc = globalThis.document) {
@@ -232,7 +264,7 @@ export function mountOverlay(html, session) {
         if (!session.busy || session.cancelableBusy) closeOverlay({ reason: 'escape' });
     });
     const host = overlayMountHost();
-    if (!host) throw new Error('NPC State Delta could not find a safe host for the supporting-tools overlay.');
+    if (!host) throw new Error('NPC Codex could not find a safe host for the supporting-tools overlay.');
     host.appendChild(overlay);
     activeOverlay = overlay;
     activeSession = session;

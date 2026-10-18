@@ -10,7 +10,7 @@ test('Delta sidecars round-trip their own namespace and reject legacy data', () 
   assert.equal(payload.chatKey, 'chat:test.png:seed');
   assert.equal(payload.appVersion, '0.1.0');
   assert.match(makeNpcStateDataFileName(payload.chatKey), /^npc-state-delta-/);
-  assert.throws(() => decodeStateFilePayload(JSON.stringify({ ...payload, format: 'npc_state_chat_data' })), /Not an NPC State Delta/);
+  assert.throws(() => decodeStateFilePayload(JSON.stringify({ ...payload, format: 'npc_state_chat_data' })), /Not an NPC Codex/);
 });
 
 test('Delta native bundle rejects a valid-envelope legacy format without conversion', () => {
@@ -25,5 +25,5 @@ test('Delta native bundle rejects a valid-envelope legacy format without convers
   foreign.set(header);
   new DataView(foreign.buffer).setUint32(8, foreignManifest.length, true);
   foreign.set(foreignManifest, 12);
-  assert.throws(() => decodeNpcStateBundle(foreign), /Not an NPC State Delta bundle/);
+  assert.throws(() => decodeNpcStateBundle(foreign), /Not an NPC Codex bundle/);
 });

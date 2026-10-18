@@ -48,7 +48,7 @@ export function codexHeaderHtml(npc) {
             </div>
         </div>
         <label class="codex-quote"><span class="sr-only">Quote</span><textarea data-codex-quote rows="2" maxlength="240" placeholder="Add a quote…">${escapeHtml(npc.quote)}</textarea></label>
-        <div class="codex-actions"><button type="button" class="delta-btn delta-edit" data-npc-id="${escapeHtml(npc.id)}">Edit dossier</button></div>
+        <div class="codex-actions"><button type="button" class="delta-btn delta-edit" data-npc-id="${escapeHtml(npc.id)}">Edit dossier</button><button type="button" class="delta-btn npc-state-delta-refresh-chat" data-npc-id="${escapeHtml(npc.id)}" title="Re-read recent story to fill supported details; preserve locks and accepted development">Refresh</button></div>
         <div class="codex-tabs-slot"></div>
     </header>`;
 }
@@ -59,17 +59,17 @@ export function codexLayoutStyles(rootId) {
 ${r} .delta-stage { display:grid; grid-template-rows:auto minmax(0,1fr); min-height:0; }
 ${r} .delta-spread { grid-template-columns:minmax(0,1fr) !important; min-height:0; }
 ${r} .delta-hero, ${r} .delta-document-head, ${r} .delta-stat-head { display:none !important; }
-${r} .codex-head { position:relative; z-index:2; background:var(--delta-bg, #1d2128); display:grid; grid-template-columns:auto minmax(0,1fr) minmax(180px,30%); grid-template-areas:"pic ident quote" "pic ident actions" "tabs tabs tabs"; gap:6px 18px; padding:14px 18px 0; border-bottom:1px solid var(--delta-line, rgba(218,193,148,.16)); }
-${r} .codex-portrait { grid-area:pic; width:118px; height:118px; padding:0; border:1px solid var(--delta-line, rgba(218,193,148,.22)); border-radius:10px; overflow:hidden; background:rgba(0,0,0,.3); cursor:zoom-in; }
+${r} .codex-head { position:relative; z-index:2; background:var(--delta-bg, #1d2128); display:grid; grid-template-columns:auto minmax(0,1fr) minmax(180px,30%); grid-template-areas:"pic ident quote" "pic ident actions" "tabs tabs tabs"; gap:6px 18px; padding:14px 18px 0; border-bottom:1px solid var(--delta-line, rgba(91,201,189,.16)); }
+${r} .codex-portrait { position:static; inset:auto; grid-area:pic; width:118px; height:118px; padding:0; border:1px solid var(--delta-line, rgba(91,201,189,.22)); border-radius:10px; overflow:hidden; background:rgba(0,0,0,.3); cursor:zoom-in; }
 ${r} .codex-portrait[aria-hidden] { cursor:default; }
 ${r} .codex-portrait img { width:100%; height:100%; object-fit:cover; object-position:center 18%; display:block; }
-${r} .codex-initial { display:grid; place-items:center; height:100%; font:700 3rem/1 Georgia,serif; color:var(--delta-accent, #d8bc78); opacity:.75; }
+${r} .codex-initial { display:grid; place-items:center; height:100%; font:700 3rem/1 Georgia,serif; color:var(--delta-accent, #5bc9bd); opacity:.75; }
 ${r} .codex-ident { grid-area:ident; min-width:0; display:grid; align-content:start; gap:6px; }
 ${r} .codex-title { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
-${r} .codex-title h2 { margin:0; font:700 1.6rem/1.15 Georgia,"Times New Roman",serif; color:#fff4d7; }
+${r} .codex-title h2 { margin:0; font:700 1.6rem/1.15 Georgia,"Times New Roman",serif; color:#b6eee4; }
 ${r} .codex-sub { margin:0; color:var(--delta-muted, #a9a39a); font-size:.88rem; }
 ${r} .codex-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
-${r} .codex-chip { display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:3px 10px; border:1px solid var(--delta-line, rgba(218,193,148,.22)); border-radius:7px; background:rgba(255,255,255,.035); color:inherit; font-size:.8rem; }
+${r} .codex-chip { display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:3px 10px; border:1px solid var(--delta-line, rgba(91,201,189,.22)); border-radius:7px; background:rgba(255,255,255,.035); color:inherit; font-size:.8rem; }
 ${r} .codex-chip i { font-style:normal; opacity:.7; }
 ${r} .codex-chip.is-empty { opacity:.5; }
 ${r} .codex-tag button { margin-left:2px; padding:0 2px; border:0; background:none; color:inherit; opacity:.6; cursor:pointer; }
@@ -78,15 +78,20 @@ ${r} .codex-quote { grid-area:quote; position:relative; display:block; padding:0
 ${r} .codex-quote::before, ${r} .codex-quote::after { position:absolute; font:700 1.8rem/1 Georgia,serif; color:var(--delta-muted, #a9a39a); opacity:.5; }
 ${r} .codex-quote::before { content:"“"; left:-4px; top:-6px; }
 ${r} .codex-quote::after { content:"”"; right:-4px; bottom:-18px; }
-${r} .codex-quote textarea { width:100%; min-height:3.2em; resize:none; border:0; border-bottom:1px solid var(--delta-line, rgba(218,193,148,.2)); background:transparent; color:inherit; font:italic .92rem/1.4 Georgia,serif; text-align:center; }
-${r} .codex-actions { grid-area:actions; justify-self:end; align-self:end; }
+${r} .codex-quote textarea { width:100%; min-height:3.2em; resize:none; border:0; border-bottom:1px solid var(--delta-line, rgba(91,201,189,.2)); background:transparent; color:inherit; font:italic .92rem/1.4 Georgia,serif; text-align:center; }
+${r} .codex-actions { grid-area:actions; justify-self:end; align-self:end; display:flex; flex-wrap:wrap; gap:6px; }
 ${r} .codex-tabs-slot { grid-area:tabs; margin-top:8px; }
 ${r} .codex-tabs-slot .delta-map-switch { display:flex; gap:4px; border:0; background:none; padding:0; }
-${r} .codex-tabs-slot .delta-map-switch button { min-width:120px; padding:9px 18px; border:1px solid var(--delta-line, rgba(218,193,148,.2)); border-bottom:0; border-radius:8px 8px 0 0; background:rgba(255,255,255,.03); color:inherit; }
-${r} .codex-tabs-slot .delta-map-switch button[aria-selected="true"] { background:color-mix(in srgb, var(--delta-accent, #d8bc78) 16%, transparent); border-color:var(--delta-accent, #d8bc78); color:#fff4d7; }
+${r} .codex-tabs-slot .delta-map-switch button { min-width:120px; padding:9px 18px; border:1px solid var(--delta-line, rgba(91,201,189,.2)); border-bottom:0; border-radius:8px 8px 0 0; background:rgba(255,255,255,.03); color:inherit; }
+${r} .codex-tabs-slot .delta-map-switch button[aria-selected="true"] { background:color-mix(in srgb, var(--delta-accent, #5bc9bd) 16%, transparent); border-color:var(--delta-accent, #5bc9bd); color:#b6eee4; }
 @media (min-width: 900px) {
-${r} .delta-library { display:grid !important; grid-template-columns:270px minmax(0,1fr); grid-template-rows:minmax(0,1fr); min-height:0; }
-${r} .delta-library > .delta-cast { grid-column:1; grid-row:1; display:flex !important; flex-direction:column; min-height:0; height:auto !important; max-height:none !important; border-right:1px solid var(--delta-line, rgba(218,193,148,.16)); border-top:0 !important; }
+${r} .delta-library.npc-codex-cast-collapsed { grid-template-columns:minmax(250px,32%) minmax(0,1fr); grid-template-rows:minmax(0,1fr) !important; }
+${r} .delta-library.npc-codex-cast-collapsed > .delta-cast { display:none !important; }
+${r} .npc-codex-cast-collapsed .delta-hero { display:grid !important; grid-column:1; grid-row:1; }
+${r} .npc-codex-cast-collapsed .codex-head { grid-template-columns:minmax(0,1fr) minmax(150px,30%); grid-template-areas:"ident quote" "ident actions" "tabs tabs"; }
+${r} .npc-codex-cast-collapsed .codex-portrait { display:none; }
+${r} .delta-library { display:grid !important; grid-template-columns:270px minmax(0,1fr); grid-template-rows:minmax(0,1fr) !important; min-height:0; }
+${r} .delta-library > .delta-cast { grid-column:1; grid-row:1; display:flex !important; flex-direction:column; min-height:0; height:auto !important; max-height:none !important; border-right:1px solid var(--delta-line, rgba(91,201,189,.16)); border-top:0 !important; }
 ${r} .delta-library > .delta-stage { grid-column:2; grid-row:1; }
 ${r} .delta-cast-tools { display:grid !important; grid-template-columns:minmax(0,1fr) !important; gap:8px !important; padding:12px 10px !important; }
 ${r} .delta-cast-tools .delta-library-heading { display:none !important; }
@@ -98,7 +103,7 @@ ${r} .delta-cast-rail-wrap { display:contents !important; }
 ${r} .delta-rail-arrow { display:none !important; }
 ${r} .delta-cast-list { display:flex !important; flex-direction:column; gap:6px !important; padding:0 10px 12px !important; overflow-x:hidden !important; overflow-y:auto !important; scroll-snap-type:none !important; min-height:0 !important; flex:1 1 auto; scrollbar-width:thin !important; }
 ${r} .delta-cast-card, ${r} .delta-cast-card[data-bucket="dead"] { display:grid !important; grid-template-columns:52px minmax(0,1fr); align-items:center; gap:10px; flex:0 0 auto !important; width:100% !important; min-width:0 !important; max-width:none !important; height:auto !important; min-height:66px; padding:7px !important; text-align:left !important; }
-${r} .delta-cast-card.delta-cast-first-dead { margin-left:0 !important; margin-top:8px; box-shadow:0 -9px 0 -8px rgba(218,193,148,.45); }
+${r} .delta-cast-card.delta-cast-first-dead { margin-left:0 !important; margin-top:8px; box-shadow:0 -9px 0 -8px rgba(91,201,189,.45); }
 ${r} .delta-cast-card .delta-cast-portrait { position:static !important; inset:auto !important; width:52px !important; height:52px !important; border-radius:8px !important; }
 ${r} .delta-cast-card .delta-cast-portrait.delta-portrait-placeholder span { font-size:1.5rem !important; }
 ${r} .delta-cast-card .delta-cast-copy { position:static !important; background:none !important; padding:0 !important; align-content:center !important; gap:2px !important; }

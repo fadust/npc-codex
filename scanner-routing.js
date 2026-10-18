@@ -1,4 +1,4 @@
-/* NPC State Delta: request-scoped routing for the existing NPC scanner. */
+/* NPC Codex: request-scoped routing for the existing NPC scanner. */
 
 export const SCANNER_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 export const SCANNER_MAX_OUTPUT_TOKENS_MIN = 128;
@@ -26,14 +26,14 @@ export function selectedScannerProfileId(ctx) {
 }
 
 export function scannerRoutingError(message, code = 'NPC_SCANNER_PROFILE_UNAVAILABLE') {
-    const error = new Error(`NPC State Delta scanner: ${message}`);
-    error.name = 'NPCStateDeltaScannerRouteError';
+    const error = new Error(`NPC Codex scanner: ${message}`);
+    error.name = 'NPCCodexScannerRouteError';
     error.code = code;
     return error;
 }
 
 export function isScannerRoutingError(error) {
-    return error?.name === 'NPCStateDeltaScannerRouteError';
+    return error?.name === 'NPCCodexScannerRouteError';
 }
 
 function stoppedError(timeout = false) {
