@@ -346,12 +346,40 @@ function birthdayCard(npc) {
     return `<div class="delta-current-card delta-continuity-birthday-card"><b>Birthday${changedMark(npc, 'birthDate')}</b><span>${escapeHtml(npc.birthday || 'Unknown')}</span>${source ? `<small class="delta-continuity-source">${escapeHtml(source)}</small>` : ''}</div>`;
 }
 
+// These are quoted accepted cues, not a generated judgment about personality or intent.
+function presentationCue(raw = '') {
+    const clause = String(raw).trim();
+    const labeled = clause.match(/^(overall impression|impression|presence|bearing|demeanou?r)\s*:\s*(.+)$/i);
+    const value = labeled ? labeled[2].trim() : clause;
+    // Mixed physical descriptions remain in Appearance rather than being repeated here.
+    if (/\b(hair|eyes?|skin|complexion|beard|moustache|mustache|outfit|coat|cloak|dress|shirt|boots?|robes?|armou?r|clothing|jewel\w*|earrings?|height|tall|muscular|slender)\b/i.test(value)) return null;
+    if (labeled) return { kind: /bearing|demean/i.test(labeled[1]) ? 'bearing' : 'impression', value };
+    if (/\b(comes across as|air of|impression of|presence feels|quietly imposing|effortlessly elegant|weathered yet dignified)\b/i.test(value)) return { kind: 'impression', value };
+    if (/\b(posture|gait|poise|bearing|stands? (?:upright|erect|relaxed)|carries (?:himself|herself|themselves)|moves? with (?:measured|quiet|relaxed|deliberate|easy))\b/i.test(value)) return { kind: 'bearing', value };
+    return null;
+}
+
+export function presentationDetails(npc = {}) {
+    const result = { impression: [], bearing: [] };
+    const clauses = String(npc.appearance || '').split(/;|\n/);
+    // Accepted mannerisms may describe visible carriage; personality and mood are not substitutes.
+    for (const raw of [...clauses, ...(Array.isArray(npc.mannerisms) ? npc.mannerisms : [])]) {
+        const cue = presentationCue(raw);
+        if (cue && cue.value && result[cue.kind].length < 3 && !result[cue.kind].includes(cue.value)) result[cue.kind].push(cue.value);
+    }
+    return result;
+}
+
+function physicalDescription(text = '') {
+    return String(text).split(/;|\n/).filter(clause => !presentationCue(clause)).join('; ').trim();
+}
+
 // Presentation-only grouping: retain every supplied clause; never infer missing anatomy.
 export function appearanceDetailSections(text = '', npc = {}) {
     const groups = { Gender: [], 'Age bracket': [], 'Skin color': [], Face: [], 'Facial hair': [], Hairstyle: [], 'Hair color': [], Accessories: [], Body: [], Proportions: [], Outfit: [], 'Other details': [] };
     const labels = Object.fromEntries(Object.keys(groups).map(key => [key.toLowerCase(), key]));
     labels.proportion = 'Proportions';
-    for (const raw of String(text).split(/;|\n|,(?!\d)/).map(value => value.trim()).filter(Boolean)) {
+    for (const raw of physicalDescription(text).split(/;|\n|,(?!\d)/).map(value => value.trim()).filter(Boolean)) {
         const labeled = raw.match(/^([a-z ]+)\s*:\s*(.+)$/i);
         const explicit = labels[labeled?.[1].trim().toLowerCase()];
         if (explicit) { groups[explicit].push(labeled[2]); continue; }
@@ -394,12 +422,12 @@ export function appearanceFormsHtml(npc) {
         .filter(([label, clauses]) => label !== 'Other details' || clauses.length)
         .map(([label, clauses]) => `<div class="delta-appearance-form-row"><b>${label}</b>${clauses.length ? proseHtml(clauses.join('; ')) : '<p class="delta-muted">Not specified</p>'}</div>`).join('')}</div>`;
     const compatibilityCurrent = !model.currentForm && !model.currentFormUnknown && presentation
-        ? `<div class="delta-appearance-form-row"><b>Current outfit &amp; presentation<span class="delta-appearance-current-badge">Current</span></b>${proseHtml(presentation)}</div>`
+        ? `<div class="delta-appearance-form-row"><b>Current outfit &amp; presentation<span class="delta-appearance-current-badge">Current</span></b>${proseHtml(physicalDescription(presentation))}</div>`
         : '';
     const current = model.currentFormUnknown ? 'Unclassified / unknown'
         : model.currentForm || (compatibilityCurrent ? 'Current presentation' : 'No selected form');
     const unclassified = model.currentFormUnknown && model.unclassifiedAppearance
-        ? `<div class="delta-appearance-form-row"><b>Current unclassified presentation<span class="delta-appearance-current-badge">Current</span></b>${proseHtml(model.unclassifiedAppearance)}</div>`
+        ? `<div class="delta-appearance-form-row"><b>Current unclassified presentation<span class="delta-appearance-current-badge">Current</span></b>${proseHtml(physicalDescription(model.unclassifiedAppearance))}</div>`
         : '';
     const formImages = npc.formPortraits || {};
     const rows = model.appearanceForms.map(form => {
@@ -408,10 +436,12 @@ export function appearanceFormsHtml(npc) {
             ? `<img class="delta-form-portrait-thumb" src="${escapeHtml(image)}" alt="${escapeHtml(form.name)} form portrait" loading="lazy" decoding="async">`
             : '<span class="delta-form-portrait-thumb delta-form-portrait-empty" aria-hidden="true">+</span>';
         const action = npc.id ? `<button type="button" class="delta-btn delta-experience-portrait delta-form-portrait-button" data-npc-id="${escapeHtml(npc.id)}" data-form="${escapeHtml(form.name)}">${image ? 'Change portrait' : 'Add portrait'}</button>` : '';
-        return `<div class="delta-appearance-form-row delta-appearance-form-with-portrait">${thumb}<div><b>${escapeHtml(form.name)}${form.name === model.currentForm ? '<span class="delta-appearance-current-badge">Current</span>' : ''}</b>${proseHtml(form.appearance)}${action}</div></div>`;
+        return `<div class="delta-appearance-form-row delta-appearance-form-with-portrait">${thumb}<div><b>${escapeHtml(form.name)}${form.name === model.currentForm ? '<span class="delta-appearance-current-badge">Current</span>' : ''}</b>${proseHtml(physicalDescription(form.appearance))}${action}</div></div>`;
     }).join('');
+    const cues = presentationDetails(npc);
+    const impressions = `<div class="delta-appearance-form-row"><b>Overall impression</b>${cues.impression.length ? proseHtml(cues.impression.join('; ')) : '<p class="delta-muted">No overall impression established.</p>'}</div><div class="delta-appearance-form-row"><b>Bearing</b>${cues.bearing.length ? proseHtml(cues.bearing.join('; ')) : '<p class="delta-muted">No bearing established.</p>'}</div>`;
     const empty = !unclassified && !compatibilityCurrent && !rows ? '<p class="delta-muted">No named forms established.</p>' : '';
-    return `<details class="delta-appearance-form-summary" data-delta-key="appearance"><summary><b>Appearance</b><small>Current: ${escapeHtml(current)}</small></summary>${details}<div class="delta-appearance-form-list">${model.overallAppearance && !(model.appearanceForms.length && (model.currentForm || model.currentFormUnknown)) ? `<div class="delta-appearance-form-row"><b>Physical features</b>${proseHtml(model.overallAppearance)}</div>` : ''}</div></details><details class="delta-appearance-form-summary" data-delta-key="presentations"><summary><b>Presentations</b><small>Current: ${escapeHtml(current)}</small></summary><div class="delta-appearance-form-list">${unclassified}${compatibilityCurrent}${rows}${empty}</div></details>`;
+    return `<details class="delta-appearance-form-summary" data-delta-key="appearance"><summary><b>Appearance</b><small>Current: ${escapeHtml(current)}</small></summary>${details}<div class="delta-appearance-form-list">${model.overallAppearance && !(model.appearanceForms.length && (model.currentForm || model.currentFormUnknown)) ? `<div class="delta-appearance-form-row"><b>Physical features</b>${proseHtml(physicalDescription(model.overallAppearance))}</div>` : ''}${unclassified}${compatibilityCurrent}${rows}${empty}</div></details><details class="delta-appearance-form-summary" data-delta-key="presentations"><summary><b>Presentations</b><small>Overall impression &amp; bearing</small></summary><p class="delta-muted">How they come across—not proof of personality or intentions.</p><div class="delta-appearance-form-list">${impressions}</div></details>`;
 }
 
 // Cache only rendered section markup on its DOM node, never canonical state/history.

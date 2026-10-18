@@ -25,7 +25,7 @@ test('original viewer prefers saved local original and rejects unsafe or externa
 });
 
 import { createNpcRecord, replacePortraitImage, normalizeFormPortraitAssets } from '../core.js';
-import { dossierDetailProjection, appearanceDetailSections } from '../dossier-ui.js';
+import { dossierDetailProjection, appearanceDetailSections, presentationDetails, appearanceFormsHtml } from '../dossier-ui.js';
 import { encodeNpcStateBundle, decodeNpcStateBundle } from '../bundle.js';
 import { prunePortraitAssetsForState, pruneFormPortraitAssetsForState } from '../storage.js';
 
@@ -82,4 +82,19 @@ test('appearance shows accepted identity, visual age and distinct hair/skin/acce
         assert.equal(appearanceDetailSections('', { species: 'Human', age })['Age bracket'][0], `${label} (age ${age})`);
     }
     assert.deepEqual(appearanceDetailSections('').Gender, []);
+});
+
+test('Presentations quotes supported impressions and bearing without appearance or personality inference', () => {
+    const npc = { ...createNpcRecord('Ari Vale'), appearance: 'Dark hair; brown coat; Impression: quietly imposing; Bearing: stands upright', mannerisms: ['moves with measured grace'], personality: 'Trustworthy and kind', mood: 'Calm' };
+    assert.deepEqual(presentationDetails(npc), { impression: ['quietly imposing'], bearing: ['stands upright', 'moves with measured grace'] });
+    assert.deepEqual(presentationDetails({ appearance: 'blue eyes; expensive coat', personality: 'Confident', mood: 'Calm' }), { impression: [], bearing: [] });
+    assert.deepEqual(presentationDetails({ appearance: 'Impression: imposing in a red coat' }), { impression: [], bearing: [] });
+    const html = appearanceFormsHtml(dossierDetailProjection(npc));
+    const [appearance, presentation] = html.split('<details class="delta-appearance-form-summary" data-delta-key="presentations">');
+    assert.match(appearance, /brown coat/);
+    assert.doesNotMatch(appearance, /quietly imposing|stands upright/);
+    assert.match(presentation, /quietly imposing/);
+    assert.match(presentation, /stands upright/);
+    assert.doesNotMatch(presentation, /Dark hair|brown coat|Trustworthy|Calm/);
+    assert.match(presentation, /Overall impression &amp; bearing/);
 });
