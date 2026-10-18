@@ -7,6 +7,6 @@
     "js": "bootstrap.js",
     "css": "style.css",
     "author": "fadust (based on NPC State Delta by kohz87)",
-    "version": "2.0.0",
+    "version": "2.0.2",
     "minimum_client_version": "1.18.0"
 }

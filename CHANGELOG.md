@@ -4,6 +4,17 @@ From 2.0.0 NPC Codex has its own version numbers. 1.1.5 and earlier are NPC Stat
 
 ## Unreleased
 
+## 2.0.2 - 18 October 2026
+
+- Recall unique nickname aliases for pending-input and off-screen/deceased references. Shared aliases, role labels and aliases overlapping another actor name remain excluded. Custom-field grounding and actor state are unchanged.
+
+## 2.0.1 - 18 October 2026
+
+- Add Saga canon admission/seeding and BaiBai actor ownership with manually approved BunnyMo portrayal references.
+- Compact actor prompts while preserving knowledge gates, locks and portrayal approval.
+- Track the main card actor unless explicitly designated narrator-only; retain supported family bonds without admitting absent relatives.
+- Document selected upstream adoptions and remaining differences in FORK-CHANGELOG.md.
+
 - Exclude Floris planning logs from scanner evidence while retaining the existing readout path. Ambiguous shared aliases cannot choose a recipient for name-keyed knowledge.
 
 - Keep distinct canon identities separate through cast folding, admission, profile continuity and death updates, even with a shared short alias. Mentioned canon relatives alone do not create dossiers.

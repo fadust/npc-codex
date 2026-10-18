@@ -2,16 +2,24 @@
 
 This file tracks our maintained fork's changes and its relationship to [NPC State Delta](https://github.com/kohz87/npc_state_delta). It does not replace the inherited [CHANGELOG.md](CHANGELOG.md) or claim that every upstream release has been merged.
 
+## Current fork version — 2.0.2
+
+Version bumped on 18 October 2026 to package the integration and fixes below. 2.0.2 adds unique nickname recall; persisted formats are unchanged. No GitHub release or tag is implied.
+
 ## Comparison checkpoint — 18 October 2026
 
 - Fork runtime reviewed: [`2e83180`](https://github.com/fadust/npc-codex/commit/2e8318067d8d4021b9d100df1df503ddb14eca30), merged into `main` as [`4ceb1f3`](https://github.com/fadust/npc-codex/commit/4ceb1f32303743c39a485de83c98af206567e03d) through [PR #2](https://github.com/fadust/npc-codex/pull/2). Both commits have identical file contents.
 - Upstream reviewed: [`e5ef4b6`, v1.2.8](https://github.com/kohz87/npc_state_delta/commit/e5ef4b6), including the October 17 changes and October 18 display updates. The earlier adaptation was pinned through upstream `136d55e`, v1.2.6.
 - At this checkpoint Git reported **42 ahead / 31 behind**. This counts commit ancestry, including merge and release commits; it is not a count of missing features. Adapted code retains different commit identities. Later documentation commits will change the count.
-- NPC Codex remains application version **2.0.0**. Our version sequence is independent of upstream's. The additions below are unreleased changes on main, not a new tagged release.
+- At this comparison checkpoint NPC Codex was application version **2.0.0**. Our version sequence is independent of upstream's; the changes below are now recorded under 2.0.1.
 
 ## Our changes
 
-### Unreleased — 18 October 2026
+### 2.0.2 — 18 October 2026
+
+- Adopt unique nickname recall with shared-alias, role-label and overlapping-name guards. Keep custom-field fact validation canonical-name-only. Recall does not admit actors, change presence or override death. Only upstream adoption item 1 is enabled; items 2–4 remain deferred.
+
+### 2.0.1 — 18 October 2026
 
 | Commit | Change and purpose |
 |---|---|
@@ -36,7 +44,7 @@ The fork introduced knowledge gating, canon-first cast resolution and seeding, w
 | **1.1.6: deceased-reference lines** | Adapted | `referenceBlock` in [core-mechanics.js](core-mechanics.js) supplies compact confirmed-dead references, never live actors. It shares a four-reference ceiling with living mentions, with at most three deceased lines. [Actor tests](tests/actor-stack.test.js) cover reference-only death behavior. |
 | **1.1.6: custom fields** | Adapted and hardened | Up to six configured fields; normalization, explicit actor/field/value grounding, keep-by-default updates and manual locks. Settings/editor/scanner wiring is in [index.js](index.js), [core.js](core.js) and [core-mechanics.js](core-mechanics.js). Fix 1 below strengthens evidence handling. These fields do not add combat or progression rules. |
 | **1.1.7: mentioned off-screen/archived NPC recall** | Adapted | Compact established-fact lines and `referencedNpcs` diagnostics are present. Mention alone does not put an actor on-screen. See `referenceBlock` and `injectionPreview`. |
-| **1.1.7: distinctive name-part matching** | Partial | `npcNamedInText` supports distinctive name parts, capitalization checks and shared-name rejection. Its current explicit-label loop checks the canonical name, not the full alias list: arbitrary nickname recall is not complete upstream parity. Role labels do not independently trigger recall. |
+| **1.1.7: distinctive name-part matching** | Adapted in 2.0.2 | `npcNamedInText` supports distinctive name parts, capitalization checks and shared-name rejection. Unique nickname aliases now also recall actors, with stricter rejection when another actor name or alias contains the same label. Role labels do not independently trigger recall. |
 | **1.1.7: role-alias merge safety** | Adapted and hardened | `scanLabelsMatch` requires continuity for role-only matches: explicit same-person evidence, prior presence, or compatible place. Pre-scan presence survives controller reset; Saga admission shares the guard. Distinct canon identities receive additional protection. |
 | **1.1.7: editable/lockable aliases** | Adapted | Dossier editor aliases and manual-field locks are retained in [index.js](index.js). Alias editing/API resolution and textual mention recall are separate paths; editing an alias does not imply every recall path uses it. |
 | **1.1.8–1.1.10: opt-in one-pass narration capture and rewrite/comment-envelope fixes** | Not adopted | Our rollout keeps the separate scanner request. It does not ask the story model for a hidden Delta update block, so the capture-specific rewrite and comment-boundary fixes are not ports in this fork. Our formatter-settlement fix addresses our own automatic update path. |
@@ -72,6 +80,6 @@ Direct World Engine integration and broader CarrotKernel actor ownership remain 
 
 At runtime commit `2e83180`, the saved full-suite run passed **1,140 tests**, plus compatibility and runtime smoke checks. The shared Ari ten-turn deterministic simulation passed **143 assertions**. Before merging PR #2, runtime validation, prompt measurement and package verification also passed. GitHub Actions did not run before that merge.
 
-Those results do not establish live-model extraction quality. The live Ari trials exposed intermittent malformed scanner JSON, unsupported inference, incorrect presence and incomplete profile filling. The final family-bond correction was tested deterministically but had not received a completed live acceptance run at that checkpoint. Name/alias recall is only partially equivalent to upstream, as noted above.
+Those results do not establish live-model extraction quality. The live Ari trials exposed intermittent malformed scanner JSON, unsupported inference, incorrect presence and incomplete profile filling. The final family-bond correction was tested deterministically but had not received a completed live acceptance run at that checkpoint. The earlier nickname recall gap is addressed in 2.0.2; the fork retains stricter ambiguity guards.
 
 This comparison is a code/provenance review of the listed upstream behaviors, not a fresh full live-stack test or an assertion that all upstream fixes are unnecessary. Future adoption should update this file with the upstream revision, fork commit, behavior differences and actual verification; do not clear GitHub's behind count by importing competing state owners solely to match history.

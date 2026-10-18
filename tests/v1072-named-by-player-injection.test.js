@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildInjection, createNpcRecord, npcNamedInText } from '../core.js';
+import { buildInjection, createNpcRecord, npcNamedInText, mergeScanResult } from '../core.js';
 
 function npc(name, extra = {}) {
     const record = createNpcRecord(name);
@@ -15,6 +15,38 @@ function npc(name, extra = {}) {
     });
     return record;
 }
+
+test('unique nickname recall reaches reference injection without admitting or changing the actor', () => {
+    const red = npc('Orrin Hask', { aliases: ['Red'], manualProfileFields: ['aliases'] });
+    assert.equal(npcNamedInText(red, 'Where is Red?', [red]), true);
+    assert.equal(npcNamedInText(red, 'The red door opens.', [red]), false);
+    assert.match(buildInjection([red], 'Where is Red?', 6), /Orrin Hask \(mentioned, not present/);
+    assert.equal(red.present, false);
+    assert.deepEqual(red.aliases, ['Red']);
+    const dead = { ...red, archived: true, lifeState: 'deceased', lifeStateCertainty: 'explicit' };
+    const prompt = buildInjection([dead], 'Remember Red.', 6);
+    assert.match(prompt, /DECEASED, REFERENCED ONLY/);
+    assert.doesNotMatch(prompt, /IDENTITY/);
+});
+
+test('shared aliases and aliases matching another name cannot choose an actor', () => {
+    const vale = npc('Ari Vale', { aliases: ['Ari'] });
+    const senn = npc('Ari Senn', { aliases: ['Ari'] });
+    for (const actor of [vale, senn]) assert.equal(npcNamedInText(actor, 'Ari?', [vale, senn]), false);
+    assert.equal(npcNamedInText(vale, 'Ari Vale?', [vale, senn]), true);
+    const red = npc('Orrin Hask', { aliases: ['Red', 'the healer'] });
+    assert.equal(npcNamedInText(red, 'Red?', [red, npc('Jon Red')]), false);
+    assert.equal(npcNamedInText(red, 'the healer?', [red]), false);
+});
+
+test('nickname retrieval does not authorize custom-field facts through aliases', () => {
+    const red = npc('Orrin Hask', { aliases: ['Red'], customFields: { Level: '3' } });
+    const scan = { npcs: [{ id: red.id, name: red.name, customFields: { Level: '5' }, customFieldsReason: 'Reached level 5.' }] };
+    const result = mergeScanResult({ npcs: [red], candidates: [], turn: 1 }, scan, {
+        turn: 2, customFieldNames: ['Level'], developmentContext: 'Red reached Level 5.',
+    });
+    assert.equal(result.state.npcs[0].customFields.Level, '3');
+});
 
 test('an off-screen NPC is only injected when the pending player message names her', () => {
     const linnea = npc('Linnea');

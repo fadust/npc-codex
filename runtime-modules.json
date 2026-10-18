@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "applicationVersion": "2.0.0",
+  "applicationVersion": "2.0.2",
   "entrypoint": "bootstrap.js",
   "modules": [
     { "path": "actor-stack.js", "role": "actor-ownership", "required": true },
