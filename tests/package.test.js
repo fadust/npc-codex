@@ -33,7 +33,7 @@ test('install folder has SillyTavern-discoverable one-level layout', () => {
 
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
     assert.equal(manifest.display_name, 'NPC Codex');
-    assert.equal(manifest.version, '2.0.1');
+    assert.equal(manifest.version, '2.0.2');
     assert.equal(manifest.js, 'bootstrap.js');
     assert.equal(config.applicationVersion, manifest.version);
     assert.equal(config.entrypoint, manifest.js);

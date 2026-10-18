@@ -5805,8 +5805,12 @@ export function npcNamedInText(npc, text, roster = []) {
     if (!haystack || !npc?.name) return false;
     const others = (Array.isArray(roster) ? roster : []).filter(other => other && other !== npc && other.id !== npc.id);
     const otherLabels = others.flatMap(other => [other.name, ...(other.aliases || [])]).map(normalizeName).filter(Boolean);
-    // Ambiguous short aliases cannot establish a custom fact for a named actor.
-        const labels = [npc.name].filter(label => label && !isRoleDescriptionLabel(label));
+    // Recall aliases only when no other actor's name or alias contains that label.
+    const aliases = (npc.aliases || []).filter(label => {
+        const key = normalizeName(label);
+        return key && !otherLabels.some(other => countNormalizedPhrase(other, key) > 0);
+    });
+    const labels = [npc.name, ...aliases].filter(label => label && !isRoleDescriptionLabel(label));
     for (const label of labels) {
         const needle = normalizeName(label);
         if (!needle || countNormalizedPhrase(haystack, needle) === 0) continue;

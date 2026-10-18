@@ -4,6 +4,10 @@ From 2.0.0 NPC Codex has its own version numbers. 1.1.5 and earlier are NPC Stat
 
 ## Unreleased
 
+## 2.0.2 - 18 October 2026
+
+- Recall unique nickname aliases for pending-input and off-screen/deceased references. Shared aliases, role labels and aliases overlapping another actor name remain excluded. Custom-field grounding and actor state are unchanged.
+
 ## 2.0.1 - 18 October 2026
 
 - Add Saga canon admission/seeding and BaiBai actor ownership with manually approved BunnyMo portrayal references.
