@@ -23,31 +23,31 @@ function hiddenUploadInput(npcId) {
 
 // A portrait target is the main portrait ('') or one named appearance form. Each target keeps its
 // own prompt draft so a form starts from that form's accepted appearance.
-function targetDraftKey(chatKey, npcId, form = '') {
-    return draftKey(chatKey, form ? `${npcId}::form::${String(form).toLocaleLowerCase()}` : npcId);
+function targetDraftKey(chatKey, npcId, form = '', slot = 'face') {
+    return draftKey(chatKey, `${slot}::` + (form ? `${npcId}::form::${String(form).toLocaleLowerCase()}` : npcId));
 }
 
 function npcForms(npc) {
     return (Array.isArray(npc?.appearanceForms) ? npc.appearanceForms : []).map(form => String(form?.name || '').trim()).filter(Boolean);
 }
 
-function targetPortrait(npc, form = '') {
-    if (!form) return npc?.portrait?.dataUrl || '';
-    return api()?.formPortraits?.(npc.id)?.[form]?.dataUrl || '';
+function targetPortrait(npc, form = '', slot = 'face') {
+    const asset = form ? api()?.formPortraits?.(npc.id)?.[form] : npc?.portrait;
+    return (slot === 'fullBody' ? asset?.fullBody : asset)?.dataUrl || '';
 }
 
-function currentDraft(npc, form = '') {
-    const key = targetDraftKey(activeChatKey(), npc.id, form);
+function currentDraft(npc, form = '', slot = 'face') {
+    const key = targetDraftKey(activeChatKey(), npc.id, form, slot);
     const saved = promptDrafts.get(key);
     if (saved) return { key, positive: saved.positive || '', negative: saved.negative || '' };
-    const prompts = api()?.portraitPrompts?.(npc.id, { form }) || { positive: '', negative: '' };
+    const prompts = api()?.portraitPrompts?.(npc.id, { form, slot }) || { positive: '', negative: '' };
     return { key, positive: String(prompts.positive || ''), negative: String(prompts.negative || '') };
 }
 
 function saveDraftFromOverlay(session, overlay) {
     const positive = String(overlay?.querySelector('#npc_state_delta_tools_positive')?.value || '');
     const negative = String(overlay?.querySelector('#npc_state_delta_tools_negative')?.value || '');
-    keepPromptDraft(targetDraftKey(session.chatKey, session.npcId, session.form), { positive, negative });
+    keepPromptDraft(targetDraftKey(session.chatKey, session.npcId, session.form, session.slot), { positive, negative });
     return { positive: positive.trim(), negative: negative.trim() };
 }
 
@@ -134,14 +134,14 @@ function portraitTargetHtml(npc, form) {
     return `<label class="delta-tools-portrait-target">Portrait for<select data-portrait-target>${options}</select></label>`;
 }
 
-function portraitDialogHtml(npc, draft, form = '') {
-    const portrait = targetPortrait(npc, form);
-    const targetLabel = form ? `${form} form portrait` : 'portrait';
+function portraitDialogHtml(npc, draft, form = '', slot = 'face') {
+    const portrait = targetPortrait(npc, form, slot);
+    const targetLabel = `${form ? form + ' form ' : ''}${slot === 'fullBody' ? 'full-body render' : 'face portrait'}`;
     const canGenerate = portraitGenerationAvailable();
     const portraitSeed = Number.isSafeInteger(npc?.portraitSeed) && npc.portraitSeed >= 0 ? String(npc.portraitSeed) : '';
     return `<section class="delta-tools-dialog delta-tools-portrait" role="document" aria-label="Portrait management for ${escapeHtml(npc.name)}">
       <header>
-        <div><span class="delta-tools-kicker">PORTRAIT + PROMPTS</span><h2>${escapeHtml(npc.name)}</h2><small>Build prompts from the accepted dossier. Generate with BaiBai Image or SillyTavern. BaiBai keeps the original in its gallery. Generated images stay preview-only until you explicitly choose Use as Portrait.</small>${portraitTargetHtml(npc, form)}</div>
+        <div><span class="delta-tools-kicker">PORTRAIT + PROMPTS</span><h2>${escapeHtml(npc.name)}</h2><small>Build prompts from the accepted dossier. Generate with BaiBai Image or SillyTavern. BaiBai keeps the original in its gallery. Generated images stay preview-only until you explicitly choose Use as Portrait.</small>${portraitTargetHtml(npc, form)}<label>Image composition<select data-portrait-slot><option value="face"${slot === 'face' ? ' selected' : ''}>Face portrait — name and NPC list</option><option value="fullBody"${slot === 'fullBody' ? ' selected' : ''}>Full-body render — large panel</option></select></label></div>
         <button type="button" class="delta-tools-close" data-delta-tools-close aria-label="Close">×</button>
       </header>
       <div class="delta-tools-body delta-tools-portrait-grid">
@@ -181,7 +181,7 @@ function portraitDialogHtml(npc, draft, form = '') {
         <button type="button" data-copy-final-prompt>Copy Prompt</button>
         <button type="button" data-generate-portrait ${canGenerate ? '' : 'disabled title="Enable Portrait generation in NPC Codex settings and configure SillyTavern Image Generation."'}>Generate Portrait</button>
         <button type="button" data-generate-baibai ${canGenerate ? '' : 'disabled'}>Generate with BaiBai Image</button>
-        <button type="button" data-use-generated-portrait disabled>Use as Portrait</button>
+        <button type="button" data-use-generated-portrait disabled>${slot === 'fullBody' ? 'Use as full-body render' : 'Use as face portrait'}</button>
         <span data-delta-tools-status hidden></span>
       </footer>
     </section>`;
@@ -189,7 +189,7 @@ function portraitDialogHtml(npc, draft, form = '') {
 
 async function finishUploadedPortrait(session, file) {
     try {
-        const applied = await api()?.setPortrait?.(session.npcId, file, { chatKey: session.chatKey, isCurrent: () => currentSessionIs(session), form: session.form || '' });
+        const applied = await api()?.setPortrait?.(session.npcId, file, { chatKey: session.chatKey, isCurrent: () => currentSessionIs(session), form: session.form || '', slot: session.slot });
         if (!applied) throw new Error('The portrait target changed; stale image result was rejected.');
         const live = npcById(session.npcId);
         if (!currentSessionIs(session)) throw new Error('The portrait workflow is no longer current; late completion was rejected from this workflow.');
@@ -216,7 +216,7 @@ async function finishUploadedPortrait(session, file) {
 
 function generatePromptsFromDossier(session, overlay) {
     if (!currentSessionIs(session)) return;
-    const prompts = api()?.portraitPrompts?.(session.npcId, { form: session.form || '' });
+    const prompts = api()?.portraitPrompts?.(session.npcId, { form: session.form || '', slot: session.slot });
     if (!prompts) {
         toast('warning', 'NPC Codex: could not build portrait prompts for the selected dossier.');
         return;
@@ -225,7 +225,7 @@ function generatePromptsFromDossier(session, overlay) {
     const negative = overlay.querySelector('#npc_state_delta_tools_negative');
     if (positive) positive.value = prompts.positive || '';
     if (negative) negative.value = prompts.negative || '';
-    keepPromptDraft(targetDraftKey(session.chatKey, session.npcId, session.form), { positive: prompts.positive || '', negative: prompts.negative || '' });
+    keepPromptDraft(targetDraftKey(session.chatKey, session.npcId, session.form, session.slot), { positive: prompts.positive || '', negative: prompts.negative || '' });
     recordToolEvent('portrait-prompts', { chatKey: session.chatKey, npcId: session.npcId, action: 'generate-from-dossier', outcome: 'generated' });
     toast('info', 'NPC Codex: portrait prompts generated from the current accepted dossier.');
 }
@@ -343,14 +343,14 @@ async function savePortraitSeed(session, overlay) {
 
 // The appearance a generated preview was made from. Applying it after the NPC's appearance or form
 // changed would stamp an old image as current, so the preview is rejected and must be regenerated.
-function portraitGenerationBase(npcId, form = '') {
+function portraitGenerationBase(npcId, form = '', slot = 'face') {
     const npc = npcById(npcId);
     if (!npc) return '';
     // Physical features are a visual input only when no named form supplies the appearance.
     const formsInUse = Array.isArray(npc.appearanceForms) && npc.appearanceForms.length > 0
         && Boolean(form || npc.currentForm || npc.currentFormUnknown);
     return JSON.stringify([
-        String(form || ''), npc.currentForm || '', npc.currentFormUnknown === true, formsInUse ? '' : (npc.overallAppearance || ''),
+        slot, String(form || ''), npc.currentForm || '', npc.currentFormUnknown === true, formsInUse ? '' : (npc.overallAppearance || ''),
         npc.appearance || '', npc.unclassifiedAppearance || '', npc.appearanceForms || [], npc.species || '', npc.gender || '',
         // The prompt's visual age (apparent age, else age) is a generation input like the forms.
         String(npc.apparentAge || '').trim() || String(npc.age || '').trim(),
@@ -389,7 +389,7 @@ async function generatePortrait(session, overlay, provider = 'host') {
     const use = overlay?.querySelector?.('[data-use-generated-portrait]');
     if (use) use.disabled = true;
     setBusy(session, true, provider === 'baibai' ? 'Generating through BaiBai Image; the original is saved in its gallery…' : 'Generating through SillyTavern Image Generation…', { allowClose: true });
-    session.generationBase = portraitGenerationBase(session.npcId, session.form);
+    session.generationBase = portraitGenerationBase(session.npcId, session.form, session.slot);
     try {
         const result = provider === 'baibai'
             ? await generateBaiBaiPortrait({ positive: draft.positive, negative: draft.negative, seed: generationSeed, name: npcById(session.npcId)?.name })
@@ -429,7 +429,7 @@ async function useGeneratedPortrait(session, overlay) {
     const actionSeq = ++session.actionSeq;
     const live = npcById(session.npcId);
     if (!live) return false;
-    if (session.generationBase && session.generationBase !== portraitGenerationBase(session.npcId, session.form)) {
+    if (session.generationBase && session.generationBase !== portraitGenerationBase(session.npcId, session.form, session.slot)) {
         toast('warning', `NPC Codex: ${live.name}'s appearance changed after this preview was generated, so it was not applied. Generate a new preview.`);
         return false;
     }
@@ -438,15 +438,15 @@ async function useGeneratedPortrait(session, overlay) {
     try {
         const file = await generatedPortraitFile(url, session.npcId);
         if (!currentSessionIs(session) || session.actionSeq !== actionSeq) return false;
-        if (session.generationBase && session.generationBase !== portraitGenerationBase(session.npcId, session.form)) {
+        if (session.generationBase && session.generationBase !== portraitGenerationBase(session.npcId, session.form, session.slot)) {
             throw new Error('the appearance changed after this preview was generated; generate a new preview.');
         }
         applied = await api()?.setPortrait?.(session.npcId, file, {
             chatKey: session.chatKey,
             isCurrent: () => currentSessionIs(session) && session.actionSeq === actionSeq
-                && (!session.generationBase || session.generationBase === portraitGenerationBase(session.npcId, session.form)),
+                && (!session.generationBase || session.generationBase === portraitGenerationBase(session.npcId, session.form, session.slot)),
             generatedFrom: url,
-            form: session.form || '',
+            form: session.form || '', slot: session.slot,
         });
         if (!applied) throw new Error('The portrait target changed; stale generated image was rejected.');
         if (!currentSessionIs(session) || session.actionSeq !== actionSeq) return false;
@@ -512,7 +512,15 @@ function wirePortraitDialog(session, overlay) {
         const npcId = session.npcId;
         const form = String(event.target.value || '');
         closeOverlay({ reason: 'portrait-target-changed', session });
-        openPortraitTools(npcId, { form });
+        openPortraitTools(npcId, { form, slot: session.slot });
+    });
+
+    overlay?.querySelector('[data-portrait-slot]')?.addEventListener('change', event => {
+        if (!currentSessionIs(session) || session.busy) return;
+        saveDraftFromOverlay(session, overlay);
+        const slot = event.target.value;
+        closeOverlay({ reason: 'portrait-slot-changed', session });
+        openPortraitTools(session.npcId, { form: session.form, slot });
     });
 
     overlay?.addEventListener('input', event => {
@@ -548,7 +556,7 @@ function wirePortraitDialog(session, overlay) {
         if (portraitImage) {
             const npc = npcById(session.npcId);
             const asset = session.form ? api()?.formPortraits?.(session.npcId)?.[session.form] : npc?.portrait;
-            openPortraitImage(portraitImage.matches('[data-generated-image]') ? session.generatedPortraitUrl : originalPortraitSource(asset), npc?.name);
+            openPortraitImage(portraitImage.matches('[data-generated-image]') ? session.generatedPortraitUrl : originalPortraitSource(session.slot === 'fullBody' ? asset?.fullBody : asset), npc?.name);
             return;
         }
         if (event.target.closest?.('[data-generate-baibai]')) {
@@ -567,7 +575,7 @@ function wirePortraitDialog(session, overlay) {
     });
 }
 
-export function openPortraitTools(npcId = selectedNpcId(), { form = '' } = {}) {
+export function openPortraitTools(npcId = selectedNpcId(), { form = '', slot = 'face' } = {}) {
     const npc = npcById(npcId);
     if (!npc) {
         toast('warning', 'NPC Codex: select an NPC dossier first.');
@@ -577,7 +585,8 @@ export function openPortraitTools(npcId = selectedNpcId(), { form = '' } = {}) {
     const target = wanted ? npcForms(npc).find(name => name.toLocaleLowerCase() === wanted) || '' : '';
     const session = makeSession('portrait', { npcId: npc.id });
     session.form = target;
-    const overlay = mountOverlay(portraitDialogHtml(npc, currentDraft(npc, target), target), session);
+    session.slot = slot === 'fullBody' ? 'fullBody' : 'face';
+    const overlay = mountOverlay(portraitDialogHtml(npc, currentDraft(npc, target, session.slot), target, session.slot), session);
     wirePortraitDialog(session, overlay);
     return overlay;
 }
@@ -585,10 +594,10 @@ export function openPortraitTools(npcId = selectedNpcId(), { form = '' } = {}) {
 async function removePortrait(session) {
     if (!currentSessionIs(session) || session.busy) return;
     const npc = npcById(session.npcId);
-    if (!npc || !targetPortrait(npc, session.form)) return;
+    if (!npc || !targetPortrait(npc, session.form, session.slot)) return;
     setBusy(session, true, 'Removing portrait without changing the dossier...');
     try {
-        if (!await api()?.removePortrait?.(session.npcId, { chatKey: session.chatKey, form: session.form || '' })) throw new Error('The portrait target is no longer current.');
+        if (!await api()?.removePortrait?.(session.npcId, { chatKey: session.chatKey, form: session.form || '', slot: session.slot })) throw new Error('The portrait target is no longer current.');
         const saved = await flushDurably(session.chatKey, 'portrait removal');
         if (!currentSessionIs(session)) return;
         stage1Refresh();

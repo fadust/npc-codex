@@ -251,7 +251,7 @@ export function preserveUserNpcMetadata(restoredNpcs = [], currentNpcs = []) {
         delete npc.manual;
         const current = findNpcForMetadataRestore(npc, currentNpcs);
         if (!current) continue;
-        if (current?.portrait?.dataUrl) npc.portrait = structuredClone(current.portrait);
+        if ((current?.portrait?.dataUrl || current?.portrait?.fullBody?.dataUrl)) npc.portrait = structuredClone(current.portrait);
         for (const field of globallyPreserved) {
             if (Object.prototype.hasOwnProperty.call(current, field)) npc[field] = structuredClone(current[field]);
         }

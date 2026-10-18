@@ -163,7 +163,7 @@ test('dossier exposes species/race, age, form-owned appearance, and portrait gen
     assert.doesNotMatch(index, /npc_state_delta_edit_appearance/);
     assert.match(continuityUi, /Named forms/);
     assert.match(continuityUi, /Apply appearance</);
-    assert.match(continuityUi, /Physical features \(enduring\)/);
+    assert.match(continuityUi, /Face, body &amp; proportions \(enduring\)/);
     assert.match(continuityUi, /Current outfit &amp; presentation/);
     assert.match(continuityUi, /Current form/);
     assert.match(index, /Age:/);

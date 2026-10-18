@@ -15,6 +15,13 @@ Version bumped on 18 October 2026 to package the integration and fixes below. 2.
 
 ## Our changes
 
+### Unreleased — separate face and full-body images
+
+- Face portraits appear beside the NPC name and in the NPC list. A separate full-body render appears in the collapsed-list panel. Portrait tools select either composition with independent prompt drafts, preview, upload, replacement and removal. Each opens its own original resolution.
+- Existing portraits stay in the face slot; no image is duplicated or regenerated automatically. Both assets use the existing canonical portrait owner, appearance-form support, freshness guards, persistence, rollback retention and native binary bundle. Older extension versions do not display the new full-body asset.
+- Appearance now displays Face, Body, Proportions and Outfit from the resolved accepted description. Grouping is presentation-only; unmatched clauses remain under Other details, and missing categories say Not specified. The editor guides users to cover all four without creating a second appearance authority or extra model calls.
+- Tested with synthetic images and deterministic BaiBai responses; live image-provider likeness and framing quality remain unverified.
+
 ### Unreleased — BaiBai portraits and Codex presentation
 
 - Portrait tools can call the existing BaiBai Image API v1 using accepted dossier prompts and the user's configured backend. Originals are stored in BaiBai's gallery; Codex only applies a preview after **Use as Portrait**. Existing chat, form, appearance and stale-result checks remain shared with the native image route. No chat message or scanner request is created by the adapter.

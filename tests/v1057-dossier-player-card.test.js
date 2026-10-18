@@ -45,7 +45,7 @@ test('the dossier layout keeps portrait emphasis, section jumps and compact dead
     const ui = fs.readFileSync(new URL('../dossier-ui.js', import.meta.url), 'utf8');
     const experience = fs.readFileSync(new URL('../dossier-experience.js', import.meta.url), 'utf8');
     assert.match(ui, /delta-portrait-expand/);
-    assert.match(ui, /openLightbox\(\)/);
+    assert.match(ui, /openLightbox\(slot = 'fullBody'\)/);
     assert.match(ui, /data-delta-section="player"/);
     assert.match(ui, /data-delta-jump/);
     assert.match(ui, /data-bucket="\$\{escapeHtml\(npc\.bucket\)\}"/);

@@ -78,6 +78,23 @@ async function formPortraitChecks(mockState, eventSource, manualAddNpc, sleep) {
     assert.deepEqual(runtime.formPortraits(npc.id), {});
     assert.match(runtime.getNpc(npc.id).portrait.dataUrl, /MAIN$/, 'removing a form portrait keeps the main portrait');
 
+    assert.equal(await runtime.setPortrait(npc.id, file('BODY'), { chatKey: key, slot: 'fullBody' }), true);
+    assert.match(runtime.getNpc(npc.id).portrait.dataUrl, /MAIN$/);
+    assert.match(runtime.getNpc(npc.id).portrait.fullBody.dataUrl, /BODY$/);
+    assert.equal(await runtime.removePortrait(npc.id, { chatKey: key }), true);
+    await runtime.flush();
+    assert.equal(runtime.getNpc(npc.id).portrait.dataUrl, undefined);
+    assert.match(runtime.getNpc(npc.id).portrait.fullBody.dataUrl, /BODY$/);
+    const bodyOnly = JSON.parse(mockState.files.get(runtime.dataFile().path));
+    assert.match(bodyOnly.state.portraitAssets[npc.id].fullBody.dataUrl, /BODY$/, 'body-only image survives durable compaction');
+    assert.equal(await runtime.setPortrait(npc.id, file('NEWFACE'), { chatKey: key }), true);
+    assert.match(runtime.getNpc(npc.id).portrait.fullBody.dataUrl, /BODY$/);
+    assert.equal(await runtime.setPortrait(npc.id, file('FOXB'), { chatKey: key, form: 'Fox', slot: 'fullBody' }), true);
+    await runtime.flush();
+    assert.match(runtime.getDossierState().formPortraits[npc.id].Fox.fullBody.dataUrl, /FOXB$/);
+    assert.equal(await runtime.removePortrait(npc.id, { chatKey: key, slot: 'fullBody' }), true);
+    assert.match(runtime.getNpc(npc.id).portrait.dataUrl, /NEWFACE$/);
+    assert.equal(runtime.getNpc(npc.id).portrait.fullBody, undefined);
     assert.equal(await runtime.setPortrait(npc.id, file('FOX2'), { chatKey: key, form: 'Fox' }), true);
     assert.equal(await runtime.deleteNpc(npc.id), true);
     await runtime.flush();

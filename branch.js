@@ -1472,7 +1472,7 @@ export function reconcileBranchState(state, chat, { explicitDivergence = null, o
     // user-owned asset before ordinary portrait GC runs.
     for (const npc of Array.isArray(restored.npcs) ? restored.npcs : []) {
         const asset = state?.portraitAssets?.[npc?.id];
-        if (!npc?.portrait?.dataUrl && asset?.dataUrl) npc.portrait = structuredClone(asset);
+        if (!(npc?.portrait?.dataUrl || npc?.portrait?.fullBody?.dataUrl) && (asset?.dataUrl || asset?.fullBody?.dataUrl)) npc.portrait = structuredClone(asset);
     }
     enforceUserDismissals(restored, state?.userDismissedGroups);
     restored.lineage = currentLineage;

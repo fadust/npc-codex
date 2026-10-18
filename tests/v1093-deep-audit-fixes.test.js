@@ -246,8 +246,8 @@ test('RB92-19: the newest manual sibling removal holds past sixty removals', () 
 
 test('RB92-20/21/22/23: workflow guards are in place', () => {
     const portrait = fs.readFileSync(new URL('../portrait-tools.js', import.meta.url), 'utf8');
-    assert.match(portrait, /session\.generationBase = portraitGenerationBase\(session\.npcId, session\.form\)/);
-    assert.match(portrait, /session\.generationBase !== portraitGenerationBase\(session\.npcId, session\.form\)/);
+    assert.match(portrait, /session\.generationBase = portraitGenerationBase\(session\.npcId, session\.form, session\.slot\)/);
+    assert.match(portrait, /session\.generationBase !== portraitGenerationBase\(session\.npcId, session\.form, session\.slot\)/);
     assert.match(portrait, /setPortraitSeed\?\.\(session\.npcId, seed, \{ chatKey: session\.chatKey, isCurrent: \(\) => currentSessionIs\(session\) \}\)/);
     const index = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8');
     assert.match(index, /function setNpcPortraitSeed\(npcId, seed, \{ chatKey, isCurrent = \(\) => true \} = \{\}\) \{\n[^\n]*\n    if \(!isCurrent\(\)\) return false;/);

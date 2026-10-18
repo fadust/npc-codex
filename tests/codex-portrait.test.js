@@ -23,3 +23,47 @@ test('original viewer prefers saved local original and rejects unsafe or externa
     assert.equal(originalPortraitSource({ generatedFrom: '/user/images/Ari/full.png', dataUrl: 'thumb' }), '/user/images/Ari/full.png');
     for (const generatedFrom of ['javascript:bad', 'https://unknown.example/a.png', '//unknown/a.png']) assert.equal(originalPortraitSource({ generatedFrom, dataUrl: 'thumb' }), 'thumb');
 });
+
+import { createNpcRecord, replacePortraitImage, normalizeFormPortraitAssets } from '../core.js';
+import { dossierDetailProjection, appearanceDetailSections } from '../dossier-ui.js';
+import { encodeNpcStateBundle, decodeNpcStateBundle } from '../bundle.js';
+import { prunePortraitAssetsForState, pruneFormPortraitAssetsForState } from '../storage.js';
+
+const face = { dataUrl: 'data:image/png;base64,AAAA', generatedFrom: '/user/images/Ari/face.png' };
+const body = { dataUrl: 'data:image/png;base64,AQID', generatedFrom: '/user/images/Ari/body.png' };
+test('face and full-body assets replace and remove independently, including body-first creation', () => {
+    const both = replacePortraitImage(face, body, 'fullBody');
+    assert.deepEqual(both, { ...face, fullBody: body });
+    assert.deepEqual(replacePortraitImage(both, null), { fullBody: body });
+    assert.deepEqual(replacePortraitImage(both, null, 'fullBody'), face);
+    assert.deepEqual(replacePortraitImage({ fullBody: body }, face), both);
+    assert.equal(replacePortraitImage({ fullBody: body }, null, 'fullBody'), null);
+    assert.throws(() => replacePortraitImage(both, face, '__proto__'), /slot/);
+});
+test('independent images survive native backup, body-only storage and form selection', () => {
+    const npc = { ...createNpcRecord('Ari Vale'), currentForm: 'Human', portrait: { ...face, fullBody: body } };
+    const state = { npcs: [npc], portraitAssets: { [npc.id]: { fullBody: body } }, formPortraitAssets: { [npc.id]: { human: { form: 'Human', fullBody: body } } } };
+    assert.deepEqual(prunePortraitAssetsForState(state)[npc.id], { fullBody: body });
+    assert.deepEqual(pruneFormPortraitAssetsForState(state), state.formPortraitAssets);
+    assert.deepEqual(normalizeFormPortraitAssets(state.formPortraitAssets), state.formPortraitAssets);
+    const result = decodeNpcStateBundle(encodeNpcStateBundle(state)).state;
+    assert.equal(result.npcs[0].portrait.dataUrl, face.dataUrl);
+    assert.equal(result.npcs[0].portrait.fullBody.dataUrl, body.dataUrl);
+    assert.equal(result.formPortraitAssets[npc.id].human.fullBody.dataUrl, body.dataUrl);
+    const shown = dossierDetailProjection(npc, {}, { Human: { fullBody: body } });
+    assert.equal(shown.portrait, face.dataUrl);
+    assert.equal(shown.fullBody, body.dataUrl);
+    assert.equal(shown.fullBodyFromForm, true);
+    const old = dossierDetailProjection({ ...npc, portrait: face });
+    assert.equal(old.portrait, face.dataUrl);
+    assert.equal(old.fullBody, '', 'old face images are not misrepresented as full-body renders');
+    const bodyOnly = { ...npc, portrait: { fullBody: body } };
+    assert.equal(decodeNpcStateBundle(encodeNpcStateBundle({ npcs: [bodyOnly] })).state.npcs[0].portrait.fullBody.dataUrl, body.dataUrl);
+});
+
+test('appearance categories retain supplied details without inventing missing traits', () => {
+    const parts = appearanceDetailSections('Face: blue eyes; Body: athletic; Proportions: long legs; Outfit: brown coat; silver aura');
+    assert.deepEqual(parts, { Face: ['blue eyes'], Body: ['athletic'], Proportions: ['long legs'], Outfit: ['brown coat'], 'Other details': ['silver aura'] });
+    assert.deepEqual(appearanceDetailSections('dark hair, blue eyes, brown coat').Proportions, []);
+    assert.deepEqual(appearanceDetailSections('dark hair, blue eyes, brown coat').Face, ['dark hair', 'blue eyes']);
+});

@@ -636,6 +636,19 @@ export function applyAppearanceUpdate(record = {}, rawUpdate = {}, { locked = fa
 // into checkpoints or the rollback journal, and they are bounded to the appearance-form limit.
 export function formPortraitKey(name) { return formKey(name); }
 
+// Both compositions belong to the same user-owned asset, outside story/scanner state.
+export function replacePortraitImage(asset, image, slot = 'face') {
+    if (!['face', 'fullBody'].includes(slot)) throw new Error('Unknown portrait image slot.');
+    if (slot === 'fullBody') {
+        const next = { ...asset };
+        if (image) next.fullBody = image;
+        else delete next.fullBody;
+        return next.dataUrl || next.fullBody?.dataUrl ? next : null;
+    }
+    return image ? { ...image, ...(asset?.fullBody ? { fullBody: asset.fullBody } : {}) }
+        : asset?.fullBody ? { fullBody: asset.fullBody, ...(asset.form ? { form: asset.form } : {}) } : null;
+}
+
 export function normalizeFormPortraitAssets(value) {
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     const out = {};
@@ -644,7 +657,7 @@ export function normalizeFormPortraitAssets(value) {
         if (!id || ['__proto__', 'constructor', 'prototype'].includes(id) || !forms || typeof forms !== 'object' || Array.isArray(forms)) continue;
         const entries = [];
         for (const [rawKey, portrait] of Object.entries(forms)) {
-            if (!portrait || typeof portrait !== 'object' || typeof portrait.dataUrl !== 'string' || !portrait.dataUrl) continue;
+            if (!portrait || typeof portrait !== 'object' || !(typeof portrait.dataUrl === 'string' && portrait.dataUrl || typeof portrait.fullBody?.dataUrl === 'string' && portrait.fullBody.dataUrl)) continue;
             const form = clean(portrait.form || rawKey, 120);
             const key = formKey(form);
             if (!key || ['__proto__', 'constructor', 'prototype'].includes(key) || entries.some(([existing]) => existing === key)) continue;

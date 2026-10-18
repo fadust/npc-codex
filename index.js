@@ -89,6 +89,7 @@ import {
     appearanceDraftRecord,
     appearanceFingerprint,
     formPortraitKey,
+    replacePortraitImage,
     formPortraitFor,
     normalizeFormPortraitAssets,
 } from './core.js';
@@ -876,8 +877,8 @@ function normalizeChatState(raw = {}) {
     state.socialGraph = socialMigration.socialGraph;
     state.npcs = socialMigration.state.npcs;
     for (const npc of state.npcs) {
-        if (npc?.portrait?.dataUrl && !state.portraitAssets[npc.id]) state.portraitAssets[npc.id] = structuredClone(npc.portrait);
-        if (!npc?.portrait?.dataUrl && state.portraitAssets[npc.id]?.dataUrl) npc.portrait = structuredClone(state.portraitAssets[npc.id]);
+        if ((npc?.portrait?.dataUrl || npc?.portrait?.fullBody?.dataUrl) && !state.portraitAssets[npc.id]) state.portraitAssets[npc.id] = structuredClone(npc.portrait);
+        if (!(npc?.portrait?.dataUrl || npc?.portrait?.fullBody?.dataUrl) && (state.portraitAssets[npc.id]?.dataUrl || state.portraitAssets[npc.id]?.fullBody?.dataUrl)) npc.portrait = structuredClone(state.portraitAssets[npc.id]);
     }
     return state;
 }
@@ -4775,7 +4776,7 @@ function findNpcByIdOrName(value) {
 // and the main portrait otherwise.
 function portraitMarkup(npc, displayName, placeholderClass = 'npc-state-delta-inline-avatar-placeholder') {
     const formImage = npc?.currentForm ? formPortraitFor(getChatState().formPortraitAssets, npc.id, npc.currentForm) : null;
-    const portraitUrl = formImage?.dataUrl || npc?.portrait?.dataUrl || '';
+    const portraitUrl = formImage?.dataUrl || (npc?.portrait?.dataUrl || npc?.portrait?.fullBody?.dataUrl) || '';
     if (portraitUrl) return `<img src="${escapeHtml(portraitUrl)}" alt="${escapeHtml(displayName)} portrait">`;
     const initial = String(displayName || '?').trim().charAt(0).toUpperCase() || '?';
     return `<div class="${placeholderClass}" aria-hidden="true"><span>${escapeHtml(initial)}</span></div>`;
@@ -6023,7 +6024,8 @@ function npcFormName(npc, form) {
     return (Array.isArray(npc?.appearanceForms) ? npc.appearanceForms : []).find(item => formPortraitKey(item?.name) === key)?.name || '';
 }
 
-async function setNpcPortrait(npcId, file, { chatKey, isCurrent = () => true, generatedFrom = '', form = '' } = {}) {
+async function setNpcPortrait(npcId, file, { chatKey, isCurrent = () => true, generatedFrom = '', form = '', slot = 'face' } = {}) {
+    if (!['face', 'fullBody'].includes(slot)) throw new Error('Unknown portrait image slot.');
     if (!chatKey || chatKey !== getChatKey() || !isCurrent() || !await ensureFreshMutationBoundary('attach a portrait', chatKey)) return false;
     const originCanonicalRevision = hydratedRevision(chatKey);
     const npc = getChatState(chatKey).npcs.find(item => item.id === String(npcId || ''));
@@ -6073,7 +6075,7 @@ async function setNpcPortrait(npcId, file, { chatKey, isCurrent = () => true, ge
                 for (const existing of Object.keys(forms)) if (!npcFormName(live, forms[existing]?.form || existing)) delete forms[existing];
             }
             if (!forms[key] && Object.keys(forms).length >= 8) throw new Error('Each NPC can keep at most 8 form portraits.');
-            forms[key] = portrait;
+            forms[key] = { ...replacePortraitImage(forms[key], portrait, slot), form: liveForm };
             state.formPortraitAssets[live.id] = forms;
             persistCritical(chatKey);
             renderDossier();
@@ -6082,8 +6084,8 @@ async function setNpcPortrait(npcId, file, { chatKey, isCurrent = () => true, ge
         const fingerprint = appearanceFingerprint(live);
         if (fingerprint) portrait.appearanceFingerprint = fingerprint;
         portrait.appearanceForm = String(live.currentForm || '').slice(0, 120);
-        live.portrait = portrait;
-        getChatState(chatKey).portraitAssets[live.id] = structuredClone(portrait);
+        live.portrait = replacePortraitImage(live.portrait, portrait, slot);
+        getChatState(chatKey).portraitAssets[live.id] = structuredClone(live.portrait);
         live.updatedAt = Date.now();
         persistCritical(chatKey);
         renderDossier();
@@ -6109,7 +6111,8 @@ function setNpcPortraitSeed(npcId, seed, { chatKey, isCurrent = () => true } = {
     return true;
 }
 
-function removeNpcPortrait(npcId, { chatKey, form = '' } = {}) {
+function removeNpcPortrait(npcId, { chatKey, form = '', slot = 'face' } = {}) {
+    if (!['face', 'fullBody'].includes(slot)) throw new Error('Unknown portrait image slot.');
     if (!chatKey || chatKey !== getChatKey() || !requireReadyChatMutation('remove a portrait', chatKey)) return false;
     const npc = getChatState(chatKey).npcs.find(item => item.id === String(npcId || ''));
     if (!npc) return false;
@@ -6120,15 +6123,18 @@ function removeNpcPortrait(npcId, { chatKey, form = '' } = {}) {
         const key = formPortraitKey(form);
         const forms = { ...(state.formPortraitAssets?.[npc.id] || {}) };
         if (!key || !forms[key]) return false;
-        delete forms[key];
+        const remaining = replacePortraitImage(forms[key], null, slot);
+        if (remaining) forms[key] = remaining;
+        else delete forms[key];
         if (Object.keys(forms).length) state.formPortraitAssets[npc.id] = forms;
         else delete state.formPortraitAssets[npc.id];
         persistCritical(chatKey);
         renderDossier();
         return true;
     }
-    npc.portrait = null;
-    delete getChatState(chatKey).portraitAssets[npc.id];
+    npc.portrait = replacePortraitImage(npc.portrait, null, slot);
+    if (npc.portrait) getChatState(chatKey).portraitAssets[npc.id] = structuredClone(npc.portrait);
+    else delete getChatState(chatKey).portraitAssets[npc.id];
     npc.updatedAt = Date.now();
     persistCritical(chatKey);
     renderDossier();
@@ -6320,7 +6326,7 @@ function importBundleBytes(bytes) {
         clearUserDismissedSuppression(merged, { id: accepted.id, name: accepted.name });
     }
     if (!merged.portraitAssets || typeof merged.portraitAssets !== 'object') merged.portraitAssets = {};
-    for (const npc of merged.npcs) if (npc.portrait?.dataUrl) merged.portraitAssets[npc.id] = structuredClone(npc.portrait);
+    for (const npc of merged.npcs) if ((npc.portrait?.dataUrl || npc.portrait?.fullBody?.dataUrl)) merged.portraitAssets[npc.id] = structuredClone(npc.portrait);
     const socialImport = reconcileSocialState(merged, { provenance: 'migration', confidence: 'migration' });
     merged.socialGraph = socialImport.socialGraph;
     merged.npcs = socialImport.state.npcs;
@@ -7353,16 +7359,16 @@ window.NPCCodex = Object.freeze({
         const npc = findNpcByIdOrName(value);
         return npc ? refreshNpcFromChat(npc.id) : false;
     },
-    portraitPrompts: (value, { form = '' } = {}) => {
+    portraitPrompts: (value, { form = '', slot = 'face' } = {}) => {
         const npc = findNpcByIdOrName(value);
         if (!npc) return null;
         const formName = form ? npcFormName(npc, form) : '';
-        return npcImagePromptPair(formName ? { ...npc, currentForm: formName, currentFormUnknown: false } : npc);
+        return buildNpcPortraitPrompts(formName ? { ...npc, currentForm: formName, currentFormUnknown: false } : npc, { ...portraitPromptOptions(), composition: slot === 'fullBody' ? 'full body render, head to toe, entire figure and feet visible, uncropped' : 'face-focused portrait, head and shoulders, close-up face, clear facial features' });
     },
     formPortraits: value => {
         const npc = findNpcByIdOrName(value);
         const forms = npc ? getChatState().formPortraitAssets?.[npc.id] || {} : {};
-        return Object.fromEntries(Object.values(forms).filter(portrait => portrait?.dataUrl).map(portrait => [portrait.form, structuredClone(portrait)]));
+        return Object.fromEntries(Object.values(forms).filter(portrait => (portrait?.dataUrl || portrait?.fullBody?.dataUrl)).map(portrait => [portrait.form, structuredClone(portrait)]));
     },
     generatePortraitUrl: async (value, overrides = {}) => {
         const npc = findNpcByIdOrName(value);
@@ -7480,8 +7486,8 @@ window.NPCCodex = Object.freeze({
         const state = getChatState();
         const formPortraits = {};
         for (const [npcId, forms] of Object.entries(state.formPortraitAssets || {})) {
-            formPortraits[npcId] = Object.fromEntries(Object.values(forms || {}).filter(portrait => portrait?.dataUrl)
-                .map(portrait => [portrait.form, { dataUrl: portrait.dataUrl, generatedFrom: portrait.generatedFrom || '', appearanceFingerprint: portrait.appearanceFingerprint || '' }]));
+            formPortraits[npcId] = Object.fromEntries(Object.values(forms || {}).filter(portrait => (portrait?.dataUrl || portrait?.fullBody?.dataUrl))
+                .map(portrait => [portrait.form, structuredClone(portrait)]));
         }
         return { turn: state.turn, npcs: structuredClone(state.npcs), portraitAssets: {}, formPortraits };
     },

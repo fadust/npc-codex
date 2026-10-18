@@ -131,16 +131,22 @@ export function dossierIndexProjection(npc = {}, portraitAssets = {}) {
 
 // The displayed portrait follows the current appearance form when that form has its own image;
 // otherwise it is the main portrait. Form images are read-only view data here.
-function displayedPortrait(npc = {}, portraitAssets = {}, formPortraits = {}) {
+function displayedPortrait(npc = {}, portraitAssets = {}, formPortraits = {}, slot = 'face') {
     const form = plain(npc?.currentForm);
-    const formImage = form ? Object.entries(formPortraits || {}).find(([name]) => name.toLocaleLowerCase() === form.toLocaleLowerCase())?.[1] : null;
+    const formAsset = form ? Object.entries(formPortraits || {}).find(([name]) => name.toLocaleLowerCase() === form.toLocaleLowerCase())?.[1] : null;
+    const formImage = slot === 'fullBody' ? formAsset?.fullBody : formAsset;
     if (formImage?.dataUrl) return { src: plain(formImage.dataUrl), fingerprint: plain(formImage.appearanceFingerprint), form, fromForm: true };
+    if (slot === 'fullBody') {
+        const image = npc?.portrait?.fullBody || portraitAssets?.[npc.id]?.fullBody;
+        return { src: plain(image?.dataUrl), fingerprint: plain(image?.appearanceFingerprint), form: plain(image?.appearanceForm), fromForm: false };
+    }
     return { src: portraitSource(npc, portraitAssets), fingerprint: plain(npc?.portrait?.appearanceFingerprint), form: plain(npc?.portrait?.appearanceForm), fromForm: false };
 }
 
 export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortraits = {}) {
     const rel = npc?.relationship && typeof npc.relationship === 'object' ? npc.relationship : {};
     const shown = displayedPortrait(npc, portraitAssets, formPortraits);
+    const body = displayedPortrait(npc, portraitAssets, formPortraits, 'fullBody');
     return {
         ...dossierIndexProjection(npc, portraitAssets),
         quote: plain(npc?.quote),
@@ -148,6 +154,10 @@ export function dossierDetailProjection(npc = {}, portraitAssets = {}, formPortr
         tags: stringList(npc?.tags, 8),
         faction: [...new Set((Array.isArray(npc?.roles) ? npc.roles : []).filter(role => role && !role.until && role.org).map(role => plain(role.org)))].join(', '),
         portrait: shown.src,
+        fullBody: body.src,
+        fullBodyFromForm: body.fromForm,
+        fullBodyForm: body.form,
+        fullBodyAppearanceChanged: portraitAppearanceChanged(npc, body),
         portraitFromForm: shown.fromForm,
         formPortraits: Object.fromEntries(Object.entries(formPortraits || {}).filter(([, image]) => image?.dataUrl).map(([name, image]) => [name, plain(image.dataUrl)])),
         age: plain(npc?.age),
@@ -336,9 +346,31 @@ function birthdayCard(npc) {
     return `<div class="delta-current-card delta-continuity-birthday-card"><b>Birthday${changedMark(npc, 'birthDate')}</b><span>${escapeHtml(npc.birthday || 'Unknown')}</span>${source ? `<small class="delta-continuity-source">${escapeHtml(source)}</small>` : ''}</div>`;
 }
 
+// Presentation-only grouping: retain every supplied clause; never infer missing anatomy.
+export function appearanceDetailSections(text = '') {
+    const groups = { Face: [], Body: [], Proportions: [], Outfit: [], 'Other details': [] };
+    for (const raw of String(text).split(/;|\n|,(?!\d)/).map(value => value.trim()).filter(Boolean)) {
+        const labeled = raw.match(/^(face|body|proportions?|outfit)\s*:\s*(.+)$/i);
+        const label = labeled?.[1].toLowerCase();
+        const value = labeled ? labeled[2] : raw;
+        const key = label ? ({ face: 'Face', body: 'Body', proportion: 'Proportions', proportions: 'Proportions', outfit: 'Outfit' })[label]
+            : /\b(wear\w*|outfit|cloth\w*|coat|dress|shirt|boots?|cloak|armou?r|uniform|trousers|pants|skirt|robe|jewel\w*|gloves?|belt|hat)\b/i.test(value) ? 'Outfit'
+            : /\b(proportions?|height|tall|short stature|long[- ]legged|broad shoulders|narrow waist|[\d.]+\s*(?:cm|metres?|meters?|feet|ft))\b/i.test(value) ? 'Proportions'
+            : /\b(face|facial|eyes?|hair|brows?|eyebrows?|nose|lips?|jaw\w*|cheeks?|chin|beard|moustache|freckles)\b/i.test(value) ? 'Face'
+            : /\b(body|build|physique|skin|muscul\w*|slender|slim|stocky|athletic|scars?|tattoos?|arms?|legs?|wings?|tail|scales|fur)\b/i.test(value) ? 'Body'
+            : 'Other details';
+        groups[key].push(value);
+    }
+    return groups;
+}
+
 export function appearanceFormsHtml(npc) {
     const model = npc.appearanceModel;
     const presentation = npc.currentPresentation || '';
+    const detailGroups = appearanceDetailSections(npc.appearance);
+    const details = `<div class="delta-appearance-detail-grid">${Object.entries(detailGroups)
+        .filter(([label, clauses]) => label !== 'Other details' || clauses.length)
+        .map(([label, clauses]) => `<div class="delta-appearance-form-row"><b>${label}</b>${clauses.length ? proseHtml(clauses.join('; ')) : '<p class="delta-muted">Not specified</p>'}</div>`).join('')}</div>`;
     const compatibilityCurrent = !model.currentForm && !model.currentFormUnknown && presentation
         ? `<div class="delta-appearance-form-row"><b>Current outfit &amp; presentation<span class="delta-appearance-current-badge">Current</span></b>${proseHtml(presentation)}</div>`
         : '';
@@ -357,7 +389,7 @@ export function appearanceFormsHtml(npc) {
         return `<div class="delta-appearance-form-row delta-appearance-form-with-portrait">${thumb}<div><b>${escapeHtml(form.name)}${form.name === model.currentForm ? '<span class="delta-appearance-current-badge">Current</span>' : ''}</b>${proseHtml(form.appearance)}${action}</div></div>`;
     }).join('');
     const empty = !unclassified && !compatibilityCurrent && !rows ? '<p class="delta-muted">No named forms established.</p>' : '';
-    return `<details class="delta-appearance-form-summary" data-delta-key="appearance" open><summary><b>Appearance</b><small>Current: ${escapeHtml(current)}</small></summary><div class="delta-appearance-form-list">${model.overallAppearance && !(model.appearanceForms.length && (model.currentForm || model.currentFormUnknown)) ? `<div class="delta-appearance-form-row"><b>Physical features</b>${proseHtml(model.overallAppearance)}</div>` : ''}${unclassified}${compatibilityCurrent}${rows}${empty}</div></details>`;
+    return `<details class="delta-appearance-form-summary" data-delta-key="appearance" open><summary><b>Appearance</b><small>Current: ${escapeHtml(current)}</small></summary>${details}<div class="delta-appearance-form-list">${model.overallAppearance && !(model.appearanceForms.length && (model.currentForm || model.currentFormUnknown)) ? `<div class="delta-appearance-form-row"><b>Physical features</b>${proseHtml(model.overallAppearance)}</div>` : ''}${unclassified}${compatibilityCurrent}${rows}${empty}</div></details>`;
 }
 
 // Cache only rendered section markup on its DOM node, never canonical state/history.
@@ -555,7 +587,7 @@ class DeltaDossierUi {
                 return;
             }
             if (event.target.closest('.delta-lightbox-close') || event.target.classList?.contains('delta-lightbox')) return void this.closeLightbox();
-            if (event.target.closest('.delta-portrait-expand') || event.target.closest('.delta-hero-media img.delta-hero-portrait')) return void this.openLightbox();
+            if (event.target.closest('.delta-portrait-expand') || event.target.closest('.delta-hero-media img.delta-hero-portrait')) return void this.openLightbox(event.target.closest('.codex-portrait') ? 'face' : 'fullBody');
             const jump = event.target.closest('.delta-section-jump')?.dataset?.deltaJump;
             if (jump) {
                 const target = this.root.querySelector(`.delta-document [data-delta-section="${CSS.escape(jump)}"]`);
@@ -614,14 +646,17 @@ class DeltaDossierUi {
     }
 
     // Full-size portrait view: presentation only, reusing the already-projected portrait source.
-    openLightbox() {
+    openLightbox(slot = 'fullBody') {
         const selected = this.projection?.npcs?.find(npc => npc.id === this.selectedNpcId);
         const panel = this.root?.querySelector('.delta-panel');
-        if (!selected?.portrait || !panel) return;
+        const source = slot === 'fullBody' ? selected?.fullBody : selected?.portrait;
+        if (!source || !panel) return;
         this.closeLightbox();
         const npc = this.api?.getNpc?.(selected.id);
-        const asset = selected.portraitFromForm ? this.api?.formPortraits?.(selected.id)?.[selected.portraitForm] : npc?.portrait;
-        this.imageViewer = openPortraitImage(originalPortraitSource(asset) || selected.portrait, selected.name);
+        const fromForm = slot === 'fullBody' ? selected.fullBodyFromForm : selected.portraitFromForm;
+        const form = slot === 'fullBody' ? selected.fullBodyForm : selected.portraitForm;
+        const asset = fromForm ? this.api?.formPortraits?.(selected.id)?.[form] : npc?.portrait;
+        this.imageViewer = openPortraitImage(originalPortraitSource(slot === 'fullBody' ? asset?.fullBody : asset) || source, selected.name);
     }
 
     closeLightbox() {
@@ -837,7 +872,7 @@ class DeltaDossierUi {
         const signature = selectedVisible && selected
             ? JSON.stringify({ ...selected, portrait: undefined, updatedAt: undefined }) : `empty:${this.filter}:${this.query}`;
         const heroSignature = selectedVisible && selected
-            ? JSON.stringify([selected.id, selected.name, subtitle, selected.bucket, selected.statusLabel, selected.portrait, selected.portraitAppearanceChanged, selected.appearanceModel.currentForm]) : signature;
+            ? JSON.stringify([selected.id, selected.name, subtitle, selected.bucket, selected.statusLabel, selected.fullBody, selected.fullBodyAppearanceChanged, selected.appearanceModel.currentForm]) : signature;
         const documentChanged = force || signature !== this.lastDetailSignature;
         const heroChanged = force || heroSignature !== this.lastHeroSignature;
         if (!documentChanged && !heroChanged) return;
@@ -853,9 +888,9 @@ class DeltaDossierUi {
 
         if (heroChanged) this.root.querySelector('.delta-lightbox')?.remove();
         if (heroChanged) hero.innerHTML = `
-            <div class="delta-hero-media">${portraitHtml(selected, 'delta-hero-portrait')}
-                ${selected.portraitAppearanceChanged ? `<span class="delta-portrait-stale" title="The dossier appearance changed after this portrait was attached. Generate or upload a new portrait to match.">${escapeHtml(selected.portraitForm && selected.portraitForm !== selected.appearanceModel.currentForm ? `Portrait shows the ${selected.portraitForm} form` : 'Appearance changed since portrait')}</span>` : ''}
-                ${selected.portrait ? `<button type="button" class="delta-portrait-expand" data-npc-id="${escapeHtml(selected.id)}" aria-label="View ${escapeHtml(selected.name)} portrait full size" title="View full size">⤢</button>` : ''}
+            <div class="delta-hero-media">${portraitHtml({ ...selected, portrait: selected.fullBody }, 'delta-hero-portrait')}
+                ${selected.fullBodyAppearanceChanged ? `<span class="delta-portrait-stale" title="The dossier appearance changed after this portrait was attached. Generate or upload a new portrait to match.">${escapeHtml(selected.fullBodyForm && selected.fullBodyForm !== selected.appearanceModel.currentForm ? `Portrait shows the ${selected.fullBodyForm} form` : 'Appearance changed since portrait')}</span>` : ''}
+                ${selected.fullBody ? `<button type="button" class="delta-portrait-expand" data-npc-id="${escapeHtml(selected.id)}" aria-label="View ${escapeHtml(selected.name)} portrait full size" title="View full size">⤢</button>` : ''}
                 <div class="delta-hero-caption">
                     <span class="delta-status delta-status-${escapeHtml(selected.bucket)}">${escapeHtml(selected.statusLabel)}</span>
                     <h2>${escapeHtml(selected.name)}</h2>
@@ -1166,6 +1201,7 @@ const STYLES = `
 #${ROOT_ID} .delta-changed-mark { margin-left:4px; font-style:normal; font-size:.66rem; letter-spacing:.02em; text-transform:none; font-weight:600; }
 #${ROOT_ID} .delta-current-card.delta-changed { border-color:rgba(113,190,145,.32); }
 #${ROOT_ID} .delta-portrait-stale { position:absolute; z-index:3; top:12px; left:12px; max-width:calc(100% - 70px); padding:4px 9px; border:1px solid rgba(91,201,189,.55); border-radius:999px; color:#ffe2a8; background:rgba(5,6,8,.62); backdrop-filter:blur(3px); font-size:.72rem; }
+#${ROOT_ID} .delta-appearance-detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
 #${ROOT_ID} .delta-appearance-form-with-portrait { display:grid; grid-template-columns:64px minmax(0,1fr); gap:10px; align-items:start; }
 #${ROOT_ID} .delta-form-portrait-thumb { width:64px; height:82px; border-radius:8px; object-fit:cover; object-position:center 18%; border:1px solid rgba(255,255,255,.12); background:rgba(0,0,0,.25); }
 #${ROOT_ID} .delta-form-portrait-empty { display:grid; place-items:center; color:var(--delta-muted); font-size:1.4rem; border-style:dashed; }

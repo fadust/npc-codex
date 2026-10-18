@@ -58,6 +58,8 @@ export function binaryToDataUrl(bytes, mime = 'application/octet-stream') {
 function cloneRecordForManifest(npc, binaryOffsetRef, imageParts) {
     const record = structuredClone(npc);
     const portrait = record.portrait;
+    if (portrait?.fullBody?.fullBody) throw new Error('Nested full-body assets are invalid.');
+    if (portrait?.fullBody) portrait.fullBody = cloneRecordForManifest({ portrait: portrait.fullBody }, binaryOffsetRef, imageParts).portrait;
     if (!portrait?.dataUrl) {
         if (portrait) delete portrait.dataUrl;
         return record;
@@ -84,7 +86,7 @@ function formPortraitsForManifest(source, npcs, binaryOffsetRef, imageParts) {
         if (!ids.has(npcId)) continue;
         for (const portrait of Object.values(forms)) {
             const record = cloneRecordForManifest({ portrait }, binaryOffsetRef, imageParts).portrait;
-            if (record?.binary) out.push({ npcId, form: portrait.form, portrait: record });
+            if (record?.binary || record?.fullBody?.binary) out.push({ npcId, form: portrait.form, portrait: record });
         }
     }
     return out;
@@ -193,24 +195,23 @@ export function decodeNpcStateBundle(input) {
     validateManifest(manifest);
 
     const portraitRanges = [];
+    function restoreImage(portrait, name, kind = 'portrait') {
+        if (!portrait) return;
+        if (portrait.fullBody?.fullBody) throw new Error('Nested full-body assets are invalid.');
+        if (portrait.fullBody) restoreImage(portrait.fullBody, `${name} full body`, kind);
+        const bin = portrait.binary;
+        if (!bin) return;
+        const offset = Number(bin.offset), length = Number(bin.length);
+        if (!Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length <= 0) throw new Error(`NPC Codex bundle has invalid portrait metadata for ${name}.`);
+        const start = binaryStart + offset, end = start + length;
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end < start || end > bytes.length) throw new Error(`NPC Codex bundle ${kind} is truncated for ${name}.`);
+        portraitRanges.push({ start, end, name });
+        portrait.dataUrl = binaryToDataUrl(bytes.subarray(start, end), portrait.mime || 'application/octet-stream');
+        delete portrait.binary;
+    }
     const npcs = manifest.state.npcs.map(npc => {
         const record = structuredClone(npc);
-        const bin = record.portrait?.binary;
-        if (!bin) return record;
-        const offset = Number(bin.offset);
-        const length = Number(bin.length);
-        if (!Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length <= 0) {
-            throw new Error(`NPC Codex bundle has invalid portrait metadata for ${record.name || 'an NPC'}.`);
-        }
-        const start = binaryStart + offset;
-        const end = start + length;
-        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end < start || end > bytes.length) {
-            throw new Error(`NPC Codex bundle portrait is truncated for ${record.name || 'an NPC'}.`);
-        }
-        portraitRanges.push({ start, end, name: record.name || 'an NPC' });
-        const mime = record.portrait.mime || 'application/octet-stream';
-        record.portrait.dataUrl = binaryToDataUrl(bytes.subarray(start, end), mime);
-        delete record.portrait.binary;
+        restoreImage(record.portrait, record.name || 'an NPC');
         return record;
     });
     const npcIds = new Set(npcs.map(npc => String(npc?.id || '')).filter(Boolean));
@@ -220,23 +221,11 @@ export function decodeNpcStateBundle(input) {
     for (const entry of Array.isArray(declaredForms) ? declaredForms : []) {
         const npcId = typeof entry?.npcId === 'string' ? entry.npcId : '';
         const form = typeof entry?.form === 'string' ? entry.form.trim().slice(0, 120) : '';
-        const bin = entry?.portrait?.binary;
-        const offset = Number(bin?.offset);
-        const length = Number(bin?.length);
         if (!npcId || !form || !entry.portrait || typeof entry.portrait !== 'object' || Array.isArray(entry.portrait)
-            || !Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length <= 0) {
-            throw new Error('NPC Codex bundle has invalid form portrait metadata.');
-        }
-        const start = binaryStart + offset;
-        const end = start + length;
-        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end < start || end > bytes.length) {
-            throw new Error(`NPC Codex bundle form portrait is truncated for ${form}.`);
-        }
-        portraitRanges.push({ start, end, name: `${form} form portrait` });
-        if (!npcIds.has(npcId)) continue;
+            || !(entry.portrait.binary || entry.portrait.fullBody?.binary)) throw new Error('NPC Codex bundle has invalid form portrait metadata.');
         const portrait = structuredClone(entry.portrait);
-        delete portrait.binary;
-        portrait.dataUrl = binaryToDataUrl(bytes.subarray(start, end), portrait.mime || 'application/octet-stream');
+        restoreImage(portrait, form, 'form portrait');
+        if (!npcIds.has(npcId)) continue;
         portrait.form = form;
         formPortraitAssets[npcId] = { ...(formPortraitAssets[npcId] || {}), [formPortraitKey(form)]: portrait };
     }
