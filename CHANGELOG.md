@@ -4,6 +4,12 @@ From 2.0.0 NPC Codex has its own version numbers. 1.1.5 and earlier are NPC Stat
 
 ## Unreleased
 
+- Exclude Floris planning logs from scanner evidence while retaining the existing readout path. Ambiguous shared aliases cannot choose a recipient for name-keyed knowledge.
+
+- Keep distinct canon identities separate through cast folding, admission, profile continuity and death updates, even with a shared short alias. Mentioned canon relatives alone do not create dossiers.
+- Retry supported personality/speech gaps in the existing cast request after partial Saga seeding. Accept same-message formatter settlement during hydration only while the message, parent and chat remain current.
+- Ari live-regression checks cover alias/death isolation and post-receipt formatting. The 15-turn baseline exposed failures; passing deterministic checks do not establish live acceptance.
+
 ## 2.0.0 - 17 October 2026
 
 First NPC Codex release (fadust fork). Existing NPC State Delta dossiers load unchanged; storage keys and data files keep their `npc_state_delta` names.

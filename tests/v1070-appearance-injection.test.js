@@ -28,12 +28,12 @@ test('the full current appearance is injected when it fits', () => {
 });
 
 test('when the full appearance does not fit, enduring physical features are injected instead of nothing', () => {
-    const text = buildInjection(cast(), 'Elin hauls the tub.', 10, 3, undefined, 1200, null);
+    const text = buildInjection(cast(), 'Elin hauls the tub.', 10, 3, undefined, 1060, null);
     const elin = line(text, 'Elin');
     assert.doesNotMatch(elin, /CURRENT VISIBLE APPEARANCE/);
     assert.match(elin, /ENDURING PHYSICAL FEATURES \(authoritative anatomy\): Petite[\s\S]*generous bust/);
     for (const name of ['Elin', 'Kora', 'Tam']) assert.match(line(text, name), /IDENTITY \(authoritative\)/, `${name} keeps its essential block`);
-    assert.ok(text.length <= 1200 * 4);
+    assert.ok(text.length <= 1060 * 4);
     assert.match(line(text, 'Kora'), /ENDURING PHYSICAL FEATURES|CURRENT VISIBLE APPEARANCE/, 'a second NPC also keeps its anatomy');
 });
 

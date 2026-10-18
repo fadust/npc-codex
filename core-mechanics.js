@@ -1,3 +1,4 @@
+import { renderPortrayal } from './actor-portrayal.js';
 import { isTerminalNpcDeath } from './terminal-lifecycle.js';
 import {
     readScanKnowledge,
@@ -13,7 +14,7 @@ import { temperamentExpression, normalizeStances, renderStanceInjection } from '
 import { normalizeFloris, renderFlorisReadout } from './floris.js';
 import { renderStatusInjection, sappingStatus } from './status.js';
 import { isActionScene, abilityFlavour, clashComparison } from './derive.js';
-import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases } from './cast.js';
+import { normalizeRoles, mergeRoles, currentRoleText, transferExclusiveRoles, normalizeCanonRef, stripTitleAliases, canonIdentityConflict, distinctNamedPeople } from './cast.js';
 import { emptySheet, normalizeSheet, readSheetDelta, sheetDeltaIsEmpty, applySheetDelta, sheetIsEmpty, renderSheetInjection } from './sheet.js';
 import { normalizeCanonSeed, normalizeCanonLocked, enforceCanonLocks } from './canon-seed.js';
 import {
@@ -836,6 +837,21 @@ const INTERIM_IDENTITY_WORDS = new Set([
     'proprietor', 'captain', 'chief', 'leader', 'elder', 'student', 'apprentice', 'assistant',
     'human', 'elf', 'dwarf', 'orc', 'goblin', 'halfling', 'gnome', 'tiefling', 'traveler', 'drifter',
 ]);
+
+const LABEL_FILLER_WORDS = new Set(['the', 'a', 'an', 'of', 'and', 'from', 'at', 'in', 'on', 'that', 'this']);
+
+// A label that describes a role rather than naming one person ("Innkeeper", "the innkeeper",
+// "the old man", "Guard Captain"). Many people can fit it, so it never recalls a dossier and
+// never merges a new NPC into a named one on its own. A label with a capitalised non-role word
+// ("Red", "the Butcher of Vell", "Sister Callow") names someone.
+export function isRoleDescriptionLabel(label) {
+    const raw = String(label ?? '').trim();
+    if (!raw || !normalizeName(raw)) return false;
+    if (isInterimNpcLabel(raw)) return true;
+    const content = raw.split(/\s+/).map(word => word.replace(/[^\p{L}\p{N}'-]/gu, '')).filter(Boolean)
+        .filter(word => !LABEL_FILLER_WORDS.has(word.toLowerCase()));
+    return content.length > 0 && content.every(word => word === word.toLowerCase());
+}
 
 function isInterimNpcLabel(name, explicit = '') {
     const text = normalizeName(name);
@@ -3269,6 +3285,8 @@ export function normalizeScanNpc(raw = {}, options = {}) {
         relationshipEvidence: normalizeRelationshipEvidence(raw.relationshipEvidence ?? raw.relationship_evidence),
         relationshipChangeReason: cleanText(raw.relationshipChangeReason ?? raw.relationshipReason, 500),
     };
+    const customFields = normalizeCustomFields(raw.customFields ?? raw.custom_fields);
+    if (Object.keys(customFields).length) { npc.customFields = customFields; npc.customFieldsReason = cleanText(raw.customFieldsReason, 300); }
     return npc;
 }
 
@@ -3687,6 +3705,79 @@ export function buildNpcPortraitPrompts(rawNpc = {}, options = {}) {
     };
 }
 
+// User-defined dossier fields (for example Level or Class), named once in settings for every chat.
+export const CUSTOM_FIELD_LIMIT = 6;
+const CUSTOM_FIELD_STORED_LIMIT = 12;
+const CUSTOM_FIELD_NAME_MAX = 40;
+const CUSTOM_FIELD_VALUE_MAX = 60;
+
+export function normalizeCustomFieldNames(value) {
+    const items = Array.isArray(value) ? value : String(value ?? '').split(/[,\n]/);
+    const names = [];
+    for (const item of items) {
+        const name = cleanText(String(item ?? '').replace(/["{}:]/g, ' '), CUSTOM_FIELD_NAME_MAX);
+        if (name && !names.some(other => other.toLowerCase() === name.toLowerCase())) names.push(name);
+    }
+    return names.slice(0, CUSTOM_FIELD_LIMIT);
+}
+
+export function normalizeCustomFields(raw) {
+    const entries = Array.isArray(raw)
+        ? raw.map(item => [item?.name ?? item?.field, item?.value])
+        : Object.entries(raw && typeof raw === 'object' ? raw : {});
+    const out = {};
+    for (const [key, value] of entries) {
+        const name = cleanText(key, CUSTOM_FIELD_NAME_MAX);
+        const text = cleanText(typeof value === 'number' ? String(value) : value, CUSTOM_FIELD_VALUE_MAX);
+        if (!name || !text || Object.keys(out).some(other => other.toLowerCase() === name.toLowerCase())) continue;
+        out[name] = text;
+        if (Object.keys(out).length >= CUSTOM_FIELD_STORED_LIMIT) break;
+    }
+    return out;
+}
+
+// The stored values of the configured fields, keyed by the configured spelling.
+export function customFieldValues(npc = {}, names = []) {
+    const stored = normalizeCustomFields(npc?.customFields);
+    const out = {};
+    for (const name of normalizeCustomFieldNames(names)) {
+        const key = Object.keys(stored).find(other => other.toLowerCase() === name.toLowerCase());
+        if (key) out[name] = stored[key];
+    }
+    return out;
+}
+
+function collapsedText(value) {
+    return String(value ?? '').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+// Keep-by-default: a configured field is set from the scan only when the source text carries the
+// value, and an established value changes only with a stated reason. Omission keeps what is stored.
+function mergeCustomFieldValues(existing, incoming, { names = [], reason = '', context = '', npc = {} } = {}) {
+    const configured = normalizeCustomFieldNames(names);
+    if (!configured.length) return null;
+    const out = normalizeCustomFields(existing);
+    const source = collapsedText(context);
+    let changed = false;
+    for (const [key, value] of Object.entries(normalizeCustomFields(incoming))) {
+        const name = configured.find(item => item.toLowerCase() === key.toLowerCase());
+        if (!name) continue;
+        const storedKey = Object.keys(out).find(other => other.toLowerCase() === name.toLowerCase());
+        const prior = storedKey ? out[storedKey] : '';
+        if (prior && prior.toLowerCase() === value.toLowerCase()) continue;
+        if (prior && !String(reason || '').trim()) continue;
+        const escape = text => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Ambiguous short aliases cannot establish a custom fact for a named actor.
+        const labels = [npc.name].filter(label => label && !isRoleDescriptionLabel(label));
+        const grounded = labels.some(label => new RegExp(`(?:^|[.!?\\n]\\s*)${escape(label)}(?:['’]s)?\\s+(?:(?:is|has|now|at|reached|a|an|the)\\s+){0,4}${escape(name)}\\s*[:=]?\\s*${escape(value)}(?![\\p{L}\\p{N}])`, 'iu').test(String(context).trim()));
+        if (!source || !grounded) continue;
+        if (storedKey && storedKey !== name) delete out[storedKey];
+        out[name] = value;
+        changed = true;
+    }
+    return changed ? out : null;
+}
+
 export function normalizeNpcRecord(raw = {}) {
     const npc = { ...raw };
     // Manual profile locks block scanner rewrites. Data hygiene still normalizes whitespace,
@@ -3702,6 +3793,9 @@ export function normalizeNpcRecord(raw = {}) {
     npc.species = cleanText(raw.species ?? raw.race ?? raw.ancestry ?? raw.speciesRace ?? raw.species_race, 160);
     npc.gender = normalizeGender(raw.gender ?? raw.sex);
     npc.homeBase = cleanText(raw.homeBase ?? raw.home_base ?? raw.usualLocation ?? raw.usual_location ?? raw.whereToFind ?? raw.where_to_find, 300);
+    const customFields = normalizeCustomFields(raw.customFields);
+    if (Object.keys(customFields).length) npc.customFields = customFields;
+    else delete npc.customFields;
     const ageFields = normalizeStoredAgeFields(raw);
     npc.age = ageFields.age;
     npc.apparentAge = ageFields.apparentAge;
@@ -3954,11 +4048,40 @@ export function applyStaleNpcLifecycle(state = {}, options = {}) {
     return { state: next, archived, removed };
 }
 
-function candidateMatches(existing, incoming) {
+const GENERIC_PLACE_WORDS = new Set(['near', 'from', 'with', 'into', 'outside', 'inside', 'room', 'hall', 'house',
+    'street', 'road', 'square', 'market', 'tavern', 'city', 'town', 'village', 'district', 'quarter']);
+
+function placesOverlap(a, b) {
+    const left = normalizeName(a);
+    const right = normalizeName(b);
+    if (!left || !right) return false;
+    if (` ${left} `.includes(` ${right} `) || ` ${right} `.includes(` ${left} `)) return true;
+    const words = new Set(left.split(' ').filter(word => word.length >= 4 && !GENERIC_PLACE_WORDS.has(word)));
+    return right.split(' ').some(word => words.has(word));
+}
+
+// A shared role-description label ("Innkeeper", "the captain") fits many people, so on its own it
+// links a scan row to a properly named record only with continuity evidence: sameIndividual, the
+// record being present (before this scan reset presence), or an overlapping location/home base. A
+// record still named by a role keeps plain label matching so interim-identity promotion and name
+// reveals continue to work.
+export function scanLabelsMatch(record, incoming, presentIds = new Set()) {
+    if (distinctNamedPeople(record, incoming)) return false;
+    const incomingLabels = [incoming.name, ...(incoming.aliases || [])].filter(label => normalizeName(label));
+    const recordLabels = [record.name, ...(record.aliases || [])].filter(label => normalizeName(label));
+    const sharedKeys = new Set(recordLabels.map(normalizeName).filter(key => incomingLabels.some(label => normalizeName(label) === key)));
+    if (!sharedKeys.size) return false;
+    if (isInterimNpcLabel(record.name, record.identityKind) || isRoleDescriptionLabel(record.name)) return true;
+    // A label counts as a name when either side spells it as one ("Red" beside "red").
+    if ([...recordLabels, ...incomingLabels].some(label => sharedKeys.has(normalizeName(label)) && !isRoleDescriptionLabel(label))) return true;
+    if (incoming.sameIndividual === true || record.present === true || presentIds.has(record.id)) return true;
+    return [record.location, record.homeBase].some(place =>
+        [incoming.location, incoming.homeBase].some(other => placesOverlap(place, other)));
+}
+
+function candidateMatches(existing, incoming, presentIds) {
     if (incoming.id && incoming.id === existing.id) return true;
-    const incomingNames = new Set([incoming.name, ...(incoming.aliases || [])].map(normalizeName).filter(Boolean));
-    const existingNames = [existing.name, ...(existing.aliases || [])].map(normalizeName).filter(Boolean);
-    return existingNames.some(name => incomingNames.has(name));
+    return scanLabelsMatch(existing, incoming, presentIds);
 }
 
 function mergeLists(oldList, newList, limit = 8) {
@@ -4080,6 +4203,10 @@ function applyIncoming(existing, incoming, turn, relationshipCaps = DEFAULT_RELA
     if (!merged.name) merged.name = incomingName || existingName || 'Unnamed NPC';
     if (!merged.identityKind) merged.identityKind = inferNpcIdentityKind(merged.name, existingKind);
 
+    if (incoming.customFields && !manualFields.has('customFields')) {
+        const accepted = mergeCustomFieldValues(existing.customFields, incoming.customFields, { names: lifecycleOptions.customFieldNames, reason: incoming.customFieldsReason, context: lifecycleOptions.developmentContext, npc: existing.name ? existing : incoming });
+        if (accepted) merged.customFields = accepted;
+    }
     for (const field of TEXT_FIELDS) {
         const value = incoming[field];
         if (manualFields.has(field)) continue;
@@ -4227,7 +4354,7 @@ function applyIncoming(existing, incoming, turn, relationshipCaps = DEFAULT_RELA
     if (!manualFields.has('location') && incoming.locationState === 'clear' && !String(incoming.location || '').trim()) {
         merged.location = '';
     }
-    merged.aliases = mergeLists([...(existing.aliases || []), ...(promotedFromName ? [promotedFromName] : [])], incomingAliases, 8)
+    merged.aliases = mergeLists([...(existing.aliases || []), ...(promotedFromName ? [promotedFromName] : [])], manualFields.has('aliases') ? [] : incomingAliases, 8)
         .filter(alias => normalizeName(alias) !== normalizeName(merged.name));
     if (normalizeName(incomingName) === normalizeName(merged.name) && incoming.identityKind) {
         merged.identityKind = inferNpcIdentityKind(merged.name, incoming.identityKind);
@@ -4246,7 +4373,7 @@ function applyIncoming(existing, incoming, turn, relationshipCaps = DEFAULT_RELA
         // The free-text role mirrors the current titles unless the player locked it.
         if (!manualFields.has('role')) merged.role = currentRoleText(merged.roles) || merged.role;
     }
-    merged.canonRef = normalizeCanonRef(existing.canonRef) || normalizeCanonRef(incoming.canonRef);
+    merged.canonRef = (incoming.canonRef?.world?.startsWith('Saga:') ? normalizeCanonRef(incoming.canonRef) : null) || normalizeCanonRef(existing.canonRef) || normalizeCanonRef(incoming.canonRef);
     // Stat sheet changes arrive as grounded operations from the cast pass; a locked sheet is the player's.
     merged.sheet = incoming.sheetDelta && !sheetDeltaIsEmpty(incoming.sheetDelta) && !manualFields.has('sheet')
         ? applySheetDelta(existing.sheet, incoming.sheetDelta, { turn, sourceMessageId })
@@ -5200,6 +5327,7 @@ export function resolveInterimIdentityPromotions(scanResult, existingNpcs = [], 
 
 function explicitAliasLink(a, b) {
     if (!a || !b || a.id === b.id) return false;
+    if (canonIdentityConflict(a, b)) return false;
     const aName = normalizeName(a.name);
     const bName = normalizeName(b.name);
     if (!aName || !bName) return false;
@@ -5386,6 +5514,7 @@ export function mergeScanResult(state, scanResult, options = {}) {
         autoReactivateArchived: options.autoReactivateArchived !== false,
         skipRelationshipUpdate: Boolean(options.skipRelationshipUpdate),
         developmentContext: String(options.developmentContext || ''),
+        customFieldNames: normalizeCustomFieldNames(options.customFieldNames),
         allowTargetedDurableSeed: options.allowTargetedDurableSeed === true,
         memoryInputLimit,
     };
@@ -5397,6 +5526,7 @@ export function mergeScanResult(state, scanResult, options = {}) {
         .map(normalizeNpcCandidate)
         .filter(Boolean);
     const expiredCandidates = normalizedCandidates.filter(candidate => turn - Number(candidate.lastSeenTurn || 0) > NPC_CANDIDATE_TTL_TURNS);
+    const presentBeforeScan = new Set(options.priorPresentIds || (state?.npcs || []).filter(n => n.present).map(n => n.id));
     const next = {
         ...state,
         npcs: Array.isArray(state?.npcs) ? state.npcs.map(n => ({
@@ -5425,6 +5555,10 @@ export function mergeScanResult(state, scanResult, options = {}) {
     for (const raw of incomingList) {
         const incoming = normalizeScanNpc(raw, { memoryInputLimit });
         let existingIndex = incoming.id ? next.npcs.findIndex(existing => existing.id === incoming.id) : -1;
+        if (existingIndex >= 0 && distinctNamedPeople(next.npcs[existingIndex], incoming)) {
+            report.skipped.push(incoming.name || incoming.id);
+            continue;
+        }
         if (existingIndex >= 0 && !incoming.name) incoming.name = next.npcs[existingIndex].name;
         const key = normalizeName(incoming.name);
         if (!key || excludeNames.has(key)) {
@@ -5432,7 +5566,7 @@ export function mergeScanResult(state, scanResult, options = {}) {
             continue;
         }
 
-        if (existingIndex < 0) existingIndex = next.npcs.findIndex(existing => candidateMatches(existing, incoming));
+        if (existingIndex < 0) existingIndex = next.npcs.findIndex(existing => candidateMatches(existing, incoming, presentBeforeScan));
         if (existingIndex < 0) existingIndex = findInterimIdentityPromotionIndex(next.npcs, incoming);
         if (existingIndex >= 0) {
             const previousName = next.npcs[existingIndex].name;
@@ -5636,42 +5770,81 @@ const NAME_TITLE_TOKENS = new Set([
     'commander', 'general', 'lieutenant', 'sergeant', 'major', 'colonel', 'admiral', 'doctor', 'professor',
     'father', 'mother', 'brother', 'sister', 'elder', 'king', 'queen', 'prince', 'princess', 'duke', 'duchess',
     'count', 'countess', 'baron', 'baroness', 'lady-in-waiting', 'saint', 'young', 'old', 'little', 'big',
+    'capt', 'lt', 'sgt', 'cpl', 'col', 'gen', 'adm', 'cmdr', 'dr', 'mr', 'mrs', 'ms', 'mx', 'prof', 'rev', 'st', 'sr', 'jr',
+    'of', 'the', 'von', 'van', 'de', 'del', 'della', 'der', 'den', 'du', 'la', 'le', 'al', 'bin', 'ibn',
+]);
+// Names that are also everyday words ("I will go"): matched only when written with a capital.
+const COMMON_WORD_NAMES = new Set([
+    'will', 'hope', 'grace', 'rose', 'mark', 'faith', 'joy', 'hunter', 'page', 'rich', 'bill', 'frank', 'sage', 'june',
+    'dawn', 'summer', 'iris', 'lily', 'ruby', 'pearl', 'amber', 'jade', 'stone', 'black', 'white', 'brown', 'green',
+    'wolf', 'bear', 'hawk', 'crow', 'raven', 'chase', 'drew', 'grant', 'honor', 'angel', 'star', 'rain', 'storm',
+    'river', 'lake', 'glen', 'dale', 'forest', 'wood', 'hill', 'field', 'ford', 'mason', 'cook', 'baker', 'smith',
+    'archer', 'fisher', 'miller', 'carter', 'cooper', 'porter', 'parker', 'taylor', 'sterling', 'rowan', 'ash',
 ]);
 
-// A first name alone ("Linnea" for "Linnea Vael") names the NPC only when no other dossier shares
-// that first word, and never when the word is a title. A full name or alias always counts.
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// True when `word` stands as a whole word in the raw text starting with a capital letter.
+function capitalisedWordIn(text, word) {
+    const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(word)}(?![\\p{L}\\p{N}])`, 'giu');
+    for (const match of String(text || '').matchAll(re)) {
+        const first = match[0].charAt(0);
+        if (first !== first.toLocaleLowerCase()) return true;
+    }
+    return false;
+}
+
+// A full name or alias always counts (a one-word alias only when capitalised); role descriptions
+// ("the innkeeper") never count. Any other word of the name ("Hask" or "Orrin" for "Capt. Orrin
+// Hask") counts when it has 4+ letters, is not a title, no other dossier's label carries it, and
+// it is written with a capital (a first name may be lower-case unless it is an everyday word).
 export function npcNamedInText(npc, text, roster = []) {
     const haystack = normalizeName(text);
     if (!haystack || !npc?.name) return false;
     const others = (Array.isArray(roster) ? roster : []).filter(other => other && other !== npc && other.id !== npc.id);
     const otherLabels = others.flatMap(other => [other.name, ...(other.aliases || [])]).map(normalizeName).filter(Boolean);
-    for (const label of [npc.name, ...(npc.aliases || [])]) {
+    // Ambiguous short aliases cannot establish a custom fact for a named actor.
+        const labels = [npc.name].filter(label => label && !isRoleDescriptionLabel(label));
+    for (const label of labels) {
         const needle = normalizeName(label);
         if (!needle || countNormalizedPhrase(haystack, needle) === 0) continue;
         // A label another dossier also carries ("Tomas") names nobody on its own, and a label
         // found only inside another dossier's longer name ("Mira" in "Lady Mira") is theirs.
         if (otherLabels.includes(needle)) continue;
+        if (!needle.includes(' ') && label !== npc.name && !capitalisedWordIn(text, needle)) continue;
         // Mask every span of those longer labels (longest first, so overlapping labels such as
         // "Lady Mira Valen" and "Mira Valen" consume one span), then look for an independent mention.
         const masked = otherLabels
             .filter(other => other.length > needle.length && countNormalizedPhrase(other, needle) > 0)
             .sort((a, b) => b.length - a.length)
-            .reduce((textSoFar, other) => textSoFar.replace(new RegExp(`(?<=^|\\s)${other.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$)`, 'gu'), '#'), haystack);
+            .reduce((textSoFar, other) => textSoFar.replace(new RegExp(`(?<=^|\\s)${escapeRegExp(other)}(?=\\s|$)`, 'gu'), '#'), haystack);
         if (countNormalizedPhrase(masked, needle) === 0) continue;
         return true;
     }
+    if (isRoleDescriptionLabel(npc.name)) return false;
     const tokens = normalizeName(npc.name).split(/\s+/).filter(Boolean);
-    const first = tokens[0] || '';
-    if (tokens.length < 2 || first.length < 4 || NAME_TITLE_TOKENS.has(first)) return false;
-    // A first name another dossier's label also starts with is ambiguous, and an occurrence inside
-    // another dossier's named span ("Mira" in "Lady Mira Valen") is theirs.
-    const sharedFirst = otherLabels.some(label => label.split(/\s+/)[0] === first);
-    if (sharedFirst) return false;
-    const masked = otherLabels
-        .filter(other => other.length > first.length)
-        .sort((a, b) => b.length - a.length)
-        .reduce((textSoFar, other) => textSoFar.replace(new RegExp(`(?<=^|\\s)${other.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$)`, 'gu'), '#'), haystack);
-    return countNormalizedPhrase(masked, first) > 0;
+    if (tokens.length < 2) return false;
+    const firstPart = tokens.find(token => !NAME_TITLE_TOKENS.has(token)) || '';
+    const otherTokens = new Set(otherLabels.flatMap(label => label.split(/\s+/)));
+    for (const token of tokens) {
+        if (token.length < 4 || NAME_TITLE_TOKENS.has(token)) continue;
+        if (token === firstPart) {
+            // A first name another dossier's label also starts with is ambiguous, and an occurrence
+            // inside another dossier's named span ("Mira" in "Lady Mira Valen") is theirs.
+            if (otherLabels.some(label => label.split(/\s+/)[0] === token)) continue;
+            const masked = otherLabels
+                .filter(other => other.length > token.length && countNormalizedPhrase(other, token) > 0)
+                .sort((a, b) => b.length - a.length)
+                .reduce((textSoFar, other) => textSoFar.replace(new RegExp(`(?<=^|\\s)${escapeRegExp(other)}(?=\\s|$)`, 'gu'), '#'), haystack);
+            if (countNormalizedPhrase(masked, token) > 0 && (!COMMON_WORD_NAMES.has(token) || capitalisedWordIn(text, token))) return true;
+            continue;
+        }
+        // Any other part (a surname) must be unique to this NPC and written with a capital.
+        if (!otherTokens.has(token) && capitalisedWordIn(text, token)) return true;
+    }
+    return false;
 }
 
 export function selectRelevantNpcs(npcs, text, turn = 0, limit = 3, socialGraph = null, graphRegistry = null) {
@@ -5791,9 +5964,10 @@ function injectionIdentityCore(npc, identityCap = 540) {
     return fairInjectionParts(parts, identityCap) || 'not yet established; do not invent an archetype to fill the gap';
 }
 
-function injectionAgencyCore(npc, agencyCap = 260) {
+function injectionAgencyCore(npc, agencyCap = 260, customFieldNames = []) {
     const bonds = cleanList(npc.keyRelationships, agencyCap >= 450 ? KEY_RELATIONSHIP_LIMIT : Math.min(3, KEY_RELATIONSHIP_LIMIT), 150);
     const parts = [
+        Object.entries(customFieldValues(npc, customFieldNames)).map(([key,value]) => `${key}: ${value}`).join(' · '),
         npc.role && `role: ${npc.role}`,
         npc.goal && `current goal: ${npc.goal}`,
         bonds.length && `key relationships: ${bonds.join(' | ')}`,
@@ -5836,9 +6010,9 @@ function compactRelationshipModifier(npc, behaviorCap = 160) {
     return blend ? `${base}; ${blend}` : base;
 }
 
-function injectionEssentialBlock(npc, behaviorCap = 160, identityCap = 620, agencyCap = 300, stateCap = 180) {
+function injectionEssentialBlock(npc, behaviorCap = 160, identityCap = 620, agencyCap = 300, stateCap = 180, customFieldNames = []) {
     const identity = injectionIdentityCore(npc, identityCap);
-    const agency = injectionAgencyCore(npc, agencyCap);
+    const agency = injectionAgencyCore(npc, agencyCap, customFieldNames);
     const currentState = injectionCurrentStateCore(npc, stateCap);
     const relationship = compactRelationshipModifier(npc, behaviorCap);
     // The knowledge gate is essential, not optional enrichment, and leads the line so even the
@@ -5913,22 +6087,52 @@ function compactInjectionBehaviorRubric(criteria, maxChars) {
     return truncateInjectionText(raw, maxChars);
 }
 
-export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria = DEFAULT_BEHAVIOR_CRITERIA, budgetTokens = DEFAULT_INJECTION_BUDGET_TOKENS, socialGraph = null, { includeAppearance = false, namedNpcIds = [], recallScores = null, storyDay = null } = {}) {
+const REFERENCE_LINE_LIMIT = 4;
+const REFERENCE_LINE_CHARS = 240;
+const MENTIONED_HEADER = 'MENTIONED, NOT PRESENT: NPCs the recent story names. Use these established facts if they come up or arrive; do not bring them on-screen unprompted.';
+const DECEASED_HEADER = 'DECEASED, REFERENCED ONLY: these NPCs are dead and only mentioned. Use these facts; never portray them alive, present, or speaking.';
+
+// NPCs the recent story names who are not in the injected cast get one compact line each: a living
+// off-screen (or archived) NPC its established facts, a confirmed-dead NPC who they were and how they
+// died. At most four, living first; never a dossier block.
+function referenceBlock(npcs = [], text = '', castIds = new Set(), customFieldNames = []) {
+    const roster = Array.isArray(npcs) ? npcs : [];
+    const haystack = normalizeName(text);
+    if (!haystack) return '';
+    // Cheap pre-check before the full roster-aware match: a late game can hold hundreds of NPCs.
+    const mayBeNamed = npc => [npc.name, ...(npc.aliases || [])]
+        .some(label => normalizeName(label).split(/\s+/).some(token => token.length >= 3 && haystack.includes(token)));
+    const named = roster.filter(npc => npc?.name && !castIds.has(npc.id) && !npc.present && mayBeNamed(npc) && npcNamedInText(npc, text, roster));
+    const bondOf = npc => cleanText(String(cleanList(npc.keyRelationships, 1, 160)[0] || '').split('|')[0], 90);
+    const mentioned = named.filter(npc => !isTerminalNpcDeath(npc)).slice(0, REFERENCE_LINE_LIMIT).map(npc => {
+        const custom = Object.entries(customFieldValues(npc, customFieldNames)).map(([name, value]) => `${name}: ${value}`).join(' · ');
+        const facts = [normalizeGender(npc.gender), cleanText(npc.role, 70), npc.homeBase && `home base: ${cleanText(npc.homeBase, 60)}`,
+            custom, npc.relationshipSummary && `toward the player: ${cleanText(npc.relationshipSummary, 90)}`].filter(Boolean);
+        return truncateInjectionText(`- ${npc.name} (${['mentioned, not present', ...facts].join('; ')})`, REFERENCE_LINE_CHARS);
+    });
+    const deceased = named.filter(npc => isTerminalNpcDeath(npc)).slice(0, Math.min(3, REFERENCE_LINE_LIMIT - mentioned.length)).map(npc => {
+        const bond = bondOf(npc);
+        const facts = [normalizeGender(npc.gender), cleanText(npc.role, 70), bond && `bond: ${bond}`].filter(Boolean);
+        const death = cleanText(npc.lifeStateReason, 140);
+        return truncateInjectionText(`- ${npc.name} (deceased${facts.length ? `; ${facts.join('; ')}` : ''})${death ? `: ${death}` : ''}`, REFERENCE_LINE_CHARS);
+    });
+    return [mentioned.length && MENTIONED_HEADER, ...mentioned, deceased.length && DECEASED_HEADER, ...deceased].filter(Boolean).join('\n');
+}
+
+export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria = DEFAULT_BEHAVIOR_CRITERIA, budgetTokens = DEFAULT_INJECTION_BUDGET_TOKENS, socialGraph = null, { includeAppearance = false, namedNpcIds = [], recallScores = null, storyDay = null, customFieldNames = [] } = {}) {
     const named = new Set(Array.isArray(namedNpcIds) ? namedNpcIds : []);
     const calledIn = npc => !npc?.present && named.has(npc?.id);
     const present = (npcs || []).filter(npc => (Boolean(npc?.present) || calledIn(npc)) && !npc?.archived);
     let relevant = selectRelevantNpcs(present, text, turn, limit, socialGraph, npcs || []);
-    if (!relevant.length) return '';
+    if (!relevant.length) return referenceBlock(npcs || [], text, new Set(), customFieldNames);
 
     const budget = normalizeInjectionBudgetTokens(budgetTokens);
     const budgetChars = budget * APPROX_CHARS_PER_TOKEN;
     const headerFor = () => [
         'NPC STATE DELTA DOSSIER. Only confirmed-present NPCs are included. Treat these as established story facts; never mention the dossier or numeric values.',
-        'IDENTITY FIRST / DOMINATES: personality sets identity; behavioral profile translates it into target-general response/decision levers; speech/mannerisms shape expression; goals, duties, morality, independence, other bonds, and CURRENT mood/status determine behavior first.',
-        'VOICE FIDELITY: established Speech constrains actual dialogue wording and delivery. Preserve its sentence shape, vocabulary, formality, directness, hedging, cadence, question/explanation style, and recurring verbal habits; do not flatten distinct voices into generic polished prose.',
-        'PLAYER RELATIONSHIP IS SECONDARY: it may bias attention, interpretation, openness, tolerance, or willingness toward the player, but need not surface every scene. High scores never mean obedience, universal prioritization, clinginess, jealousy, tsundere behavior, or cruelty toward others.',
-        'Temporary mood, stress, intimacy, or player-specific behavior is not global identity. Durable identity changes gradually unless narration explicitly establishes lasting development or a developmental time skip.',
-        relevant.some(lowPlayerStanding) && 'LOW SCORES: the player is not uniquely important; no obligation, fixation, or "only them" thinking.',
+        'IDENTITY FIRST / DOMINATES: personality, values, morality, goals, duties, independence, other bonds and current mood/status govern action; behavioral profile translates it into target-general response/decision levers. Temporary mood or player-specific behavior does not rewrite identity; durable change needs lasting on-page development.',
+        'VOICE FIDELITY: preserve established Speech, mannerisms, vocabulary, sentence shape, formality, cadence, hedging and question/explanation style; never replace a distinct voice with generic polished prose.',
+        'PLAYER RELATIONSHIP IS SECONDARY: it may bias player-directed attention, interpretation and openness, but need not surface each scene. High scores never mean obedience, devotion, clinginess, jealousy, tsundere behavior, reduced empathy or cruelty toward others. Low scores create no obligation or fixation.',
         relevant.some(calledIn) && 'Exception: NPCs marked "named by player" are not yet confirmed on-screen; use their dossier if they appear.',
         relevant.some(npc => Array.isArray(npc?.knowledge) && npc.knowledge.length) && 'KNOWLEDGE GATES ARE HARD LIMITS: each NPC speaks and acts only on what they could know. A fact under "does NOT know" stays unknown to that NPC even if narration, the player, or another NPC\'s dossier contains it, until they learn it on-page. Secrets are revealed only with an on-page reason.',
     ].filter(Boolean).join('\n');
@@ -5944,7 +6148,7 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
     let agencyCap = Math.round(Math.min(900, 300 * capScale));
     let stateCap = Math.round(Math.min(400, 180 * capScale));
     const renderEssentials = () => relevant.map(npc => {
-        const block = injectionEssentialBlock(npc, behaviorCap, identityCap, agencyCap, stateCap);
+        const block = injectionEssentialBlock(npc, behaviorCap, identityCap, agencyCap, stateCap, customFieldNames);
         return calledIn(npc) ? block.replace(`- ${npc.name}: `, `- ${npc.name} (named by player): `) : block;
     });
     while (relevant.length > 1 && (header.length + 1 + renderEssentials().join('\n').length) > budgetChars) {
@@ -5970,10 +6174,9 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
         return truncateInjectionText(lines.join('\n'), budgetChars);
     }
 
-    // Relationship rubric is useful, but subordinate to the actual NPC. Stock wording is compiled
-    // to a tiny semantic rubric; custom user criteria are retained only as space permits.
+    // The header covers stock relationship rules; retain custom criteria as space permits.
     const rubricAllowance = Math.min(600, Math.max(100, Math.floor(budgetChars * 0.08)));
-    const rubricText = compactInjectionBehaviorRubric(behaviorCriteria, rubricAllowance);
+    const rubricText = String(behaviorCriteria || '').trim() === DEFAULT_BEHAVIOR_CRITERIA ? '' : compactInjectionBehaviorRubric(behaviorCriteria, rubricAllowance);
     if (rubricText) {
         const fullRubric = `RELATIONSHIP-TO-BEHAVIOR RUBRIC: ${rubricText}`;
         const room = budgetChars - currentLength - 1;
@@ -5983,12 +6186,15 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
         }
     }
 
+    const referenceText = referenceBlock(npcs || [], text, new Set(relevant.map(n => n.id)), customFieldNames);
+    const boundedReferences = referenceText && budgetChars - currentLength > referenceText.length + 1 ? referenceText : '';
+    if (boundedReferences) currentLength += boundedReferences.length + 1;
     // Optional continuity then fills remaining room round-robin so one verbose dossier cannot
     // starve another. Relationship summary is deliberately late: live identity/state already won priority.
     // Resolved appearance uses the same optional budget as other continuity. It must not
     // shrink the essential identity/agency budget or be spliced ahead of characterization.
     const presentNames = relevant.map(npc => npc.name);
-    const optionalByNpc = relevant.map(npc => injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null, text, recallScores, presentNames, { castNpcs: relevant, storyDay }));
+    const optionalByNpc = relevant.map(npc => [renderPortrayal(npc), ...injectionOptionalFields(npc, includeAppearance, Number.isInteger(turn) ? turn : null, text, recallScores, presentNames, { castNpcs: relevant, storyDay })]);
     const enriched = essentialBlocks.slice();
     const maxPriority = Math.max(0, ...optionalByNpc.map(fields => fields.length));
     for (let priority = 0; priority < maxPriority; priority++) {
@@ -6022,7 +6228,7 @@ export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria
 
     // Rebuild with enriched NPC lines while preserving rubric placement.
     const rubricLine = lines.find(line => line.startsWith('RELATIONSHIP-TO-BEHAVIOR RUBRIC:')) || '';
-    const finalLines = [header, ...enriched, rubricLine].filter(Boolean);
+    const finalLines = [header, ...enriched, boundedReferences, rubricLine].filter(Boolean);
     return truncateInjectionText(finalLines.join('\n'), budgetChars);
 }
 
@@ -6154,6 +6360,7 @@ export function buildBackfillPrompt({
     existingNpc = null,
     userName = 'User',
     charName = 'Character',
+    excludeCardCharacter = false,
     memoryCriteria = DEFAULT_MEMORY_CRITERIA,
 }) {
     const target = cleanText(targetName, 120);
@@ -6186,7 +6393,7 @@ export function buildBackfillPrompt({
 
 Requested NPC: ${target || '(missing target)'}
 Player/main character to exclude: ${userName}
-Main card speaker to exclude: ${charName}
+Main card speaker: ${charName} (${excludeCardCharacter ? 'narrator only; exclude' : 'actor; eligible for a dossier'})
 Existing partial dossier (identity hint only): ${JSON.stringify(existing)}
 
 Rules:
@@ -6199,7 +6406,7 @@ Rules:
 7. NPC Inner Chatter may support durable personality, goals, attitude, or relationship-summary evidence, but do not store the moment-to-moment internal monologue itself.
 8. PRESENT is current-scene state, not historical presence. Set present=true only if the requested NPC physically appears or actively participates in the MOST RECENT ASSISTANT STORY MESSAGE contained in this history. An older appearance does not count. A World State mention alone does not establish presence. Set worldActive=true only for explicit current off-screen activity in the latest World State; present and worldActive are mutually exclusive.
 9. This is historical backfill. relationshipImpact MUST be "none" and every relationshipDelta value MUST be 0. Do not numerically replay old relationship events.
-10. Do not create a dossier for ${userName} or ${charName}.
+10. Do not create a dossier for ${userName}${excludeCardCharacter ? ` or narrator ${charName}` : ''}.
 11. HOME BASE / USUAL LOCATION is durable home, workplace, headquarters, or regular haunt, not the current scene location. Establish it only from grounded ongoing-life evidence; changing an established homeBase requires homeBaseState:"update"+homeBaseReason. Keep the JSON compact enough to finish reliably: homeBase<=300; appearance<=500; personality<=280; speech<=240; background<=320; relationshipSummary<=280; mannerism<=140; behaviorProfile max6/180; keyRelationship/memory<=180. Merge overlaps rather than append. Unknown facts may be empty.
 12. Output JSON only. No markdown, no code fence, no commentary. Finish and close every quoted string, array, and object before stopping.
 13. ${KNOWLEDGE_SCANNER_RULE}
@@ -6372,6 +6579,7 @@ export function buildScannerPrompt({
     candidates = [],
     userName = 'User',
     charName = 'Character',
+    excludeCardCharacter = false,
     maxNpcs = 40,
     relationshipBaseline = DEFAULT_RELATIONSHIP,
     relationshipCaps = DEFAULT_RELATIONSHIP_CAPS,
@@ -6501,7 +6709,7 @@ export function buildScannerPrompt({
     return `Private NPC dossier scanner.
 Admission: ${admissionPolicy}${fullScanRule}
 Rules:
-1. Exclude player (${userName}), main speaker (${charName}), extras.
+1. Exclude player (${userName})${excludeCardCharacter ? `, narrator (${charName})` : ''}, extras. ${excludeCardCharacter ? '' : `Main card actor (${charName}) is eligible; use the same evidence gates.`}
 2. EXISTING: match id/name/alias/role. Return compact JSON deltas: changed fields only; omitted persist. Identity promotion: role/interim dossier + grounded proper name => MUST reuse id; old label in aliases; identityKind:"proper_name"; never duplicate/downgrade.
 3. NEW/CANDIDATE: include name,identityKind,dossierSignal,dossierReason,sameIndividual,directInteraction,present,worldActive. Dossier-worthy NEW: populate every grounded field now; directInteraction affects admission/relationship only, NEVER enrichment. Incidental role candidates may stay lightweight.
 4. Candidates are not dossiers. sameIndividual=true only when proven. Use narration, World State, durable Inner Chatter; proper names there MUST be returned even when prose uses role.

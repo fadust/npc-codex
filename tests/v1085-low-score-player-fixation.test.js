@@ -32,13 +32,13 @@ test('a fixated summary from a scan is not stored at low scores', () => {
     assert.equal(scan('Grateful for his help with the inn.'), 'Grateful for his help with the inn.', 'an ordinary first summary is still stored');
 });
 
-test('the roleplay injection drops stance moods and adds the low-score rule only when it applies', () => {
+test('the roleplay injection drops stance moods and uses a conditional low-score rule without labeling neutral actors', () => {
     const npc = elena();
     npc.relationshipSummary = FIXATED;
     const low = buildInjection([npc], 'Elena', 10);
     assert.match(low, /mood: Overwhelmed, breathless, awe-struck;/);
     assert.doesNotMatch(low, /devoted|chosen partner/);
-    assert.match(low, /LOW SCORES: the player is not uniquely important/);
+    assert.match(low, /Low scores create no obligation or fixation/);
     const high = buildInjection([elena({ trust: 60, affection: 72, desire: 0, tension: 0 })], 'Elena', 10);
     assert.match(high, /mood: Overwhelmed, breathless, awe-struck, devoted/, 'established affection keeps the mood as written');
     assert.doesNotMatch(high, /LOW SCORES/);

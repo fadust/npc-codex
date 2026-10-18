@@ -122,3 +122,7 @@ The historical Stage 9 release prepared a coherent 1.0.0 manifest, package metad
 For each requested stage: inspect current HEAD and dirty work; read governing files; establish the applicable baseline; implement only that stage's cohesive changes; update tests and current docs; run affected checks; review the final diff; record results and remaining limitations. A next stage may depend on prior work but cannot silently declare it accepted. Preserve user/session authorization for commits and publication; do not require repeated approvals for already authorized work.
 
 Historical baseline test names or fixture values may reference older versions when the exact historical shape is the subject under test. Retain useful behavior tests and migrate their filenames/current-runtime expectations when the implementation owner changes; never weaken a test just to pass after a regression. Concrete baseline bugs should be recorded and resolved in the applicable authorized stage.
+
+## 2026-10-18 actor integration
+
+See [actor-stack.md](actor-stack.md) for selected upstream provenance, fixes 1–3, Saga revision guards, BaiBai ownership and manually approved BunnyMo portrayal. This is a fork integration at application version 2.0.0, not a storage migration or new release version.

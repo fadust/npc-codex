@@ -23,6 +23,7 @@ import { memoryContext, readMemoryDecision, readEventDecisions } from './memory.
 import { readStanceDecisions } from './stance.js';
 import { applySchemaToDelta, schemaPromptLine } from './schema.js';
 import { capPoolChanges } from './trust.js';
+import { resolveActor } from './actor-stack.js';
 import { renderFlorisReadout } from './floris.js';
 
 export const CAST_PASS_SYSTEM_PROMPT = "You are NPC State Delta's isolated cast and knowledge evaluator. Use only the supplied candidates, canon entries and current exchange. Return only the requested JSON object.";
@@ -218,9 +219,20 @@ function midSentence(text, index) {
     return !/(^|[.!?…"“*\]\n]\s*)$/.test(before) && index > 0;
 }
 
-export function castSignals(transcript, { knownLabels = [], userName = '', charName = '' } = {}) {
+// Only an explicit description directive excludes a narrator; narrative prose is not configuration.
+export function cardActorPolicy(ctx = {}) {
+    const card = ctx.characterId != null ? ctx.characters?.[ctx.characterId] : null;
+    const description = card?.data?.description ?? card?.description ?? '';
+    return {
+        userName: ctx.name1 || 'User',
+        charName: ctx.name2 || card?.name || 'Character',
+        excludeCardCharacter: /^\s*\[NPC Codex: narrator\]\s*$/im.test(description),
+    };
+}
+
+export function castSignals(transcript, { knownLabels = [], userName = '', charName = '', excludeCardCharacter = false } = {}) {
     const text = String(transcript || '');
-    const known = new Set([...knownLabels, userName, charName].map(norm).filter(Boolean));
+    const known = new Set([...knownLabels, userName, ...(excludeCardCharacter ? [charName] : [])].map(norm).filter(Boolean));
     const knownTokens = new Set([...known].flatMap(label => label.split(/\s+/)));
     const unknownNames = [];
     for (const match of text.matchAll(NAME_RUN)) {
@@ -264,7 +276,7 @@ function tokens(text) {
     return new Set(normAll(text).split(/[^\p{L}\p{N}]+/u).filter(token => token.length > 2));
 }
 
-export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation = '', baibaiNpcs = [], limit = SHORTLIST_LIMIT } = {}) {
+export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation = '', baibaiNpcs = [], canonEntries = [], limit = SHORTLIST_LIMIT } = {}) {
     const text = String(transcript || '');
     const words = tokens(text);
     const scene = tokens(sceneLocation);
@@ -315,7 +327,7 @@ export function buildCastShortlist({ npcs = [], transcript = '', sceneLocation =
                 ...((npc.location || extra.location) ? { location: cleanText(npc.location || extra.location, 120) } : {}),
                 ...(npc.lifeState && npc.lifeState !== 'unknown' ? { lifeState: npc.lifeState } : {}),
                 ...(npc.canonRef ? { canon: `canon:${npc.canonRef.world}#${npc.canonRef.uid}` } : {}),
-                ...(npc.canonSeed ? { seeded: true } : {}),
+                ...(npc.canonSeed && (!npc.canonSeed.world?.startsWith('Saga:') || (npc.personality && npc.speech && canonEntries.some(e => e.world === npc.canonSeed.world))) ? { seeded: true } : {}),
                 ...(npc.sheet?.derivation?.emphasis?.dominant?.length || npc.sheet?.derivation?.emphasis?.weak?.length ? {} : { needsBuild: true }),
                 ...(renderFlorisReadout(npc) ? { floris: renderFlorisReadout(npc) } : {}),
                 ...(normalizeKnowledge(npc.knowledge).length ? { existingKnowledge: scannerKnowledgeContext(npc, 6) } : {}),
@@ -427,14 +439,14 @@ export function rankCanonEntries(entries, transcript, { npcs = [], limit = CANON
 
 /* ---------- The combined cast + knowledge request. ---------- */
 
-export function buildCastPassPrompt({ transcript, shortlist = [], canon = [], signals = {}, userName = 'User', charName = 'Character', schema = null }) {
+export function buildCastPassPrompt({ transcript, shortlist = [], canon = [], signals = {}, userName = 'User', charName = 'Character', excludeCardCharacter = false, schema = null }) {
     const hints = [
         signals.unknownNames?.length && `unlisted names: ${signals.unknownNames.join(', ')}`,
         signals.tiePhrases?.length && `tie references: ${signals.tiePhrases.join(' | ')}`,
         signals.titlePhrases?.length && `title references: ${signals.titlePhrases.join(' | ')}`,
     ].filter(Boolean).join('\n');
     return `Private NPC cast and knowledge evaluator.
-TASK A - CAST. List each individual person the CURRENT EXCHANGE refers to by name, title or tie (people only: not places or objects, not crowds, not ${userName}, not ${charName}). Resolve each to exactly one of, checked IN THIS ORDER:
+TASK A - CAST. List each individual person the CURRENT EXCHANGE refers to by name, title or tie (people only: not places or objects, not crowds, not ${userName}${excludeCardCharacter ? `, not narrator ${charName}` : ''}). Resolve each to exactly one of, checked IN THIS ORDER:
  1. a CANON entry that defines them: "is":"canon:<id>", "name" = the canonical name. source "card" is this story's own canon (it may be an AU) and outranks source "lorebook" when they disagree;
  2. an existing DOSSIER: "is":"<dossier id>";
  3. "is":"new".
@@ -483,10 +495,10 @@ function appearsIn(text, fragment) {
     return Boolean(needle) && haystack.includes(needle);
 }
 
-export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon = [], userName = '', charName = '', schema = null } = {}) {
+export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon = [], userName = '', charName = '', excludeCardCharacter = false, schema = null } = {}) {
     const report = { accepted: [], rejected: [] };
     const live = (Array.isArray(npcs) ? npcs : []).filter(npc => npc && !npc.archived);
-    const excluded = new Set([userName, charName].map(norm).filter(Boolean));
+    const excluded = new Set([userName, ...(excludeCardCharacter ? [charName] : [])].map(norm).filter(Boolean));
     const rows = [];
     const edges = [];
     const nameOf = new Map();
@@ -502,12 +514,14 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
         const gender = ['female', 'male'].includes(String(person?.gender || '').toLowerCase()) ? String(person.gender).toLowerCase() : '';
         const roles = normalizeRoles(person?.roles).map(role => ({ ...role }));
         let row = null;
+        let mentionedCanonOnly = false;
         if (is.startsWith('canon:')) {
             const entry = canon.find(item => item.id === is);
             if (!entry) { report.rejected.push({ ref, reason: 'unknown canon entry' }); continue; }
-            const canonical = name || entry.name;
+            const canonical = entry.name;
             const dossier = live.find(npc => npc.id === entry.dossierId)
                 || live.find(npc => labelsOf(npc).some(label => norm(label) === norm(canonical)));
+            mentionedCanonOnly = !dossier && person.present !== true;
             row = dossier
                 ? { id: dossier.id, name: dossier.name, sameIndividual: true }
                 : { name: canonical, identityKind: 'proper_name', dossierSignal: 'persistent', dossierReason: `canon entry ${entry.name}`, sameIndividual: true };
@@ -563,7 +577,7 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
             if (decision.ops.length || decision.intents.length) row.memoryDecision = { ops: decision.ops, intents: decision.intents };
         }
         row.matchLabels = [...new Set([...(row.matchLabels || []), stripArticle(ref), ...(name ? [name] : [])])];
-        rows.push(row);
+        if (!mentionedCanonOnly) rows.push(row);
         nameOf.set(norm(ref), row.name);
         if (name) nameOf.set(norm(name), row.name);
         report.accepted.push({ ref, is, name: row.name });
@@ -590,7 +604,7 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
     for (const item of Array.isArray(parsed?.knowledge) ? parsed.knowledge : []) {
         const who = cleanText(item?.who, 160);
         if (!who) continue;
-        const dossier = live.find(npc => npc.id === who || labelsOf(npc).some(label => norm(label) === norm(who)));
+        const dossier = resolveActor(live, who);
         const key = dossier ? dossier.id : `name:${norm(nameOf.get(norm(who)) || who)}`;
         const entries = readScanKnowledge({ knowledge: [item] });
         if (!entries.length) continue;
@@ -613,6 +627,27 @@ export function castDecisionsToScan(parsed, { transcript = '', npcs = [], canon 
 // Folds cast rows into the broad scanner's parsed result. A row for an NPC the scanner already
 // returned is merged into that row (the merge reads `present` per row, so a duplicate row would
 // undo the scanner's presence); other rows are appended. Edges are appended.
+export function canonIdentityConflict(a, b) {
+    const left = a?.canonRef, right = b?.canonRef;
+    if (!left?.world || !right?.world) return false;
+    if (left.world.startsWith('Saga:') && right.world.startsWith('Saga:')) {
+        return left.world.split('@')[0] !== right.world.split('@')[0];
+    }
+    return left.world === right.world && Number(left.uid) !== Number(right.uid);
+}
+
+export function distinctNamedPeople(a, b) {
+    if (canonIdentityConflict(a, b)) return true;
+    const left = norm(a?.name), right = norm(b?.name);
+    if (!left || !right || left === right) return false;
+    if (left.startsWith(`${right} `) || right.startsWith(`${left} `)) return false;
+    // Shared short aliases cannot merge two full names; explicit name reveals still can.
+    return /^[A-Z][\p{L}'’-]+\s+[A-Z][\p{L}'’-]+/u.test(a.name || '')
+        && /^[A-Z][\p{L}'’-]+\s+[A-Z][\p{L}'’-]+/u.test(b.name || '')
+        && !(a.aliases || []).some(label => norm(label) === right)
+        && !(b.aliases || []).some(label => norm(label) === left);
+}
+
 export function mergeCastIntoScan(parsed, cast) {
     const base = parsed && typeof parsed === 'object' ? parsed : {};
     const rows = (Array.isArray(base.npcs) ? base.npcs : []).map(row => ({ ...row }));
@@ -621,6 +656,7 @@ export function mergeCastIntoScan(parsed, cast) {
     const labelsOfItem = item => new Set([item.name, ...(item.aliases || []), ...(item.matchLabels || []),
         ...(item.roles || []).flatMap(role => [role.title, role.org ? `${role.title} of ${role.org}` : ''])].map(stripArticle).map(norm).filter(Boolean));
     const sameRow = (row, item) => {
+        if (distinctNamedPeople(row, item) || (row.id && item.id && row.id !== item.id)) return false;
         if (item.id && row.id === item.id) return true;
         const mine = labelsOfItem(item);
         return [row.name, ...(row.aliases || [])].map(stripArticle).map(norm).some(label => mine.has(label));
@@ -656,7 +692,7 @@ export function resolveKnowledgeKeys(knowledge, npcs) {
     for (const [key, entries] of knowledge || []) {
         if (!key.startsWith('name:')) { out.set(key, entries); continue; }
         const label = key.slice(5);
-        const npc = (npcs || []).find(item => item && labelsOf(item).some(name => norm(name) === label));
+        const npc = resolveActor(npcs, label);
         if (npc) out.set(npc.id, [...(out.get(npc.id) || []), ...entries]);
     }
     return out;

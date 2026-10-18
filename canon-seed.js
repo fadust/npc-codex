@@ -11,6 +11,7 @@
 
 import { CARD_CANON_WORLD } from './cast.js';
 import { groundedIn } from './sheet.js';
+import { isTerminalNpcDeath } from './terminal-lifecycle.js';
 
 export const CANON_SEED_FIELDS = Object.freeze(['species', 'gender', 'age', 'apparentAge', 'overallAppearance', 'personality', 'speech', 'background', 'likes', 'dislikes']);
 // Fields that stay canon-locked after seeding. Gender/age/species are identity anchors as well.
@@ -48,7 +49,7 @@ export function canonTextFor(canonRef, { entries = [], cardEntries = [] } = {}) 
     const byName = canonRef.name ? list.find(entry => entry?.world === canonRef.world && norm(entry?.comment) === norm(canonRef.name)) : null;
     // Prefer the uid, but only while it still names the same person (lorebooks get edited).
     const entry = exact && (!canonRef.name || norm(exact.comment) === norm(canonRef.name)) ? exact : (byName || exact);
-    return cleanText(entry?.content, CANON_TEXT_MAX);
+    return cleanText(entry?.content, canonRef.world.startsWith('Saga:') ? Infinity : CANON_TEXT_MAX);
 }
 
 // Rows from the cast pass that link a dossier (existing or new) to canon for the first time.
@@ -58,7 +59,7 @@ export function canonSeedTargets(castRows, npcs, limit = CANON_SEED_PER_SCAN) {
     for (const row of Array.isArray(castRows) ? castRows : []) {
         if (!row?.canonRef) continue;
         const existing = row.id ? live.find(npc => npc?.id === row.id) : live.find(npc => norm(npc?.name) === norm(row.name));
-        if (existing?.canonSeed) continue;
+        if (existing?.canonSeed && (!row.canonRef.world.startsWith('Saga:') || (existing.canonSeed.world === row.canonRef.world && existing.personality && existing.speech))) continue;
         if (out.some(item => norm(item.name) === norm(row.name))) continue;
         out.push({ id: existing?.id || row.id || '', name: row.name, canonRef: row.canonRef });
         if (out.length >= limit) break;
@@ -72,13 +73,16 @@ export function canonSeedTargets(castRows, npcs, limit = CANON_SEED_PER_SCAN) {
 // for a canon-resolved person in the same call; parseCanonSeed grounds it in the full canon text.
 
 // Keeps only fields grounded in the canon text. Returns { fields, rejected[] }.
-export function parseCanonSeed(parsed, canonText) {
+export function parseCanonSeed(parsed, canonText, { strict = false } = {}) {
     const fields = {};
     const rejected = [];
     const source = parsed && typeof parsed === 'object' ? parsed : {};
     for (const key of CANON_SEED_FIELDS) {
         const value = cleanText(source[key], LIMITS[key]);
         if (!value) continue;
+        if (strict && key !== 'gender' && !String(canonText).replace(/\s+/g, ' ').toLowerCase().includes(value.toLowerCase())) {
+            rejected.push(key); continue;
+        }
         if (key === 'gender') {
             const gender = value.toLowerCase();
             // Grounded only by gendered words in the canon text itself, and only when they agree.
@@ -120,7 +124,7 @@ function titleContradictsGender(text, gender) {
 // isNew: the dossier was created in this scan, so canon becomes its base outright. An older
 // dossier only has empty fields filled: its story history is never overwritten by a late link.
 export function applyCanonSeed(npc, fields, { canonRef = null, turn = null, isNew = false } = {}) {
-    if (!npc || !fields) return { npc, seeded: [], dropped: [] };
+    if (!npc || !fields || isTerminalNpcDeath(npc)) return { npc, seeded: [], dropped: [] };
     const manual = new Set(Array.isArray(npc.manualProfileFields) ? npc.manualProfileFields : []);
     const next = { ...npc };
     const seeded = [];

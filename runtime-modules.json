@@ -3,6 +3,9 @@
   "applicationVersion": "2.0.0",
   "entrypoint": "bootstrap.js",
   "modules": [
+    { "path": "actor-stack.js", "role": "actor-ownership", "required": true },
+    { "path": "actor-portrayal.js", "role": "actor-portrayal", "required": true },
+    { "path": "portrayal-references.js", "role": "portrayal-references", "required": true },
     { "path": "bootstrap.js", "role": "bootstrap", "required": true },
     { "path": "index.js", "role": "runtime-controller", "required": true },
     { "path": "destructive-settlement.js", "role": "destructive-host-settlement", "required": true },
@@ -25,6 +28,7 @@
     { "path": "cast.js", "role": "cast-resolution-roles-and-canon", "required": true },
     { "path": "sheet.js", "role": "stat-sheet-items-and-conditions", "required": true },
     { "path": "canon-seed.js", "role": "canon-field-seeding-and-locks", "required": true },
+    { "path": "saga-canon.js", "role": "read-only-saga-canon-consumer", "required": true },
     { "path": "diagnostics-core.js", "role": "bounded-operation-diagnostics", "required": true },
     { "path": "appearance.js", "role": "appearance-forms", "required": true },
     { "path": "terminal-lifecycle.js", "role": "terminal-lifecycle", "required": true },

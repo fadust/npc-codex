@@ -1,3 +1,5 @@
+import { ACTOR_OWNERS, resolveActor, actorProfiles, readStoryContinuity } from './actor-stack.js';
+import { PORTRAYAL_REFERENCES, acceptPortrayal, renderPortrayal } from './actor-portrayal.js';
 /* NPC State Delta - standalone SillyTavern extension */
 import { extension_settings, getContext } from '../../../extensions.js';
 import { extension_prompt_types, extension_prompt_roles, getRequestHeaders, saveSettings as saveHostSettings } from '../../../../script.js';
@@ -63,6 +65,8 @@ import {
     parseScanJson,
     npcMatchesLabel,
     normalizeName,
+    normalizeCustomFieldNames,
+    normalizeCustomFields,
     normalizeGender,
     normalizeNpcRecord,
     normalizeNpcCandidate,
@@ -102,8 +106,10 @@ import { parseFlorisReadout, applyFlorisReadout, stripFlorisLog } from './floris
 import { setBirthdayFallback } from './birthday.js';
 import { REFLECTION_SYSTEM_PROMPT, reflectionTarget, buildReflectionPrompt, applyReflection, beliefsToEditorText, beliefsFromEditorText, normalizePreferences } from './reflection.js';
 import { canonSeedTargets, canonTextFor, parseCanonSeed, applyCanonSeed } from './canon-seed.js';
+import { sagaCanonBridge, readSagaCanon, sagaCanonEntries, resolveSagaAdmissions, captureCanonRevision, canonRevisionCurrent } from './saga-canon.js';
 import {
     castSignals,
+    cardActorPolicy,
     buildCastShortlist,
     rankCanonEntries,
     cardCanonEntries,
@@ -502,6 +508,7 @@ const DEFAULTS = Object.freeze({
     injectDepth: 1,
     injectLimit: 3,
     injectBudgetTokens: 4000,
+    customFieldNames: [],
     branchRescan: true,
     midDeleteRewind: false,
     presentCastDisplay: 'full',
@@ -583,6 +590,7 @@ function getSettings() {
     assign('recallQdrantUrl', typeof settings.recallQdrantUrl === 'string' && settings.recallQdrantUrl.trim() ? settings.recallQdrantUrl.trim() : RECALL_DEFAULTS.qdrantUrl);
     assign('injectBudgetTokens', legacyDefaultBudget ? 4000 : Math.max(512, Math.min(6000, Math.round(Number(settings.injectBudgetTokens) || 4000))));
     assign('injectBudgetDefaultUpgraded', true);
+    assign('customFieldNames', normalizeCustomFieldNames(settings.customFieldNames), sameJson);
     assign('fullScanEveryTurn', settings.fullScanEveryTurn === true);
     assign('scannerConnectionProfile', typeof settings.scannerConnectionProfile === 'string' ? settings.scannerConnectionProfile.trim() : '');
     assign('portraitGenerationEnabled', settings.portraitGenerationEnabled !== false);
@@ -2267,7 +2275,7 @@ function flushCurrentChatOnPageHide() {
 function cleanMessage(message) {
     if (!message || message.is_system) return '';
     const speaker = message.name || (message.is_user ? getContext().name1 : getContext().name2) || '';
-    const body = stripUiNoise(message.mes || '');
+    const body = stripUiNoise(stripFlorisLog(message.mes || ''));
     return body ? `${speaker}: ${body}` : '';
 }
 
@@ -2365,8 +2373,13 @@ function storyDaysForTranscript(transcript) {
 }
 
 function currentExclusions() {
-    const ctx = getContext();
-    return [ctx.name1, ctx.name2].filter(Boolean);
+    const { userName, charName, excludeCardCharacter } = cardActorPolicy(getContext());
+    return [userName, ...(excludeCardCharacter ? [charName] : [])].filter(Boolean);
+}
+
+function eligibleActors(npcs) {
+    const excluded = new Set(currentExclusions().map(normalizeName));
+    return (npcs || []).filter(npc => !excluded.has(normalizeName(npc.name)));
 }
 
 // The text last handed to the host for roleplay generation, with the reason when it is empty, so
@@ -2443,6 +2456,7 @@ function recallSettingsChanged() {
 }
 
 function updateInjection() {
+    globalThis.dispatchEvent?.(new Event('npc-codex:ownership-changed'));
     const settings = getSettings();
     const ctx = getContext();
     const injectionKey = getChatKey();
@@ -2461,9 +2475,9 @@ function updateInjection() {
     const namedNpcIds = namedByPlayerNpcIds(state);
     const sceneText = recentTranscript(4);
     const recallScores = recallCache.chatKey === injectionKey ? recallCache.scores : null;
-    const prompt = buildInjection(state.npcs, sceneText, state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds, recallScores, storyDay: storyDayAt(latestMessageId(true)) });
+    const prompt = buildInjection(eligibleActors(state.npcs), sceneText, state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds, customFieldNames: settings.customFieldNames, recallScores, storyDay: storyDayAt(latestMessageId(true)) });
     scheduleRecallRefresh(state, sceneText, injectionKey);
-    const present = (state.npcs || []).filter(npc => npc?.present && !npc?.archived);
+    const present = eligibleActors(state.npcs).filter(npc => npc?.present && !npc?.archived);
     const depth = Math.max(0, Math.min(20, Number(settings.injectDepth) || 1));
     lastInjection = {
         text: prompt,
@@ -2487,7 +2501,9 @@ function injectionPreview() {
     const settings = getSettings();
     const state = getChatKey() === 'no-chat' ? { npcs: [] } : getChatState();
     const text = String(lastInjection.text || '');
-    const injectedNpcs = text.split('\n').filter(line => line.startsWith('- ')).map(line => line.slice(2).split(':')[0].replace(/ \(named by player\)$/, ''));
+    const lines = text.split('\n');
+    const injectedNpcs = lines.map(line => line.match(/^- (.+?)(?: \(named by player\))?: IDENTITY/)?.[1]).filter(Boolean);
+    const referencedNpcs = lines.map(line => line.match(/^- (.+?) \((?:mentioned, not present|deceased)/)?.[1]).filter(Boolean);
     return {
         sending: Boolean(text),
         reason: lastInjection.reason || '',
@@ -2496,6 +2512,7 @@ function injectionPreview() {
         presentNpcs: (state.npcs || []).filter(npc => npc?.present && !npc?.archived).map(npc => npc.name),
         namedByPlayer: (lastInjection.namedByPlayer || []).filter(name => injectedNpcs.includes(name)),
         injectedNpcs,
+        referencedNpcs,
         chars: text.length,
         estimatedTokens: Math.ceil(text.length / 4),
         budgetTokens: Number(settings.injectBudgetTokens) || 0,
@@ -2748,8 +2765,7 @@ async function scanNpcDossier(npcId) {
         dossierText: sourceText,
         targetName: existing.name,
         existingNpc: existing,
-        userName: ctx.name1 || 'User',
-        charName: ctx.name2 || 'Character',
+        ...cardActorPolicy(ctx),
     });
     const scanStateVersion = Number(stateVersions.get(chatKey) || 0);
     const operation = beginScanOperation(chatKey, `dossier import for ${existing.name}`, { npcId: id, indicator: 'dossier' });
@@ -2856,6 +2872,8 @@ function syncOpenNpcEditorFields(npc) {
     if (!npc || !editorIsMounted()) return;
     const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ''; };
     set('npc_state_delta_edit_name', npc.name || '');
+    set('npc_state_delta_edit_aliases', (npc.aliases || []).join('\n'));
+    set('npc_codex_custom_fields', JSON.stringify(npc.customFields || {}, null, 2));
     set('npc_state_delta_edit_role', npc.role || '');
     set('npc_state_delta_edit_species', npc.species || '');
     set('npc_state_delta_edit_gender', npc.gender || '');
@@ -2933,10 +2951,10 @@ async function refreshNpcFromChat(npcId) {
     const lineage = chatLineage(ctx.chat || []);
     const refreshStartedAt = performance.now?.() ?? Date.now();
     const prompt = buildProfileRefreshPrompt({
+        customFieldNames: settings.customFieldNames,
         transcript,
         targetNpc: existing,
-        userName: ctx.name1 || 'User',
-        charName: ctx.name2 || 'Character',
+        ...cardActorPolicy(ctx),
         memoryCriteria: settings.memoryCriteria,
         turn: Number.isInteger(state.turn) ? state.turn : null,
         storyDay: storyDayAt(latestMessageId(true)),
@@ -3024,6 +3042,8 @@ async function refreshNpcFromChat(npcId) {
         const targetMessageId = latestMessageId(true);
         const merged = mergeScanResult(latest, parsed, {
             maxNpcs: settings.maxNpcs,
+            customFieldNames: settings.customFieldNames,
+
             excludeNames: [...currentExclusions(), ...(latest.dismissed || [])],
             turn: latest.turn,
             sourceMessageId: targetMessageId,
@@ -3225,11 +3245,11 @@ async function backfillNpcFromHistory(request, messageId = null, { automatic = f
     }
     const scanLineage = chatLineage(ctx.chat || []);
     const prompt = buildBackfillPrompt({
+        customFieldNames: settings.customFieldNames,
         transcript,
         targetName: request.label,
         existingNpc: existing,
-        userName: ctx.name1 || 'User',
-        charName: ctx.name2 || 'Character',
+        ...cardActorPolicy(ctx),
         memoryCriteria: settings.memoryCriteria,
     });
 
@@ -3315,6 +3335,8 @@ async function backfillNpcFromHistory(request, messageId = null, { automatic = f
         const targetMessageId = Number.isInteger(messageId) ? messageId : latestMessageId(true);
         const merged = mergeScanResult(latestState, parsed, {
             maxNpcs: settings.maxNpcs,
+            customFieldNames: settings.customFieldNames,
+
             excludeNames: [...currentExclusions(), ...(latestState.dismissed || [])],
             turn: latestState.turn,
             sourceMessageId: targetMessageId,
@@ -3476,10 +3498,8 @@ async function readCanonEntries() {
 }
 
 async function readBaiBaiCast() {
-    try {
-        const snapshot = await globalThis.STBaiBaiBook?.getSnapshot?.();
-        return { location: String(snapshot?.state?.location || ''), npcs: Array.isArray(snapshot?.npcs) ? snapshot.npcs : [] };
-    } catch { return { location: '', npcs: [] }; }
+    const ctx = getContext();
+    return readStoryContinuity(globalThis.STBaiBaiBook, ctx.chat?.length || 0, ctx.getCurrentChatId?.(), ctx.groupId || null);
 }
 
 // Canon field seeding (S7.1): the first time a dossier is linked to a canon entry, its base fields
@@ -3611,38 +3631,43 @@ function canonSeedsFromCast(castPass, existingNpcs) {
         const row = rows.find(item => item.canonSeedRaw && (target.id ? item.id === target.id : item.name === target.name));
         const canonText = canonTextFor(target.canonRef, castPass.canonSources || {});
         if (!row || !canonText) continue;
-        const { fields, rejected } = parseCanonSeed(row.canonSeedRaw, canonText);
+        const { fields, rejected } = parseCanonSeed(row.canonSeedRaw, canonText, { strict: target.canonRef.world.startsWith('Saga:') });
         if (Object.keys(fields).length) seeds.push({ ...target, fields, rejected });
     }
     return seeds;
 }
 
 async function runCastPass(ctx, existingNpcs, transcript, options = {}) {
-    const empty = { cast: null, used: false, responseChars: 0, shortlist: 0, canon: 0 };
+    const saga = sagaCanonBridge();
+    const canonRevision = captureCanonRevision(saga);
+    const empty = { cast: null, canonRevision, used: false, responseChars: 0, shortlist: 0, canon: 0 };
     const npcs = Array.isArray(existingNpcs) ? existingNpcs : [];
     const knownLabels = npcs.flatMap(npc => [npc?.name, ...(npc?.aliases || [])]).filter(Boolean);
-    const signals = castSignals(transcript, { knownLabels, userName: ctx.name1 || '', charName: ctx.name2 || '' });
+    const signals = castSignals(transcript, { knownLabels, ...cardActorPolicy(ctx) });
     if (!signals.any) return empty;
-    const [baibai, entries] = await Promise.all([readBaiBaiCast(), readCanonEntries()]);
-    const shortlist = buildCastShortlist({ npcs, transcript, sceneLocation: baibai.location, baibaiNpcs: baibai.npcs });
+    const [baibai, source] = await Promise.all([readBaiBaiCast(), saga ? readSagaCanon(transcript, { bridge: saga }) : readCanonEntries()]);
+    const entries = saga ? sagaCanonEntries(source) : source;
+    const shortlist = buildCastShortlist({ npcs, transcript, sceneLocation: baibai.location, baibaiNpcs: baibai.npcs, canonEntries: entries });
     // Card canon (this story's own definitions, possibly an AU) ranks ahead of lorebook canon.
     const card = Number.isInteger(Number(ctx.characterId)) ? ctx.characters?.[ctx.characterId] : null;
     const cardText = [card?.description, card?.scenario].filter(Boolean).join('\n');
-    const cardEntries = cardCanonEntries(cardText);
-    const canon = rankCanonEntries([...cardEntries, ...entries], transcript, { npcs, exclude: [ctx.name1, ctx.name2] });
-    const schema = findWorldSchema({ cardText, entries });
+    const cardEntries = saga ? [] : cardCanonEntries(cardText);
+    const canon = saga ? entries.map(e => ({ id: `canon:${e.world}#${e.uid}`, world: e.world, uid: e.uid,
+        source: 'applicable Saga canon', name: e.comment, keys: e.key, snippet: e.content }))
+        : rankCanonEntries([...cardEntries, ...entries], transcript, { npcs, exclude: currentExclusions() });
+    const schema = findWorldSchema({ cardText: saga ? '' : cardText, entries });
     if (JSON.stringify(schema) !== JSON.stringify(lastWorldSchema)) { lastWorldSchema = schema; renderDossier(); }
     if (!shortlist.length && !canon.length && !signals.unknownNames.length && !signals.tiePhrases.length && !signals.titlePhrases.length) return empty;
     try {
         const { parsed, raw } = await generateParsedNpcJson(ctx, {
             systemPrompt: CAST_PASS_SYSTEM_PROMPT,
-            prompt: buildCastPassPrompt({ transcript, shortlist, canon, signals, userName: ctx.name1 || 'User', charName: ctx.name2 || 'Character', schema }),
+            prompt: buildCastPassPrompt({ transcript, shortlist, canon, signals, ...cardActorPolicy(ctx), schema }),
             responseLength: CAST_RESPONSE_LENGTH,
             label: 'cast pass',
             requestScope: options.requestScope,
         });
-        const cast = castDecisionsToScan(parsed, { transcript, npcs, canon, userName: ctx.name1 || '', charName: ctx.name2 || '', schema });
-        return { cast, used: true, responseChars: String(raw ?? '').length, shortlist: shortlist.length, canon: canon.length, canonSources: { entries, cardEntries } };
+        const cast = castDecisionsToScan(parsed, { transcript, npcs, canon, ...cardActorPolicy(ctx), schema });
+        return { cast, canonRevision, continuity: { status: baibai.status, revision: baibai.revision }, used: true, responseChars: String(raw ?? '').length, shortlist: shortlist.length, canon: canon.length, canonSources: { entries, cardEntries } };
     } catch (error) {
         if (isScannerRoutingError(error)) throw error;
         console.warn('[NPC State Delta] cast pass failed; the dossier scan continues without it.', error);
@@ -3898,6 +3923,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
     }
     const ctx = getContext();
     const scanChatKey = getChatKey();
+    const scanCanonRevision = captureCanonRevision();
     if (scanChatKey === 'no-chat') return false;
     const sourceFingerprint = Number.isInteger(messageId) ? fingerprintMessage(ctx.chat?.[messageId] || {}) : null;
     await ensureChatStateLoaded(scanChatKey);
@@ -3928,11 +3954,11 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
     const state = getChatState(scanChatKey);
     const scanStateVersion = Number(stateVersions.get(scanChatKey) || 0);
     const prompt = buildScannerPrompt({
+        customFieldNames: settings.customFieldNames,
         transcript,
         existingNpcs: state.npcs,
         candidates: state.candidates,
-        userName: ctx.name1 || 'User',
-        charName: ctx.name2 || 'Character',
+        ...cardActorPolicy(ctx),
         maxNpcs: settings.maxNpcs,
         relationshipBaseline: settings.relationshipBaseline,
         relationshipCaps: settings.relationshipCaps,
@@ -3956,6 +3982,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             label: manual ? 'manual dossier scan' : (fullWindowScan ? 'automatic full dossier scan' : 'automatic dossier scan'),
             requestScope: operation.requestScope,
         });
+        if (!canonRevisionCurrent(scanCanonRevision)) return false;
         let currentLineage = chatLineage(getContext().chat || []);
         if (!await scanCanonicalBaseCurrent(scanChatKey, operation, 'dossier scan')
             || !scanOperationCurrent(scanChatKey, operation) || getChatKey() !== scanChatKey
@@ -4009,7 +4036,10 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             { currentExchangeOnly: manual || fullWindowScan, requestScope: operation.requestScope },
         );
         const castPass = await runCastPass(ctx, state.npcs, currentTranscript || transcript, { requestScope: operation.requestScope });
+        if (!canonRevisionCurrent(scanCanonRevision) || !canonRevisionCurrent(castPass.canonRevision)) return false;
         const canonSeeds = canonSeedsFromCast(castPass, state.npcs);
+        const canonResolved = await resolveSagaAdmissions(castPass.cast ? mergeCastIntoScan(fullWindowRelationship.mergeSafe, castPass.cast) : fullWindowRelationship.mergeSafe, state.npcs);
+        if (!canonRevisionCurrent(scanCanonRevision) || !canonRevisionCurrent(castPass.canonRevision)) return false;
         const scanFinishedAt = performance.now?.() ?? Date.now();
         lastScanMetrics = {
             label: manual ? 'manual' : (fullWindowScan ? 'automatic-full' : 'automatic'),
@@ -4046,7 +4076,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
         }
         const targetMessageId = Number.isInteger(messageId) ? messageId : latestMessageId(true);
         const compactWorldStateTurn = hasCompactMeguminWorldState(ctx.chat?.[targetMessageId]?.mes || '');
-        const parsedForMerge = suppressPrimaryRelationshipForFocusedDecisions(fullWindowRelationship.mergeSafe, relationshipPass.decisions);
+        const parsedForMerge = suppressPrimaryRelationshipForFocusedDecisions(canonResolved, relationshipPass.decisions);
         // If the registry is already full, free truly stale slots before admission so a new
         // current NPC is not rejected just because a long-gone dossier still occupies the cap.
         const preCleanup = applyStaleLifecycleAfterScan(state, parsedForMerge, currentTranscript || transcript, settings, { onlyWhenAtCap: true });
@@ -4055,8 +4085,11 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             npc.present = false;
             if (!compactWorldStateTurn) npc.worldActive = false;
         }
-        const merged = mergeScanResult(mergeBaseState, castPass.cast ? mergeCastIntoScan(parsedForMerge, castPass.cast) : parsedForMerge, {
+        const merged = mergeScanResult(mergeBaseState, parsedForMerge, {
+            priorPresentIds: (state.npcs || []).filter(n => n.present).map(n => n.id),
             maxNpcs: settings.maxNpcs,
+            customFieldNames: settings.customFieldNames,
+
             excludeNames: [...currentExclusions(), ...(state.dismissed || [])],
             turn: state.turn,
             sourceMessageId: targetMessageId,
@@ -4126,13 +4159,14 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             console.info('[NPC State Delta] dossier scan metrics', lastScanMetrics);
         }
         applyFocusedRelationshipDecisions(merged.state, relationshipPass.decisions, settings.relationshipCaps, targetMessageId, merged.report);
+        if (!canonRevisionCurrent(scanCanonRevision) || !canonRevisionCurrent(castPass.canonRevision)) return false;
         if (canonSeeds.length) {
             const priorIds = new Set((state.npcs || []).map(npc => npc?.id));
             const seededReport = [];
             merged.state.npcs = merged.state.npcs.map(npc => {
                 const seed = canonSeeds.find(item => (item.id && item.id === npc?.id) || (!item.id && String(npc?.name || '').toLowerCase() === String(item.name || '').toLowerCase()));
-                if (!npc || !seed || npc.canonSeed) return npc;
-                const applied = applyCanonSeed(npc, seed.fields, { canonRef: npc.canonRef || seed.canonRef, turn: state.turn, isNew: !priorIds.has(npc.id) });
+                if (!npc || !seed || (npc.canonSeed && !seed.canonRef?.world?.startsWith('Saga:'))) return npc;
+                const applied = applyCanonSeed(npc, seed.fields, { canonRef: seed.canonRef, turn: state.turn, isNew: !priorIds.has(npc.id) });
                 if (applied.seeded.length || applied.dropped.length) seededReport.push({ npcId: npc.id, fields: applied.seeded, ...(applied.dropped.length ? { dropped: applied.dropped } : {}) });
                 return applied.npc;
             });
@@ -4287,6 +4321,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             if (manual) globalThis.toastr?.info?.('NPC State Delta: another session updated this chat during the scan; the stale result was discarded.');
             return false;
         }
+        if (!canonRevisionCurrent(scanCanonRevision) || !canonRevisionCurrent(castPass.canonRevision)) return false;
         if (targetMessageId >= 0) commitBranchCheckpoint(nextState, targetMessageId, 'scan');
         setChatState(chatKey, nextState);
         persist();
@@ -4356,6 +4391,7 @@ function buildSettingsHtml() {
     const roster = `
         <h4 class="delta-settings-subhead">In-chat display</h4>
         ${settingRow('npc_state_delta_present_cast_display', 'Present NPCs in chat', '<select id="npc_state_delta_present_cast_display" class="text_pole"><option value="full">Full cards</option><option value="compact">Compact strip</option><option value="off">Off</option></select>', 'Shown under the latest reply (or as a Megumin tab). Tapping an NPC opens its dossier. Off adds nothing to the chat; presence tracking and injection are unaffected.')}
+        <label>Custom field names (up to six)<input id="npc_codex_custom_field_names" class="text_pole" value="${escapeHtml(getSettings().customFieldNames.join(', '))}" placeholder="Level, Class"></label>
         <h4 class="delta-settings-subhead">Generation injection</h4>
         ${settingRow('npc_state_delta_inject', 'Inject present NPC state', '<input id="npc_state_delta_inject" type="checkbox">', 'Only active NPCs present in the latest scanned scene are injected into generation.')}
         ${settingRow('npc_state_delta_inject_budget', 'Injection budget', numberControl('npc_state_delta_inject_budget', 512, 6000, 'tokens', { step: 100, prefix: '<small>~</small>' }), 'Upper limit; only what the present NPCs need is used. The default 4000 lets detailed dossiers reach the roleplay model in full. When it runs short, lower-priority fields, then lower-ranked NPCs, are trimmed first.')}
@@ -5363,6 +5399,8 @@ function openNpcEditor(npcId) {
         <label>Name<input id="npc_state_delta_edit_name" class="text_pole" value="${editorValue(npc.name)}"></label>
         <label>Species / Race<input id="npc_state_delta_edit_species" class="text_pole" maxlength="160" placeholder="Half-elf, dwarf, dwelf, human, custom species..." value="${editorValue(npc.species)}"></label>
         <label>Gender<select id="npc_state_delta_edit_gender" class="text_pole"><option value="" ${!npc.gender ? 'selected' : ''}>Unknown / not established</option><option value="male" ${npc.gender === 'male' ? 'selected' : ''}>Male</option><option value="female" ${npc.gender === 'female' ? 'selected' : ''}>Female</option></select></label>
+        <label>Aliases<textarea id="npc_state_delta_edit_aliases" class="text_pole" rows="3">${editorValue((npc.aliases || []).join("\n"))}</textarea></label>
+        <label>Custom fields (JSON)<textarea id="npc_codex_custom_fields" class="text_pole" rows="3">${editorValue(JSON.stringify(npc.customFields || {}))}</textarea></label>
         <label>Role<input id="npc_state_delta_edit_role" class="text_pole" value="${editorValue(npc.role)}"></label>
         <label>Home Base / Usual Location<input id="npc_state_delta_edit_home_base" class="text_pole" maxlength="300" placeholder="Home, workplace, headquarters, or regular haunt" value="${editorValue(npc.homeBase)}"></label>
         <label>Chronological age<input id="npc_state_delta_edit_age" class="text_pole" maxlength="80" placeholder="Actual stated age; leave blank if unknown" value="${editorValue(npc.age)}"></label>
@@ -5381,9 +5419,15 @@ function openNpcEditor(npcId) {
           <p class="npc-state-delta-muted">These are appended only when building image prompts. They are never injected into roleplay generation and never rewritten by the NPC scanner.</p>
           <label>Additional positive prompt<textarea id="npc_state_delta_edit_portrait_positive" class="text_pole" rows="4" maxlength="${PORTRAIT_NPC_PROMPT_LIMIT}" placeholder="black ceremonial ribbon, winter uniform, gold ear cuff...">${editorValue(npc.portraitPromptPositive)}</textarea></label>
           <label>Additional negative prompt<textarea id="npc_state_delta_edit_portrait_negative" class="text_pole" rows="4" maxlength="${PORTRAIT_NPC_PROMPT_LIMIT}" placeholder="helmet, hood, short hair...">${editorValue(npc.portraitPromptNegative)}</textarea></label>
-          <label class="npc-state-delta-editor-lock"><input id="npc_state_delta_edit_portrait_replace" type="checkbox" ${npc.portraitPromptReplace ? 'checked' : ''}> Replace the automatic positive prompt entirely <small>Use only when this NPC needs a hand-authored model-specific prompt. The global negative prompt still applies.</small></label>
+      <label class="npc-state-delta-editor-lock"><input id="npc_state_delta_edit_portrait_replace" type="checkbox" ${npc.portraitPromptReplace ? 'checked' : ''}> Replace the automatic positive prompt entirely <small>Use only when this NPC needs a hand-authored model-specific prompt. The global negative prompt still applies.</small></label>
         </div>
       </details>
+          <details><summary>BunnyMo portrayal (reference only)</summary>
+      <p>Approve expression of accepted traits only. Facts, knowledge, locks and current scene take precedence. Changing the actor invalidates the guide.</p>
+      <label>Reference<select id="npc_codex_portrayal_reference"><option value="">No guide</option>${PORTRAYAL_REFERENCES.entries.map(e => `<option value="${e.uid}" ${npc.portrayal?.reference === e.uid ? 'selected' : ''}>${editorValue(e.title)}</option>`).join('')}</select></label>
+      <details><summary>Preview references and provenance</summary>${PORTRAYAL_REFERENCES.entries.map(e => `<details><summary>${editorValue(e.title)}</summary><pre>${editorValue(e.text)}</pre></details>`).join('')}<p>${editorValue(PORTRAYAL_REFERENCES.source)} · ${editorValue(PORTRAYAL_REFERENCES.revision)}</p></details>
+      <label>Explicitly approved portrayal guide (600 characters)<textarea id="npc_codex_portrayal_text" class="text_pole" maxlength="600">${editorValue(npc.portrayal?.text || '')}</textarea></label>
+      <p>${npc.portrayal && !renderPortrayal(npc) ? 'Guide is stale or already expressed by accepted Speech/Mannerisms; only valid, additional guidance is injected.' : 'Saving approves this guidance. Leave empty to disable.'}</p></details>
       <label class="npc-state-delta-editor-lock"><input id="npc_state_delta_edit_lock_profile" type="checkbox" ${locked.length ? 'checked' : ''}> Protect edited stable profile fields from future scanner rewrites <small>Leave off to use manual edits as an organic baseline. Existing locks stay protected until you uncheck and save.</small></label>
       ${locked.length ? `<p class="npc-state-delta-muted">Currently protected: ${editorValue([...locked].join(', '))}</p>` : ''}
       <label class="npc-state-delta-editor-lock"><input id="npc_state_delta_edit_retention_protected" type="checkbox" ${npc.retentionProtected ? 'checked' : ''}> Keep this NPC from automatic stale cleanup <small>Use for recurring or major NPCs who may disappear for long arcs. This does not lock their profile fields.</small></label>
@@ -5744,6 +5788,7 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     const next = structuredClone(current);
     const oldRelationship = { ...(current.relationship || DEFAULT_RELATIONSHIP) };
     const stableInputs = {
+        aliases: cleanEditorList(editorField('npc_state_delta_edit_aliases'), 8),
         name: String(editorField('npc_state_delta_edit_name')).trim().slice(0, 120) || current.name,
         role: String(editorField('npc_state_delta_edit_role')).trim().slice(0, 240),
         species: String(editorField('npc_state_delta_edit_species')).trim().slice(0, 160),
@@ -5764,8 +5809,10 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
         return false;
     }
     if (stableInputs.name !== current.name && current.name) {
-        next.aliases = [...new Set([...(current.aliases || []), current.name])].slice(0, 8);
+        stableInputs.aliases = [...new Set([current.name, ...stableInputs.aliases])].slice(0, 8);
     }
+    try { next.customFields = normalizeCustomFields(JSON.parse(String(editorField('npc_codex_custom_fields') || '{}'))); }
+    catch { globalThis.toastr?.warning?.('Custom fields must be a JSON object.'); return false; }
     Object.assign(next, stableInputs);
     const birthdayInput = String(editorField('npc_state_delta_edit_birthday')).trim().slice(0, 180);
     const currentBirthdayDisplay = String(current.birthDateDisplay || '').trim();
@@ -5837,11 +5884,11 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
             turn: Number.isFinite(Number(state.turn)) ? Number(state.turn) : null,
         };
     }
-    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge', 'sheet', 'episodes', 'intentions', 'beliefs', 'likes', 'dislikes'];
+    const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge', 'sheet', 'episodes', 'intentions', 'beliefs', 'likes', 'dislikes', 'aliases', 'customFields'];
     if (document.getElementById('npc_state_delta_edit_lock_profile')?.checked) {
         const locks = new Set(current.manualProfileFields || []);
         for (const key of stableKeys) {
-            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge' || key === 'sheet' || key === 'episodes' || key === 'intentions' || key === 'beliefs' || key === 'likes' || key === 'dislikes';
+            const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge' || key === 'sheet' || key === 'episodes' || key === 'intentions' || key === 'beliefs' || key === 'likes' || key === 'dislikes' || key === 'aliases' || key === 'customFields';
             const before = listField ? JSON.stringify(current[key] || []) : String(current[key] || '');
             const after = listField ? JSON.stringify(next[key] || []) : String(next[key] || '');
             if (before !== after) locks.add(key);
@@ -5853,6 +5900,11 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     next.retentionProtected = Boolean(document.getElementById('npc_state_delta_edit_retention_protected')?.checked);
     next.minor = Boolean(document.getElementById('npc_state_delta_edit_minor')?.checked);
     next.updatedAt = Date.now();
+    try {
+        const text = String(editorField('npc_codex_portrayal_text') || '').trim();
+        if (text) next.portrayal = acceptPortrayal(normalizeNpcRecord(next), { reference: editorField('npc_codex_portrayal_reference'), text });
+        else delete next.portrayal;
+    } catch (error) { globalThis.toastr?.warning?.(error.message); return false; }
     state.npcs[index] = normalizeNpcRecord(next);
     if (next.lastRelationshipChange?.impact === 'manual') state.npcs[index].lastRelationshipChange = structuredClone(next.lastRelationshipChange);
     const targetMessageId = latestMessageId(false);
@@ -6542,6 +6594,9 @@ function bindUi() {
         persistSettings();
     });
     bindSettingsCheckbox('#npc_state_delta_full_scan_every_turn', 'fullScanEveryTurn');
+    $(document).on('change.npcStateDelta', '#npc_codex_custom_field_names', function () {
+        getSettings().customFieldNames = normalizeCustomFieldNames(this.value); persistSettings(); updateInjection();
+    });
     bindSettingsCheckbox('#npc_state_delta_inject', 'inject', updateInjection);
     bindSettingsCheckbox('#npc_state_delta_recall_enabled', 'recallEnabled', updateInjection);
     bindSettingsCheckbox('#npc_state_delta_derive_stats', 'deriveStats');
@@ -6801,7 +6856,7 @@ function bindUi() {
             turn: state.turn,
             relationshipBaseline: settings.relationshipBaseline,
         });
-        if (result.report.status === 'excluded') return globalThis.toastr?.warning?.('NPC State Delta: player/main character cannot be added as an NPC.');
+        if (result.report.status === 'excluded') return globalThis.toastr?.warning?.('NPC State Delta: player or explicitly designated narrator cannot be added as an NPC.');
         if (result.report.status === 'full') return globalThis.toastr?.warning?.(`NPC State Delta: active roster cap is ${settings.maxNpcs}. Archived dossiers do not count.`);
         if (['added', 'exists', 'restored'].includes(result.report.status)) clearUserDismissedSuppression(result.state, name);
         const targetMessageId = latestMessageId(false);
@@ -6891,14 +6946,24 @@ async function handleAssistantMessageReceived(messageId, { bypassSwipeGuard = fa
     if (eventChatKey === 'no-chat' || !Number.isInteger(messageId) || messageId < 0) return;
     const eventMessage = getContext().chat?.[messageId];
     if (!eventMessage || eventMessage.is_user || eventMessage.is_system || !String(eventMessage.mes || '').trim()) return;
-    const eventSourceKey = lineageCheckpointKey(chatLineage(getContext().chat || []), messageId);
+    let eventSourceKey = lineageCheckpointKey(chatLineage(getContext().chat || []), messageId);
+    const eventParentKey = lineageCheckpointKey(chatLineage(getContext().chat || []), messageId - 1);
     try { await ensureChatStateLoaded(eventChatKey); }
     catch (error) {
         console.error('[NPC State Delta] assistant event deferred because chat hydration failed.', error);
         globalThis.toastr?.error?.('NPC State Delta could not load this chat dossier. Existing sidecar data was preserved; retry after the server is available.');
         return;
     }
-    if (getChatKey() !== eventChatKey || eventSourceKey !== lineageCheckpointKey(chatLineage(getContext().chat || []), messageId)) return;
+    if (getChatKey() !== eventChatKey) return;
+    const settledChat = getContext().chat || [];
+    const settledSourceKey = lineageCheckpointKey(chatLineage(settledChat), messageId);
+    if (eventSourceKey !== settledSourceKey) {
+        // Host formatters can finish the same new message during hydration; never adopt a replaced branch.
+        if (settledChat[messageId] !== eventMessage || latestMessageId(true) !== messageId
+            || eventParentKey !== lineageCheckpointKey(chatLineage(settledChat), messageId - 1)
+            || isHostSwipeActive()) return;
+        eventSourceKey = settledSourceKey;
+    }
 
     // SillyTavern 1.18 emits MESSAGE_SWIPED before starting Generate('swipe'). Some
     // backends then emit MESSAGE_RECEIVED while swipeState is still SWIPING. Never run
@@ -7318,7 +7383,7 @@ window.NPCStateDelta = Object.freeze({
     openEditor: value => { const npc = findNpcByIdOrName(value); return npc ? openNpcEditorSafely(npc.id) : false; },
     updateSheet: (npcId, sheet) => updateNpcSheet(npcId, sheet, { chatKey: getChatKey() }),
     updateDecor: (npcId, patch) => updateNpcDecor(npcId, patch, { chatKey: getChatKey() }),
-    openDossier: value => { const npc = findNpcByIdOrName(value); return npc ? openLauncherDossier(npc.id) : false; },
+    openDossier: value => { const npc = resolveActor(getChatState().npcs, value); return npc ? openLauncherDossier(npc.id) : false; },
     injectionPreview: () => structuredClone(injectionPreview()),
     uiStatus: () => ({
         version: NPC_STATE_VERSION,
@@ -7404,6 +7469,9 @@ window.NPCStateDelta = Object.freeze({
     },
     clearDiagnostics: () => diagnosticStore.clear(getChatKey()),
     getState: () => structuredClone(getChatState()),
+    actorOwnership: () => ({ ...ACTOR_OWNERS, enabled: getSettings().enabled && getSettings().inject, revision: Number(stateVersions.get(getChatKey()) || 0) }),
+    ownsActor: name => getSettings().enabled && getSettings().inject && chatHydrationStatus(getChatKey()) === 'ready' && !!resolveActor(eligibleActors(getChatState().npcs), name),
+    actorProfiles: () => chatHydrationStatus(getChatKey()) === 'ready' ? actorProfiles(eligibleActors(getChatState().npcs), Number(stateVersions.get(getChatKey()) || 0)) : [],
     getNpc: npcId => {
         const npc = getChatState().npcs.find(item => item.id === String(npcId || ''));
         return npc ? structuredClone(npc) : null;

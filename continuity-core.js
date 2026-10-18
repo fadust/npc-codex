@@ -1,3 +1,4 @@
+import { distinctNamedPeople } from './cast.js';
 /* NPC State Delta Stage 4 continuity facade. */
 import * as mechanics from './core-mechanics.js';
 import {
@@ -19,12 +20,13 @@ function lockedAppearance(npc = {}) {
     return Array.isArray(npc.manualProfileFields) && npc.manualProfileFields.includes('appearance');
 }
 function sameNpc(raw = {}, npc = {}) {
+    if (distinctNamedPeople(raw, npc)) return false;
     if (raw?.id && String(raw.id) === String(npc.id)) return true;
     if (raw?.name && mechanics.npcMatchesLabel(npc, raw.name)) return true;
     return Array.isArray(raw?.aliases) && raw.aliases.some(alias => mechanics.npcMatchesLabel(npc, alias));
 }
 function matchingPrevious(npc, source = []) {
-    return (Array.isArray(source) ? source : []).filter(item => item && (
+    return (Array.isArray(source) ? source : []).filter(item => item && !distinctNamedPeople(item, npc) && (
         String(item.id || '') === String(npc?.id || '')
         || (npc?.name && mechanics.npcMatchesLabel(item, npc.name))
         || (item?.name && mechanics.npcMatchesLabel(npc, item.name))
@@ -229,12 +231,12 @@ export function buildNpcPortraitPrompts(rawNpc = {}, options = {}) {
     }, options);
 }
 
-export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria = mechanics.DEFAULT_BEHAVIOR_CRITERIA, budgetTokens = mechanics.DEFAULT_INJECTION_BUDGET_TOKENS, socialGraph = null, { namedNpcIds = [] } = {}) {
+export function buildInjection(npcs, text, turn = 0, limit = 3, behaviorCriteria = mechanics.DEFAULT_BEHAVIOR_CRITERIA, budgetTokens = mechanics.DEFAULT_INJECTION_BUDGET_TOKENS, socialGraph = null, { namedNpcIds = [], customFieldNames = [] } = {}) {
     const resolved = (Array.isArray(npcs) ? npcs : []).map(npc => ({
         ...normalizeTerminalNpc(npc),
         appearance: resolveNpcAppearance(npc),
     }));
-    return mechanics.buildInjection(resolved, text, turn, limit, behaviorCriteria, budgetTokens, socialGraph, { includeAppearance: true, namedNpcIds });
+    return mechanics.buildInjection(resolved, text, turn, limit, behaviorCriteria, budgetTokens, socialGraph, { includeAppearance: true, namedNpcIds, customFieldNames });
 }
 
 const COMPACT_STAGE4_RULE = `\nS4: forms/current; confirmed death terminal.`;
