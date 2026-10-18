@@ -1,5 +1,9 @@
-// Hiding a message (memory extensions set is_system) is not a narrative change; the role here must
-// match branch lineage identity, which ignores the flag.
+export function stripBaiBaiImageTags(text) {
+    // BaiBai inserts each complete illustration block after a line, including its own leading EOL.
+    return String(text ?? '').replace(/(?:\r?\n[\t ]*)?<bbi_image\b[^>]*>(?:(?!<\/?bbi_image\b)[\s\S])*<\/bbi_image>/gi, '');
+}
+
+// Hiding a message is not a narrative change; match branch lineage's flag-independent role.
 function normalizedRole(message = {}) {
     return message?.is_user ? 'user' : 'assistant';
 }
@@ -16,7 +20,7 @@ function fnv1a(value) {
 
 export function narrativeMessageFingerprint(message = {}) {
     const role = normalizedRole(message);
-    return `${role}:${fnv1a(`${role}\u001f${String(message?.mes ?? '')}`)}`;
+    return `${role}:${fnv1a(`${role}\u001f${stripBaiBaiImageTags(message?.mes)}`)}`;
 }
 
 export function narrativeLineage(chat = []) {

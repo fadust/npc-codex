@@ -15,6 +15,14 @@ Version bumped on 18 October 2026 to package the integration and fixes below. 2.
 
 ## Our changes
 
+### Unreleased — BaiBai Image edit isolation
+
+- Complete `bbi_image` illustration blocks no longer change NPC story fingerprints or enter scanner evidence. Tag insertion/replacement/removal therefore does not require another NPC scan or invalidate an in-flight result; edits to surrounding prose still use normal reconciliation and rescan safeguards.
+- Old image-bearing history keys are remapped only when their exact raw-message fingerprints match. Unproven historical differences remain subject to existing recovery checks.
+- Deterministic tests cover Ari image edits during/after scanning, real prose edits, LF/CRLF, malformed blocks, and proven-key migration. All 1,146 tests, runtime smoke, compatibility, validation and packaging passed. No model settings, scoring rules or persisted format versions changed.
+- Browser verification on 18 October 2026 after backup and deployment: an actual BaiBai Image prompt edit produced zero NPC requests and kept revision 20; a subsequent prose edit completed one automatic scan in 22.601 seconds (three successful provider requests, no retry/failure) and saved revision 22. The updated bridge location and relaxed posture appeared in the actor prompt; established personality and private knowledge were preserved.
+- Live limits: this was one paired synthetic Ari check. Earlier fear cues still influenced the model's mood interpretation. A harmless five-second unchanged-lineage warning remains for image-only edits; it does not dispatch a scan. The diagnostics NPC-count label also incorrectly displays zero despite listing both actors in its prompt.
+
 ### 2.0.2 — 18 October 2026
 
 - Adopt unique nickname recall with shared-alias, role-label and overlapping-name guards. Keep custom-field fact validation canonical-name-only. Recall does not admit actors, change presence or override death. Only upstream adoption item 1 is enabled; items 2–4 remain deferred.

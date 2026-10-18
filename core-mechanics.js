@@ -1,4 +1,5 @@
 import { renderPortrayal } from './actor-portrayal.js';
+import { stripBaiBaiImageTags } from './destructive-settlement-core.js';
 import { isTerminalNpcDeath } from './terminal-lifecycle.js';
 import {
     readScanKnowledge,
@@ -1243,7 +1244,7 @@ export function hasCompactMeguminWorldState(text) {
 }
 
 export function stripUiNoise(text) {
-    let source = String(text ?? '')
+    let source = stripBaiBaiImageTags(text)
         .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
         .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ');
 

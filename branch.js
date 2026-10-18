@@ -1,4 +1,5 @@
 import * as branchCore from './branch-core.js';
+import { stripBaiBaiImageTags } from './destructive-settlement-core.js';
 import { isTerminalNpcDeath, normalizeName, normalizeNpcRecord } from './core.js';
 import { parseQualifiedChatKey } from './identity.js';
 import { prunePortraitAssetsInPlace } from './storage.js';
@@ -56,7 +57,7 @@ export function fingerprintMessage(message = {}) {
     // summarised messages) does not change what was said, and a lineage that followed the flag
     // invalidated every later checkpoint key whenever a message was hidden or unhidden. The flag is
     // therefore fixed in the hash, which keeps the value earlier versions stored for ordinary messages.
-    return messageFingerprint(message, false);
+    return messageFingerprint({ ...message, mes: stripBaiBaiImageTags(message.mes) }, false);
 }
 
 // The value earlier versions stored for a message whose system flag was set (hidden or system).
@@ -90,10 +91,8 @@ export function remapLineageKeys(state, fromLineage, toLineage) {
     return state;
 }
 
-// State saved while a message was hidden (or that is system) recorded that message under the old,
-// flag-sensitive hash. When the stored lineage differs from the chat only in such messages, adopt
-// the flag-independent hash and rewrite the stored keys once; real content differences are left for
-// ordinary reconciliation.
+// Upgrade only hashes proven against the exact live raw text (old hidden-message or image-tag
+// hashes). Unproven content differences remain subject to ordinary reconciliation.
 export function migrateLegacyLineage(state, chat) {
     const previous = Array.isArray(state?.lineage) ? state.lineage : [];
     const messages = Array.isArray(chat) ? chat : [];
@@ -103,7 +102,7 @@ export function migrateLegacyLineage(state, chat) {
     const limit = Math.min(previous.length, messages.length);
     for (let i = 0; i < limit; i += 1) {
         if (previous[i] === fingerprintMessage(messages[i])) continue;
-        if (previous[i] === legacySystemFingerprint(messages[i])) {
+        if (previous[i] === legacySystemFingerprint(messages[i]) || previous[i] === messageFingerprint(messages[i], false)) {
             rebased[i] = fingerprintMessage(messages[i]);
             changed = true;
         }
