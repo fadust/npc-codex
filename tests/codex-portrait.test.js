@@ -63,7 +63,23 @@ test('independent images survive native backup, body-only storage and form selec
 
 test('appearance categories retain supplied details without inventing missing traits', () => {
     const parts = appearanceDetailSections('Face: blue eyes; Body: athletic; Proportions: long legs; Outfit: brown coat; silver aura');
-    assert.deepEqual(parts, { Face: ['blue eyes'], Body: ['athletic'], Proportions: ['long legs'], Outfit: ['brown coat'], 'Other details': ['silver aura'] });
+    assert.deepEqual(Object.fromEntries(Object.entries(parts).filter(([, values]) => values.length)), { Face: ['blue eyes'], Body: ['athletic'], Proportions: ['long legs'], Outfit: ['brown coat'], 'Other details': ['silver aura'] });
     assert.deepEqual(appearanceDetailSections('dark hair, blue eyes, brown coat').Proportions, []);
-    assert.deepEqual(appearanceDetailSections('dark hair, blue eyes, brown coat').Face, ['dark hair', 'blue eyes']);
+    assert.deepEqual(appearanceDetailSections('dark hair, blue eyes, brown coat').Face, ['blue eyes']);
+});
+
+test('appearance shows accepted identity, visual age and distinct hair/skin/accessory details', () => {
+    const p = appearanceDetailSections('long black hair; tan skin; trimmed beard; silver earrings; blue eyes', { gender: 'male', species: 'Human', age: '80', apparentAge: '25' });
+    assert.deepEqual(p.Gender, ['male']);
+    assert.deepEqual(p['Age bracket'], ['Young adult (apparent age 25)']);
+    assert.deepEqual(p['Skin color'], ['tan skin']);
+    assert.deepEqual(p.Hairstyle, ['long black hair']);
+    assert.deepEqual(p['Hair color'], ['long black hair']);
+    assert.deepEqual(p['Facial hair'], ['trimmed beard']);
+    assert.deepEqual(p.Accessories, ['silver earrings']);
+    assert.deepEqual(appearanceDetailSections('', { species: 'Elf', age: '300' })['Age bracket'], ['Age: 300 — bracket unspecified']);
+    for (const [age, label] of [[8, 'Kid'], [16, 'Teen'], [20, 'Young adult'], [35, 'Adult'], [55, 'Middle-aged'], [70, 'Old'], [85, 'Very old']]) {
+        assert.equal(appearanceDetailSections('', { species: 'Human', age })['Age bracket'][0], `${label} (age ${age})`);
+    }
+    assert.deepEqual(appearanceDetailSections('').Gender, []);
 });

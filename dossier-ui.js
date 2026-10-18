@@ -347,19 +347,41 @@ function birthdayCard(npc) {
 }
 
 // Presentation-only grouping: retain every supplied clause; never infer missing anatomy.
-export function appearanceDetailSections(text = '') {
-    const groups = { Face: [], Body: [], Proportions: [], Outfit: [], 'Other details': [] };
+export function appearanceDetailSections(text = '', npc = {}) {
+    const groups = { Gender: [], 'Age bracket': [], 'Skin color': [], Face: [], 'Facial hair': [], Hairstyle: [], 'Hair color': [], Accessories: [], Body: [], Proportions: [], Outfit: [], 'Other details': [] };
+    const labels = Object.fromEntries(Object.keys(groups).map(key => [key.toLowerCase(), key]));
+    labels.proportion = 'Proportions';
     for (const raw of String(text).split(/;|\n|,(?!\d)/).map(value => value.trim()).filter(Boolean)) {
-        const labeled = raw.match(/^(face|body|proportions?|outfit)\s*:\s*(.+)$/i);
-        const label = labeled?.[1].toLowerCase();
-        const value = labeled ? labeled[2] : raw;
-        const key = label ? ({ face: 'Face', body: 'Body', proportion: 'Proportions', proportions: 'Proportions', outfit: 'Outfit' })[label]
-            : /\b(wear\w*|outfit|cloth\w*|coat|dress|shirt|boots?|cloak|armou?r|uniform|trousers|pants|skirt|robe|jewel\w*|gloves?|belt|hat)\b/i.test(value) ? 'Outfit'
+        const labeled = raw.match(/^([a-z ]+)\s*:\s*(.+)$/i);
+        const explicit = labels[labeled?.[1].trim().toLowerCase()];
+        if (explicit) { groups[explicit].push(labeled[2]); continue; }
+        const value = raw;
+        const key = /\b(beard|moustache|mustache|stubble|goatee|sideburns|clean[- ]shaven|facial hair)\b/i.test(value) ? 'Facial hair'
+            : /\b(earrings?|piercings?|necklace|pendant|glasses|spectacles|bracelet|rings?|hairpin|hair clip|accessor\w*|jewel\w*)\b/i.test(value) ? 'Accessories'
+            : /\b(complexion|skin (?:color|colour|tone)|(?:pale|fair|tan|tanned|olive|brown|black|dark|light|white|blue|green|red|golden) skin)\b/i.test(value) ? 'Skin color'
+            : /\b(wear\w*|outfit|cloth\w*|coat|dress|shirt|boots?|cloak|armou?r|uniform|trousers|pants|skirt|robe|gloves?|belt|hat)\b/i.test(value) ? 'Outfit'
             : /\b(proportions?|height|tall|short stature|long[- ]legged|broad shoulders|narrow waist|[\d.]+\s*(?:cm|metres?|meters?|feet|ft))\b/i.test(value) ? 'Proportions'
-            : /\b(face|facial|eyes?|hair|brows?|eyebrows?|nose|lips?|jaw\w*|cheeks?|chin|beard|moustache|freckles)\b/i.test(value) ? 'Face'
+            : /\b(hair|bald|braids?|ponytail|buzz cut|bob cut)\b/i.test(value) ? 'Hairstyle'
+            : /\b(face|facial|eyes?|brows?|eyebrows?|nose|lips?|jaw\w*|cheeks?|chin|freckles)\b/i.test(value) ? 'Face'
             : /\b(body|build|physique|skin|muscul\w*|slender|slim|stocky|athletic|scars?|tattoos?|arms?|legs?|wings?|tail|scales|fur)\b/i.test(value) ? 'Body'
             : 'Other details';
+        if (key === 'Hairstyle' && /\b(black|brown|blond[e]?|red|auburn|ginger|silver|white|grey|gray|blue|green|pink|purple|dark|light|copper|golden)\b/i.test(value)) {
+            groups['Hair color'].push(value);
+            if (!/\b(long|short|curly|straight|wavy|braid\w*|ponytail|cropped|shaved|cut|bob|bun)\b/i.test(value)) continue;
+        }
         groups[key].push(value);
+    }
+    if (npc.gender) groups.Gender = [String(npc.gender)];
+    // Display bands only, never stored or fed back as new canon. Prefer visual age.
+    const visualAge = String(npc.apparentAge || '').trim();
+    const age = visualAge || String(npc.age ?? '').trim();
+    const humanScale = Boolean(visualAge) || /^human$/i.test(String(npc.species || ''));
+    if (!groups['Age bracket'].length && age) {
+        const number = /^(?:~)?\d{1,3}$/.test(age) ? Number(age.replace('~', '')) : null;
+        if (humanScale && number !== null) {
+            const bracket = number < 13 ? 'Kid' : number < 18 ? 'Teen' : number < 30 ? 'Young adult' : number < 45 ? 'Adult' : number < 65 ? 'Middle-aged' : number < 80 ? 'Old' : 'Very old';
+            groups['Age bracket'] = [`${bracket} (${visualAge ? 'apparent age' : 'age'} ${age})`];
+        } else groups['Age bracket'] = [`${visualAge ? 'Apparent age' : 'Age'}: ${age} — bracket unspecified`];
     }
     return groups;
 }
@@ -367,7 +389,7 @@ export function appearanceDetailSections(text = '') {
 export function appearanceFormsHtml(npc) {
     const model = npc.appearanceModel;
     const presentation = npc.currentPresentation || '';
-    const detailGroups = appearanceDetailSections(npc.appearance);
+    const detailGroups = appearanceDetailSections(npc.appearance, npc);
     const details = `<div class="delta-appearance-detail-grid">${Object.entries(detailGroups)
         .filter(([label, clauses]) => label !== 'Other details' || clauses.length)
         .map(([label, clauses]) => `<div class="delta-appearance-form-row"><b>${label}</b>${clauses.length ? proseHtml(clauses.join('; ')) : '<p class="delta-muted">Not specified</p>'}</div>`).join('')}</div>`;
