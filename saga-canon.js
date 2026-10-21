@@ -3,6 +3,8 @@ import { distinctNamedPeople } from './cast.js';
 import { CANON_SEED_FIELDS, parseCanonSeed } from './canon-seed.js';
 const norm = value => String(value || '').normalize('NFKC').toLowerCase().trim();
 export function sagaCanonBridge() {
+    const tunnel = globalThis.TunnelVision?.bridge;
+    if (tunnel?.canonStatus?.().enabled) return tunnel;
     const bridge = globalThis.Saga?.bridge;
     return bridge?.canonStatus?.().enabled ? bridge : null;
 }
@@ -12,6 +14,7 @@ export function sagaCanonEntries(result) {
     for (const entry of result?.entries || []) {
         if (!entry.entity || !entry.revision || !entry.text || !Array.isArray(entry.basis)) continue;
         const key = `${entry.entity}@${entry.revision}`;
+        // Keep existing canonRef IDs stable when the evidence provider moves to TunnelVision.
         const group = groups.get(key) || { world: `Saga:${key}`, uid: 0, comment: entry.title,
             key: [entry.title, ...(entry.aliases || [])], content: '', passages: new Set() };
         if (!group.passages.has(entry.text)) { group.passages.add(entry.text); group.content += `${group.content ? '\n' : ''}${entry.text}`; }
