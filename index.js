@@ -7541,7 +7541,9 @@ window.NPCCodex = Object.freeze({
         const npc = findNpcByIdOrName(value);
         if (!npc) return null;
         const formName = form ? npcFormName(npc, form) : '';
-        return buildNpcPortraitPrompts(formName ? { ...npc, currentForm: formName, currentFormUnknown: false } : npc, { ...portraitPromptOptions(), composition: slot === 'fullBody' ? 'full body render, head to toe, entire figure and feet visible, uncropped' : 'face-focused portrait, head and shoulders, close-up face, clear facial features' });
+        return buildNpcPortraitPrompts(formName ? { ...npc, currentForm: formName, currentFormUnknown: false } : npc, { ...portraitPromptOptions(), composition: slot === 'fullBody'
+            ? 'Show one character in a full-length view from the top of the head to the soles of the feet. Keep the entire figure inside the frame, with space above the head and below the feet. Do not crop the head, limbs, or feet'
+            : 'Show one character in a close-up face portrait framed from the top of the head to the shoulders. Keep the entire head and hairstyle inside the frame. Make the facial features clearly visible; do not include the waist or legs' });
     },
     formPortraits: value => {
         const npc = findNpcByIdOrName(value);

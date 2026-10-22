@@ -14,7 +14,7 @@ async function imageChecks(mockState, eventSource, manualAddNpc, sleep) {
     await manualAddNpc('Ari Vale');
     const npc = runtime.getState().npcs.find(item => item.name === 'Ari Vale');
     if (!await runtime.updateAppearance(npc.id, {
-        overallAppearance: 'Amber eyes', currentForm: 'Human', formsText: 'Human | Copper hair; blue coat\nFox | Red fur; white-tipped tail',
+        overallAppearance: 'Amber eyes', currentForm: 'Human', formsText: 'Human | Copper hair; amber eyes; blue coat\nFox | Red fur; white-tipped tail',
     }, { chatKey: runtime.uiStatus().chatKey })) throw new Error('Appearance edit failed');
     const request = { chatId: 'image-appearance', groupId: null, floor: 0, sourceText: mockState.context.chat[0].mes };
     const before = JSON.stringify(runtime.getState());
@@ -25,6 +25,11 @@ async function imageChecks(mockState, eventSource, manualAddNpc, sleep) {
     if (runtime.imageActors({ ...request, chatId: 'other' }) !== null) throw new Error('Cross-chat image read accepted');
     if (runtime.imageActors({ ...request, sourceText: 'Changed story.' }) !== null) throw new Error('Stale source image read accepted');
     if (JSON.stringify(runtime.getState()) !== before) throw new Error('Read-only image API mutated a dossier');
+    const facePrompt = runtime.portraitPrompts(npc.id, { slot: 'face' }).positive;
+    const bodyPrompt = runtime.portraitPrompts(npc.id, { slot: 'fullBody' }).positive;
+    if (!/top of the head to the shoulders/.test(facePrompt) || !/entire head and hairstyle/.test(facePrompt)) throw new Error('Face framing is not explicit');
+    if (!/soles of the feet/.test(bodyPrompt) || !/Do not crop the head, limbs, or feet/.test(bodyPrompt)) throw new Error('Full-body framing is not explicit');
+    for (const prompt of [facePrompt, bodyPrompt]) if (!/Copper hair/i.test(prompt) || !/Amber eyes/i.test(prompt) || /Red fur/i.test(prompt)) throw new Error('Portrait framing dropped accepted form appearance: ' + prompt);
     await runtime.flush();
     // Exercise the real creation -> accepted appearance -> automatic image-save hooks.
     const previousCreate = document.createElement;

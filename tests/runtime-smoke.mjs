@@ -525,11 +525,11 @@ try {
     assert.match(portraitPrompts.positive, /Crimson Demon/);
     assert.match(portraitPrompts.positive, /crimson eyes/);
     assert.doesNotMatch(portraitPrompts.positive, /proud but earnest/i, 'nonvisual Personality prose should not be dumped into portrait prompts');
-    assert.match(portraitPrompts.positive, /head and shoulders/);
+    assert.match(portraitPrompts.positive, /top of the head to the shoulders/);
     const bodyPrompt = globalThis.NPCCodex.portraitPrompts('Yunyun', { slot: 'fullBody' });
-    assert.match(bodyPrompt.positive, /head to toe/);
+    assert.match(bodyPrompt.positive, /soles of the feet/);
     assert.match(bodyPrompt.positive, /crimson eyes/);
-    assert.doesNotMatch(bodyPrompt.positive, /head and shoulders/);
+    assert.doesNotMatch(bodyPrompt.positive, /close-up face portrait/);
     const generatedUrl = await globalThis.NPCStateDelta.generatePortraitUrl('Yunyun');
     assert.equal(generatedUrl, '/user/images/npc-state-delta-generated.png');
     assert.equal(mockState.slashCalls.length, 1, 'one portrait request should execute exactly one native ST slash command');

@@ -8,6 +8,16 @@ function indexOfOrFail(text, fragment) {
     return index;
 }
 
+test('semantic portraits retain accepted visual identity and age group without inventing missing traits', () => {
+    const options = { format: 'natural', stylePositive: '', styleNegative: '', composition: '', useMood: false };
+    const prompt = buildNpcPortraitPrompts({ species: 'Human', gender: 'male', age: '80', apparentAge: '35',
+        appearance: 'deep brown skin; an angular face with a scar across the nose; short curly black hair; green eyes' }, options).positive;
+    for (const trait of ['Human', 'male', 'apparent age 35', 'Visual age group: adult', 'deep brown skin', 'angular face', 'scar across the nose', 'short curly black hair', 'green eyes']) assert.ok(prompt.includes(trait), trait);
+    assert.doesNotMatch(prompt, /age 80/);
+    assert.equal(buildNpcPortraitPrompts({}, options).positive, '');
+    assert.doesNotMatch(buildNpcPortraitPrompts({ species: 'Elf', age: '300', appearance: 'silver hair' }, options).positive, /Visual age group:/);
+});
+
 test('portrait prompt assembly is deterministic, subject-first, label-free in tag formats, and style-last', () => {
     const prompts = buildNpcPortraitPrompts({
         species: 'Half-elf',
