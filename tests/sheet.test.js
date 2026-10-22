@@ -70,10 +70,10 @@ test('the cast pass carries grounded sheet deltas into the merge and the injecti
     assert.match(buildInjection(merged.state.npcs, 'Sera waits.', 3, 3), /STAT SHEET \(established\): carries: brass compass/);
 });
 
-test('a locked sheet ignores scanner deltas; records normalize and survive an empty sheet', () => {
+test('the story still applies to a player-edited sheet; records normalize and survive an empty sheet', () => {
     const npc = { ...createNpcRecord('Pell'), sheet: applySheetDelta(emptySheet(), { items: [{ op: 'gained', item: 'puzzle lock' }] }), manualProfileFields: ['sheet'] };
     const merged = mergeScanResult({ npcs: [npc], candidates: [], dismissed: [], turn: 2 }, { npcs: [{ id: npc.id, name: 'Pell', sheetDelta: { items: [{ op: 'lost', item: 'puzzle lock' }] } }] }, { turn: 2 });
-    assert.equal(merged.state.npcs[0].sheet.keyItems[0].item, 'puzzle lock');
+    assert.equal(merged.state.npcs[0].sheet.keyItems.length, 0);
     assert.ok(sheetIsEmpty(normalizeNpcRecord(createNpcRecord('Brunna')).sheet));
     assert.deepEqual(normalizeSheet({ keyItems: [{ item: '' }], pools: [{ name: 'MP' }] }), emptySheet());
     assert.equal(renderSheetInjection(emptySheet()), '');

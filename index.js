@@ -3607,7 +3607,8 @@ async function deriveNpcStats(ctx, npcs, castPass, options = {}) {
     };
     const out = [];
     for (const npc of Array.isArray(npcs) ? npcs : []) {
-        if (!npc || npc.archived || derived >= DERIVE_PER_SCAN || (npc.manualProfileFields || []).includes('sheet')) { out.push(npc); continue; }
+        // Player edits are not locked out: re-derivation shifts each value by the change, so edits survive.
+        if (!npc || npc.archived || derived >= DERIVE_PER_SCAN) { out.push(npc); continue; }
         const sheet = normalizeSheet(npc.sheet);
         const tier = rankTier(sheet.rank, lastWorldSchema?.ranks);
         const prior = sheet.derivation;

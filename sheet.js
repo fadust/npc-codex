@@ -356,6 +356,9 @@ export function sheetContext(sheet) {
         ...(s.spells.length ? { spells: s.spells.map(spell => spell.name) } : {}),
         ...(s.rank ? { rank: s.rank } : {}),
         ...(s.archetype ? { class: s.archetype } : {}),
+        // Current numbers, so a story change builds on what the sheet holds now, the player's edits included.
+        ...(s.attributes.length ? { attributes: Object.fromEntries(s.attributes.map(item => [item.name, item.value])) } : {}),
+        ...(s.pools.length ? { pools: Object.fromEntries(s.pools.map(pool => [pool.name, `${pool.current ?? pool.max}/${pool.max}`])) } : {}),
     };
 }
 

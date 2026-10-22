@@ -24,11 +24,11 @@ function chip(kind, label, value) {
     return `<span class="codex-chip${value ? '' : ' is-empty'}" title="${escapeHtml(label)}"><i aria-hidden="true">${ICONS[kind]}</i>${escapeHtml(value || label)}</span>`;
 }
 
-// Race the card, lore and story never stated reads as human, the same assumption the stat sheet derives from.
+// A race the card, lore and story never state is human, the same rule the stat sheet derives from.
 function raceChip(npc) {
     const race = String(npc?.species || '').trim();
     if (!/^(?:unknown|unspecified|none|n\/a)?$/i.test(race)) return chip('race', 'Race', race);
-    return `<span class="codex-chip" title="Race: assumed human (not stated by card, lore or story)"><i aria-hidden="true">${ICONS.race}</i>Human</span>`;
+    return chip('race', 'Race', 'Human');
 }
 
 // One-line lead under the name, built only from fields with real values (design review #2).

@@ -4419,8 +4419,9 @@ function applyIncoming(existing, incoming, turn, relationshipCaps = DEFAULT_RELA
         if (!manualFields.has('role')) merged.role = currentRoleText(merged.roles) || merged.role;
     }
     merged.canonRef = (incoming.canonRef?.world?.startsWith('Saga:') ? normalizeCanonRef(incoming.canonRef) : null) || normalizeCanonRef(existing.canonRef) || normalizeCanonRef(incoming.canonRef);
-    // Stat sheet changes arrive as grounded operations from the cast pass; a locked sheet is the player's.
-    merged.sheet = incoming.sheetDelta && !sheetDeltaIsEmpty(incoming.sheetDelta) && !manualFields.has('sheet')
+    // Stat sheet changes arrive as grounded operations from the cast pass. The story always applies:
+    // the cast pass sees the current sheet, player edits included, and builds on it.
+    merged.sheet = incoming.sheetDelta && !sheetDeltaIsEmpty(incoming.sheetDelta)
         ? applySheetDelta(existing.sheet, incoming.sheetDelta, { turn, sourceMessageId })
         : normalizeSheet(existing.sheet);
     if (manualFields.has('mannerisms')) {
