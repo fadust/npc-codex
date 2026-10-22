@@ -7272,8 +7272,11 @@ function registerEvents() {
     }
 
     if (events.MESSAGE_RECEIVED) {
-        source.on(events.MESSAGE_RECEIVED, async (messageId) => {
-            await handleAssistantMessageReceived(messageId);
+        // Fire-and-forget: the host awaits each listener in turn, so awaiting the scan here held
+        // CHARACTER_MESSAGE_RENDERED and every later listener for the whole LLM scan. The scan
+        // operation's busy guard still keeps scans from overlapping.
+        source.on(events.MESSAGE_RECEIVED, (messageId) => {
+            handleAssistantMessageReceived(messageId).catch(error => console.warn('[NPC Codex] post-reply scan failed.', error));
         });
     }
     if (events.CHARACTER_MESSAGE_RENDERED) source.on(events.CHARACTER_MESSAGE_RENDERED, () => queueInlineRender(0));
