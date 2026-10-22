@@ -26,6 +26,41 @@ async function imageChecks(mockState, eventSource, manualAddNpc, sleep) {
     if (runtime.imageActors({ ...request, sourceText: 'Changed story.' }) !== null) throw new Error('Stale source image read accepted');
     if (JSON.stringify(runtime.getState()) !== before) throw new Error('Read-only image API mutated a dossier');
     await runtime.flush();
+    // Exercise the real creation -> accepted appearance -> automatic image-save hooks.
+    const previousCreate = document.createElement;
+    const previousBridge = globalThis.STBaiBaiImage;
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (url, options) => String(url).startsWith('data:image/')
+        ? Promise.resolve(new Response(Buffer.from(String(url).split(',')[1], 'base64'), { headers: { 'Content-Type': 'image/png' } }))
+        : previousFetch(url, options);
+    globalThis.FileReader = class { readAsDataURL(file) { void file.arrayBuffer().then(bytes => { this.result = `data:${file.type};base64,${Buffer.from(bytes).toString('base64')}`; this.onload?.(); }); } };
+    globalThis.Image = class { set src(value) { this._src = value; this.width = 64; this.height = 96; queueMicrotask(() => this.onload?.()); } get src() { return this._src; } };
+    document.createElement = function (tag, ...rest) {
+        if (String(tag).toLowerCase() !== 'canvas') return previousCreate?.call(this, tag, ...rest);
+        return { width: 0, height: 0, getContext: () => ({ drawImage() {} }), toDataURL: () => 'data:image/webp;base64,AAAA' };
+    };
+    const calls = [];
+    globalThis.STBaiBaiImage = { apiVersion: 1, getBackendStatus: () => ({ configured: true }), generate: async request => {
+        calls.push(request); return { dataUrl: 'data:image/png;base64,AAAA', seed: calls.length === 1 ? 4242 : 9999 };
+    } };
+    mockState.extensionSettings.npc_codex.autoNewNpcImages = true;
+    await manualAddNpc('Mira Vale');
+    await sleep(30);
+    if (calls.length) throw new Error('Blank new appearance triggered image generation');
+    const newcomer = runtime.getState().npcs.find(item => item.name === 'Mira Vale');
+    await runtime.updateAppearance(newcomer.id, { overallAppearance: 'Copper hair; green eyes', currentForm: '', formsText: '', currentAppearance: 'blue coat' }, { chatKey: runtime.uiStatus().chatKey });
+    const deadline = Date.now() + 5000;
+    while (!runtime.getNpc(newcomer.id)?.portrait?.fullBody?.dataUrl && Date.now() < deadline) await sleep(20);
+    const imaged = runtime.getNpc(newcomer.id);
+    if (calls.length !== 2 || !imaged?.portrait?.dataUrl || !imaged.portrait.fullBody?.dataUrl) throw new Error(`New dossier did not receive both automatic images: ${JSON.stringify({ calls: calls.length, appearance: imaged?.appearance, portrait: imaged?.portrait, pending: runtime.getState().pendingBackfills })}`);
+    if (imaged.portraitSeed !== 4242 || calls[1].seed !== 4242) throw new Error('Actual face seed was not retained');
+    if (runtime.getNpc(npc.id).portrait?.dataUrl) throw new Error('Enabling automation generated an existing-roster backlog');
+    mockState.extensionSettings.npc_codex.autoNewNpcImages = false;
+    await sleep(30);
+    await runtime.flush();
+    document.createElement = previousCreate;
+    globalThis.STBaiBaiImage = previousBridge;
+    globalThis.fetch = previousFetch;
 }
 
 test('image appearance public API uses the real controller and rejects wrong chat or edited text', () => {
