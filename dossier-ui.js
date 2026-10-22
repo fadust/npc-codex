@@ -271,6 +271,7 @@ export function projectDossierState(state = {}, status = {}) {
         hydrationError: plain(status?.hydrationError),
         worldSchema: status?.worldSchema && typeof status.worldSchema === 'object' ? status.worldSchema : null,
         turn: Number.isFinite(Number(state?.turn)) ? Number(state.turn) : 0,
+        lastScan: Number.isFinite(Number(status?.scanOutcome?.turn)) ? { ok: Boolean(status.scanOutcome.ok), turn: Number(status.scanOutcome.turn) } : null,
         npcs: details,
         index: sortDossierIndex(details.map(npc => ({
             id: npc.id,
@@ -575,7 +576,7 @@ class DeltaDossierUi {
             </button>
             <section class="delta-panel" role="dialog" aria-modal="true" aria-label="NPC Codex dossiers" tabindex="-1" hidden>
                 <header class="delta-topbar">
-                    <div class="delta-brand"><span class="delta-kicker">NPC DOSSIER</span><strong>NPC Codex</strong><span class="delta-chat-state"></span></div>
+                    <div class="delta-brand"><span class="delta-kicker">NPC DOSSIER</span><strong>NPC Codex</strong><span class="delta-chat-state"></span><span class="delta-scan-state" hidden></span></div>
                     <div class="delta-top-actions">
                         <button type="button" class="delta-btn npc-codex-toggle-cast" data-delta-library-toggle="1" aria-expanded="true">Hide NPC list</button>
                         <button type="button" class="delta-btn delta-open-settings">Settings</button>
@@ -833,6 +834,14 @@ class DeltaDossierUi {
 
         const turnLabel = hasChat ? `Turn ${projection.turn}` : 'No chat';
         if (chatState.textContent !== turnLabel) chatState.textContent = turnLabel;
+        const scanState = this.root.querySelector('.delta-scan-state');
+        const lastScan = hasChat ? projection.lastScan : null;
+        const scanLabel = lastScan ? `Scanned turn ${lastScan.turn} · ${lastScan.ok ? 'passed' : 'failed'}` : '';
+        if (scanState) {
+            scanState.hidden = !scanLabel;
+            if (scanState.textContent !== scanLabel) scanState.textContent = scanLabel;
+            scanState.classList.toggle('is-failed', Boolean(lastScan && !lastScan.ok));
+        }
         notice.hidden = true;
         if (notice.textContent) notice.textContent = '';
 
@@ -1133,7 +1142,10 @@ const STYLES = `
 #${ROOT_ID} .delta-brand, #${ROOT_ID} .delta-top-actions { display:flex; align-items:center; gap:10px; min-width:0; }
 #${ROOT_ID} .delta-brand strong { font-size:1.03rem; white-space:nowrap; }
 #${ROOT_ID} .delta-kicker { font-size:.67rem; line-height:1.2; letter-spacing:.14em; text-transform:uppercase; color:var(--delta-accent); opacity:.82; }
-#${ROOT_ID} .delta-chat-state { display:inline-flex; padding:4px 9px; border:1px solid rgba(255,255,255,.1); border-radius:999px; color:var(--delta-muted); background:rgba(0,0,0,.16); font-size:.74rem; }
+#${ROOT_ID} .delta-chat-state, #${ROOT_ID} .delta-scan-state { display:inline-flex; padding:4px 9px; border:1px solid rgba(255,255,255,.1); border-radius:999px; color:var(--delta-muted); background:rgba(0,0,0,.16); font-size:.74rem; }
+#${ROOT_ID} .delta-scan-state[hidden] { display:none; }
+#${ROOT_ID} .delta-scan-state { font-size:12px; color:#caefd9; border-color:rgba(113,190,145,.3); }
+#${ROOT_ID} .delta-scan-state.is-failed { color:#ead7aa; border-color:rgba(205,170,109,.4); }
 #${ROOT_ID} .delta-btn, #${ROOT_ID} .delta-filter {
   appearance:none; min-height:35px; padding:6px 11px; border:1px solid var(--delta-line); border-radius:8px;
   color:var(--delta-text); background:rgba(255,255,255,.055); box-shadow:none; cursor:pointer;
@@ -1217,7 +1229,7 @@ const STYLES = `
 #${ROOT_ID} .delta-empty p, #${ROOT_ID} .delta-document-empty p { margin:0; max-width:54ch; }
 #${ROOT_ID} .delta-empty-mark { display:grid; place-items:center; width:64px; height:64px; border:1px solid var(--delta-line-strong); border-radius:18px; color:var(--delta-accent); font:700 2rem/1 Georgia,serif; background:rgba(91,201,189,.07); }
 #${ROOT_ID} .delta-error-copy { color:var(--delta-danger); }
-#${ROOT_ID} .delta-section-nav { position:sticky; top:0; z-index:3; display:flex; gap:6px; overflow-x:auto; margin:-4px 0 12px; padding:8px 0; background:var(--delta-bg); scrollbar-width:none; }
+#${ROOT_ID} .delta-section-nav { position:sticky; top:0; z-index:3; display:flex; gap:6px; overflow-x:auto; margin:-4px 0 12px; padding:8px 0; background:var(--delta-bg); scrollbar-width:none; box-shadow:0 -22px 0 var(--delta-bg); border-bottom:1px solid rgba(91,201,189,.14); }
 #${ROOT_ID} .delta-section-nav::-webkit-scrollbar { display:none; }
 #${ROOT_ID} .delta-section-jump { appearance:none; flex:0 0 auto; min-height:30px; padding:4px 10px; border:1px solid rgba(91,201,189,.18); border-radius:999px; color:var(--delta-muted); background:rgba(255,255,255,.03); font-size:.74rem; cursor:pointer; }
 #${ROOT_ID} .delta-section-jump:hover { color:var(--delta-accent-soft); border-color:var(--delta-line-strong); background:rgba(91,201,189,.09); }

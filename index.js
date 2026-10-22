@@ -211,6 +211,9 @@ let portraitSettingsSaveBusy = false;
 let lastPresentCardActivation = { npcId: '', at: 0 };
 let lastEditorActivation = { npcId: '', at: 0 };
 let lastScanMetrics = null;
+// Outcome of the last broad scan per chat, shown in the dossier as "Scanned turn N · passed/failed".
+// A failure is remembered for this session only; after a reload the persisted state shows the last success.
+const lastScanOutcome = new Map();
 const diagnosticStore = createDiagnosticStore({ limit: 40 });
 function diagnosticNpcIds(scanResult = {}, report = null) {
     const values = [];
@@ -300,6 +303,13 @@ const scanOperations = createScanOperationRegistry({
     },
 });
 function isScanBusy(key = getChatKey()) { return scanOperations.isBusy(key); }
+function lastScanOutcomeFor(key = getChatKey()) {
+    if (lastScanOutcome.has(key)) return lastScanOutcome.get(key);
+    if (key === 'no-chat' || chatHydrationStatus(key) !== 'ready') return null;
+    const state = getChatState(key);
+    if (!Number(state?.scanCount)) return null;
+    return { ok: true, turn: Number(state.turn || 0) - Number(state.assistantSinceScan || 0) };
+}
 function beginScanOperation(key, label, metadata = {}) {
     const operation = scanOperations.begin(key, label, metadata);
     if (!operation) return null;
@@ -4362,6 +4372,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
         }
         if (!canonRevisionCurrent(scanCanonRevision) || !canonRevisionCurrent(castPass.canonRevision)) return false;
         if (targetMessageId >= 0) commitBranchCheckpoint(nextState, targetMessageId, 'scan');
+        lastScanOutcome.set(chatKey, { ok: true, turn: Number(nextState.turn || 0) });
         setChatState(chatKey, nextState);
         persist();
         renderDossier();
@@ -4383,6 +4394,10 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
     } catch (error) {
         console.error('[NPC Codex] dossier scan failed', error);
         if (manual || (isScannerRoutingError(error) && error.code !== 'NPC_SCANNER_ROUTE_CANCELLED')) globalThis.toastr?.error?.(`NPC Codex scan failed: ${error?.message || error}`);
+        if (error?.code !== 'NPC_SCANNER_ROUTE_CANCELLED') {
+            try { lastScanOutcome.set(scanChatKey, { ok: false, turn: Number(getChatState(scanChatKey)?.turn || 0) }); } catch { /* chat state unavailable; keep the last outcome */ }
+            if (getChatKey() === scanChatKey) renderDossier();
+        }
         return false;
     } finally {
         endScanOperation(scanChatKey, operation);
@@ -7478,6 +7493,7 @@ window.NPCCodex = Object.freeze({
         hydrationError: hydrationErrors.get(getChatKey())?.message || null,
         scanBusyForChat: isScanBusy(getChatKey()),
         scanOperation: scanOperations.status(getChatKey()),
+        scanOutcome: lastScanOutcomeFor(getChatKey()),
         scannerRouting: scannerRoutingMetrics(),
         worldSchema: lastWorldSchema,
         vectorRecall: { enabled: Boolean(getSettings().recallEnabled), busy: recallBusy, chatKey: recallCache.chatKey, scored: recallCache.scores?.size || 0, synced: recallCache.synced || null, error: recallCache.error || null, at: recallCache.at || null },

@@ -305,6 +305,14 @@ function bindHeader(head) {
     head.addEventListener('click', event => {
         const untag = event.target.closest('[data-codex-untag]');
         if (untag) return void api()?.updateDecor?.(id, { tags: currentTags().filter((_, index) => index !== Number(untag.dataset.codexUntag)) });
+        const addQuote = event.target.closest('[data-codex-add-quote]');
+        if (addQuote) {
+            const label = head.querySelector('.codex-quote');
+            if (label) label.hidden = false;
+            addQuote.remove();
+            label?.querySelector('[data-codex-quote]')?.focus();
+            return;
+        }
         const add = event.target.closest('[data-codex-tag]');
         if (!add) return;
         const input = document.createElement('input');

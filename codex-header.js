@@ -24,6 +24,13 @@ function chip(kind, label, value) {
     return `<span class="codex-chip${value ? '' : ' is-empty'}" title="${escapeHtml(label)}"><i aria-hidden="true">${ICONS[kind]}</i>${escapeHtml(value || label)}</span>`;
 }
 
+// Race the card, lore and story never stated reads as human, the same assumption the stat sheet derives from.
+function raceChip(npc) {
+    const race = String(npc?.species || '').trim();
+    if (!/^(?:unknown|unspecified|none|n\/a)?$/i.test(race)) return chip('race', 'Race', race);
+    return `<span class="codex-chip" title="Race: assumed human (not stated by card, lore or story)"><i aria-hidden="true">${ICONS.race}</i>Human</span>`;
+}
+
 export function codexHeaderHtml(npc) {
     if (!npc) return '<header class="codex-head is-empty"><div class="codex-ident"><h2>No dossier selected</h2></div></header>';
     const subtitle = [npc.gender, npc.age ? `age ${npc.age}` : npc.apparentAge ? `looks ${npc.apparentAge}` : '', npc.aliases?.length ? `aka ${npc.aliases.slice(0, 2).join(', ')}` : '']
@@ -40,14 +47,15 @@ export function codexHeaderHtml(npc) {
             <div class="codex-chips">
                 ${chip('faction', 'Faction', npc.faction)}
                 ${chip('location', 'Location', npc.location || npc.homeBase)}
-                ${chip('race', 'Race', npc.species)}
+                ${raceChip(npc)}
                 ${chip('occupation', 'Occupation', occupationOf(npc))}
                 ${npc.sheet?.rank ? chip('rank', 'Rank', npc.sheet.rank) : ''}
                 ${tags}
                 <button type="button" class="codex-chip codex-add-tag" data-codex-tag>+ Add tag</button>
+                ${npc.quote ? '' : '<button type="button" class="codex-chip codex-add-tag" data-codex-add-quote>+ Add quote</button>'}
             </div>
         </div>
-        <label class="codex-quote"><span class="sr-only">Quote</span><textarea data-codex-quote rows="2" maxlength="240" placeholder="Add a quote…">${escapeHtml(npc.quote)}</textarea></label>
+        <label class="codex-quote"${npc.quote ? '' : ' hidden'}><span class="sr-only">Quote</span><textarea data-codex-quote rows="2" maxlength="240" placeholder="Add a quote…">${escapeHtml(npc.quote)}</textarea></label>
         <div class="codex-actions"><button type="button" class="delta-btn delta-edit" data-npc-id="${escapeHtml(npc.id)}">Edit dossier</button><button type="button" class="delta-btn npc-state-delta-refresh-chat" data-npc-id="${escapeHtml(npc.id)}" title="Re-read recent story to fill supported details; preserve locks and accepted development">Refresh</button></div>
         <div class="codex-tabs-slot"></div>
     </header>`;
@@ -80,16 +88,19 @@ ${r} .codex-quote::before { content:"“"; left:-4px; top:-6px; }
 ${r} .codex-quote::after { content:"”"; right:-4px; bottom:-18px; }
 ${r} .codex-quote textarea { width:100%; min-height:3.2em; resize:none; border:0; border-bottom:1px solid var(--delta-line, rgba(91,201,189,.2)); background:transparent; color:inherit; font:italic .92rem/1.4 Georgia,serif; text-align:center; }
 ${r} .codex-actions { grid-area:actions; justify-self:end; align-self:end; display:flex; flex-wrap:wrap; gap:6px; }
+${r} .codex-quote[hidden] { display:none; }
+${r} .codex-actions .delta-dossier-actions-primary { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; }
+${r} .codex-actions .delta-dossier-more { min-width:0; }
+${r} .codex-actions .delta-dossier-more-menu { top:calc(100% + 7px); bottom:auto; }
+${r} .codex-head > .delta-npc-diagnostics { grid-column:1 / -1; margin:4px 0 0; }
 ${r} .codex-tabs-slot { grid-area:tabs; margin-top:8px; }
 ${r} .codex-tabs-slot .delta-map-switch { display:flex; gap:4px; border:0; background:none; padding:0; }
 ${r} .codex-tabs-slot .delta-map-switch button { min-width:120px; padding:9px 18px; border:1px solid var(--delta-line, rgba(91,201,189,.2)); border-bottom:0; border-radius:8px 8px 0 0; background:rgba(255,255,255,.03); color:inherit; }
 ${r} .codex-tabs-slot .delta-map-switch button[aria-selected="true"] { background:color-mix(in srgb, var(--delta-accent, #5bc9bd) 16%, transparent); border-color:var(--delta-accent, #5bc9bd); color:#b6eee4; }
 
-${r} .delta-library.npc-codex-cast-collapsed { grid-template-columns:minmax(250px,32%) minmax(0,1fr); grid-template-rows:minmax(0,1fr) !important; }
+${r} .delta-library.npc-codex-cast-collapsed { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) !important; }
 ${r} .delta-library.npc-codex-cast-collapsed > .delta-cast { display:none !important; }
-${r} .npc-codex-cast-collapsed .delta-hero { display:grid !important; grid-column:1; grid-row:1; }
-${r} .npc-codex-cast-collapsed .codex-head { grid-template-columns:minmax(0,1fr) minmax(150px,30%); grid-template-areas:"ident quote" "ident actions" "tabs tabs"; }
-${r} .npc-codex-cast-collapsed .codex-portrait { display:none; }
+${r} .delta-library.npc-codex-cast-collapsed > .delta-stage { grid-column:1; }
 ${r} .delta-library { display:grid !important; grid-template-columns:270px minmax(0,1fr); grid-template-rows:minmax(0,1fr) !important; min-height:0; }
 ${r} .delta-library > .delta-cast { grid-column:1; grid-row:1; display:flex !important; flex-direction:column; min-height:0; height:auto !important; max-height:none !important; border-right:1px solid var(--delta-line, rgba(91,201,189,.16)); border-top:0 !important; }
 ${r} .delta-library > .delta-stage { grid-column:2; grid-row:1; }

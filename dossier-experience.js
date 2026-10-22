@@ -134,10 +134,11 @@ function actionSignature(npc) {
     return npc ? `${npc.id}:${Boolean(npc.archived)}:${lifeStateChoice(npc)}:${diagnosticVisibleNpcIds.has(String(npc.id))}` : '';
 }
 
+// Dossier actions and diagnostics live in the shared header, so they stay put whether or not the NPC list is open.
 function renderNpcDiagnostics(root) {
-    const hero = root?.querySelector?.('.delta-hero');
-    if (!hero) return;
-    hero.querySelectorAll(':scope > .delta-npc-diagnostics').forEach(node => node.remove());
+    const head = root?.querySelector?.('.codex-head');
+    if (!head) return;
+    head.querySelectorAll(':scope > .delta-npc-diagnostics').forEach(node => node.remove());
     const npcId = selectedNpcId(root);
     if (!npcId || !diagnosticVisibleNpcIds.has(npcId)) return;
     const records = api()?.diagnosticsForNpc?.(npcId) || [];
@@ -146,14 +147,13 @@ function renderNpcDiagnostics(root) {
     section.className = 'delta-npc-diagnostics';
     section.innerHTML = `<header><b>Diagnostics</b><small>${recent.length} recent operation${recent.length === 1 ? '' : 's'}</small></header>
       ${recent.length ? recent.map(row => `<details><summary>${escapeHtml(row.type || 'scan')} · ${escapeHtml(String(row.sourceMessageId ?? 'no source'))}</summary><pre>${escapeHtml(JSON.stringify({ profile: row.profile || [], birthdays: row.birthdays || [], accounting: row.accounting || {} }, null, 2))}</pre></details>`).join('') : '<p>No retained diagnostic operations for this NPC yet.</p>'}`;
-    const actions = hero.querySelector('.delta-hero-actions');
-    if (actions) actions.insertAdjacentElement('afterend', section);
-    else hero.appendChild(section);
+    const tabs = head.querySelector(':scope > .codex-tabs-slot');
+    if (tabs) tabs.insertAdjacentElement('beforebegin', section);
+    else head.appendChild(section);
 }
 
 function ensureDossierActions(root) {
-    const hero = root?.querySelector?.('.delta-hero');
-    const actions = hero?.querySelector?.('.delta-hero-actions');
+    const actions = root?.querySelector?.('.codex-head .codex-actions');
     const npcId = selectedNpcId(root);
     const npc = currentNpc(npcId);
     if (!actions || !npcId || !npc) return;
@@ -334,7 +334,7 @@ function bindDossierEvents(root) {
             const npcId = plain(diagnostics.dataset.npcId);
             if (diagnosticVisibleNpcIds.has(npcId)) diagnosticVisibleNpcIds.delete(npcId);
             else diagnosticVisibleNpcIds.add(npcId);
-            const actions = root.querySelector('.delta-hero-actions');
+            const actions = root.querySelector('.codex-head .codex-actions');
             if (actions) actions.dataset.deltaExperienceActions = '';
             normalizeRoot(root);
             return;
