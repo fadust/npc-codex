@@ -309,6 +309,89 @@ export function applyKnowledgeDecisions(npcs, decisions, { sourceMessageId = nul
     return { npcs: guarded.npcs, applied, changes: guarded.changes };
 }
 
+/* ---------- Hearsay: facts about the player travel along social-graph ties. ---------- */
+
+// Shareability is decided when a fact is written (scanner and cast-pass prompts): a fact that may
+// not travel is stored as `secret`, so the code-side gate below only has to read the kind.
+export const KNOWLEDGE_SHAREABILITY_RULE = 'SHAREABLE? A public act of the player => kind:"knows" (it can spread). A private act, or one sealed by the holder\'s role (confession to clergy, patient to healer, client to lawyer) or by agreement ("keep this between us") => kind:"secret". The story overrides: leave to tell ("you may tell the Bishop") or a seal broken on-page => kind:"knows".';
+
+const TOLD_BY = /\s*\(told by [^)]*\)\s*$/i;
+
+export function baseFact(fact) {
+    return String(fact || '').replace(TOLD_BY, '').trim();
+}
+
+export function factAboutPlayer(fact, userName) {
+    return firstIndex(baseFact(fact), [...labelsOf({ name: userName }), 'the player']) >= 0;
+}
+
+function livingNpc(npc) {
+    return npc && npc.id && !npc.archived && String(npc.lifeState || '').toLowerCase() !== 'deceased';
+}
+
+// A fact can be relayed only when it is shareable (plain `knows`, never `secret`) and was learned
+// on-page, first-hand or by word of mouth.
+function relayable(entry, userName) {
+    return entry.kind === 'knows' && ['witnessed', 'told'].includes(entry.source) && factAboutPlayer(entry.fact, userName);
+}
+
+/* One hop per scan: a player fact moves from an NPC who holds it to an NPC linked to them by an
+ * existing social-graph edge (either direction), and is recorded on the receiver as `told`, naming
+ * the teller. Holders are read from the ledgers as they stood before this hop, so a fact told now
+ * travels on at the next scan. A receiver that already holds the fact in any kind, `unaware`
+ * included, is not told; each receiver learns at most one fact per scan.
+ * Returns { npcs, told: [{ npcId, from, fact }] } with new NPC objects only where something changed. */
+export function propagatePlayerKnowledge(npcs, socialGraph, userName, { sourceMessageId = null, turn = null } = {}) {
+    const list = Array.isArray(npcs) ? npcs.slice() : [];
+    const byId = new Map(list.filter(livingNpc).map(npc => [npc.id, npc]));
+    const before = new Map([...byId].map(([id, npc]) => [id, normalizeKnowledge(npc.knowledge)]));
+    const told = [];
+    const gained = new Set();
+    for (const edge of Array.isArray(socialGraph?.edges) ? socialGraph.edges : []) {
+        for (const [fromId, toId] of [[edge?.aId, edge?.bId], [edge?.bId, edge?.aId]]) {
+            const teller = byId.get(fromId);
+            const receiver = byId.get(toId);
+            if (!teller || !receiver || gained.has(toId)) continue;
+            if (Array.isArray(receiver.manualProfileFields) && receiver.manualProfileFields.includes('knowledge')) continue;
+            const own = normalizeKnowledge(receiver.knowledge);
+            const source = before.get(fromId).find(entry => relayable(entry, userName) && !hasSimilar(own, baseFact(entry.fact)));
+            if (!source) continue;
+            const suffix = ` (told by ${cleanText(teller.name, 80)})`;
+            const fact = `${baseFact(source.fact).slice(0, KNOWLEDGE_FACT_MAX - suffix.length)}${suffix}`;
+            const entry = {
+                fact,
+                kind: 'knows',
+                source: 'told',
+                from: teller.name,
+                ...(Number.isInteger(sourceMessageId) ? { sourceMessageId } : {}),
+                ...(Number.isInteger(turn) ? { turn } : {}),
+            };
+            const next = { ...receiver, knowledge: normalizeKnowledge([...own, entry]) };
+            byId.set(toId, next);
+            list[list.indexOf(receiver)] = next;
+            gained.add(toId);
+            told.push({ npcId: toId, from: teller.name, fact });
+        }
+    }
+    return { npcs: list, told };
+}
+
+// Player facts each NPC gained between two ledgers (witnessed or told, any held kind), keyed by id.
+export function newPlayerKnowledge(beforeNpcs, afterNpcs, userName) {
+    const out = new Map();
+    const prior = new Map((Array.isArray(beforeNpcs) ? beforeNpcs : []).filter(Boolean).map(npc => [npc.id, normalizeKnowledge(npc.knowledge)]));
+    for (const npc of Array.isArray(afterNpcs) ? afterNpcs : []) {
+        if (!livingNpc(npc)) continue;
+        const old = prior.get(npc.id) || [];
+        const gained = normalizeKnowledge(npc.knowledge).filter(entry => entry.kind !== 'unaware'
+            && ['witnessed', 'told'].includes(entry.source)
+            && factAboutPlayer(entry.fact, userName)
+            && !hasSimilar(old, baseFact(entry.fact), ['knows', 'secret']));
+        if (gained.length) out.set(npc.id, gained);
+    }
+    return out;
+}
+
 // Model-facing gate, rendered inside the NPC's essential (never budget-dropped) block.
 export function renderKnowledgeGate(npc, maxChars = 600) {
     const knowledge = normalizeKnowledge(npc?.knowledge);

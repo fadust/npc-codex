@@ -622,6 +622,31 @@ export function filterRelationshipDeltaByEvidence(delta, evidence, context = '')
     ]));
 }
 
+// The target's own values, which the evaluator judges the player's act against. The prompt already
+// carries personality and behaviorProfile, so it asks for the rest only.
+export function relationshipValuesText(npc, { withProfile = true } = {}) {
+    return [
+        cleanText(npc?.role, 120),
+        withProfile && cleanText(npc?.personality, 180),
+        ...normalizeBeliefs(npc?.beliefs).slice(-4).map(item => item.belief),
+        ...normalizePreferences(npc?.likes).slice(0, 4).map(item => `likes ${item}`),
+        ...normalizePreferences(npc?.dislikes).slice(0, 4).map(item => `dislikes ${item}`),
+        ...(withProfile ? orderedBehaviorProfile(npc?.behaviorProfile).slice(0, 4).map(item => cleanText(item, 120)) : []),
+    ].filter(Boolean).join('; ');
+}
+
+// A change driven only by hearsay (a `told` fact): the evidence must ground in the receiver's
+// knowledge entry and the cited value in its own dossier, and the change is capped at ordinary
+// impact, one point on the strongest axis. Milestones and inertia still apply downstream.
+export function filterHearsayRelationshipDelta(delta, evidence, valueCited, { knowledge = '', values = '' } = {}) {
+    const zero = { trust: 0, affection: 0, desire: 0, tension: 0 };
+    const value = cleanText(valueCited, 200);
+    if (!value || !String(values || '').trim() || !relationshipChangeReasonGrounded(value, values)) return zero;
+    const grounded = filterRelationshipDeltaByEvidence(delta, evidence, knowledge);
+    const axis = RELATIONSHIP_KEYS.reduce((best, key) => Math.abs(grounded[key]) > Math.abs(grounded[best] || 0) ? key : best, null);
+    return axis && grounded[axis] !== 0 ? { ...zero, [axis]: Math.sign(grounded[axis]) } : zero;
+}
+
 export function normalizeRelationshipEventHistory(value = []) {
     const source = Array.isArray(value) ? value : [];
     const out = [];
@@ -4708,6 +4733,7 @@ export function buildRelationshipPassPrompt({
     relationshipCriteria = DEFAULT_RELATIONSHIP_CRITERIA,
     impactCriteria = DEFAULT_IMPACT_CRITERIA,
     relationshipCaps = DEFAULT_RELATIONSHIP_CAPS,
+    learned = null,
 }) {
     const caps = normalizeRelationshipCaps(relationshipCaps);
     const compactTargets = (Array.isArray(targets) ? targets : []).slice(0, 4).map(npc => ({
@@ -4720,6 +4746,8 @@ export function buildRelationshipPassPrompt({
         speech: cleanText(npc?.speech, 120),
         mannerisms: cleanList(npc?.mannerisms, 2, 100),
         goal: cleanText(npc?.goal, 140),
+        values: relationshipValuesText(npc, { withProfile: false }),
+        ...(learned?.get?.(npc?.id)?.length ? { learnedOf: learned.get(npc.id).slice(0, 3).map(entry => ({ fact: cleanText(entry.fact, 200), how: entry.source === 'told' ? `told by ${cleanText(entry.from, 80) || 'someone'}` : 'witnessed' })) } : {}),
         keyRelationships: cleanList(npc?.keyRelationships, 3, 140),
         recentRelationshipEvents: normalizeRelationshipEventHistory(npc?.relationshipEventHistory).slice(-4).map(event => ({
             impact: cleanText(event.impact, 20),
@@ -4741,7 +4769,8 @@ Rules:
 6. IDENTITY FIRST: personality/behaviorProfile/speech/mannerisms/goal/other bonds remain the person; the player is not their only motive or relationship. Trust is not obedience; Affection is not devotion; Desire is not implied by affection; Tension is not automatically jealousy/embarrassment. High scores are secondary and need not surface every scene.
 7. relationshipSummary is REQUIRED: durable prose Relationship field toward ${userName}, not event log/personality replacement. If still accurate, COPY IT EXACTLY; otherwise rewrite concisely. Keep intensity proportional to current scores/evidence; avoid absolute devotion/dependence language unless truly established. major/extreme turning point MUST rewrite an old summary.
 8. Keep deltas within cap. Every non-zero axis needs grounded relationshipEvidence from CURRENT exchange and the overall event needs one short relationshipChangeReason. Desire requires explicit attraction/romantic/intimate/physical evidence; rescue, gratitude, affection, trust, or proximity alone never supports Desire. If evidence is insufficient, zero that axis; if all axes zero use impact none and empty reason.
-9. JSON only, no markdown: {"npcs":[{"id":"...","relationshipImpact":"major","relationshipDelta":{"trust":-5,"affection":-2,"desire":0,"tension":5},"relationshipEvidence":{"trust":"the player exposed her private confidence","affection":"the betrayal hurt her attachment","desire":"","tension":"the confrontation created unresolved strain"},"relationshipSummary":"She feels betrayed and guarded toward the player, while former warmth leaves the conflict emotionally complicated.","relationshipChangeReason":"The player publicly exposed her private confidence."}]}
+9. JSON only, no markdown: {"npcs":[{"id":"...","relationshipImpact":"major","relationshipDelta":{"trust":-5,"affection":-2,"desire":0,"tension":5},"relationshipEvidence":{"trust":"the player exposed her private confidence","affection":"the betrayal hurt her attachment","desire":"","tension":"the confrontation created unresolved strain"},"relationshipSummary":"She feels betrayed and guarded toward the player, while former warmth leaves the conflict emotionally complicated.","relationshipChangeReason":"The player publicly exposed her private confidence.","relationshipValue":"loyalty to confidences"}]}
+10. VALUES: a target reacts only to what it KNOWS: witnessed here, or learnedOf (the act and how it learned). Judge by ITS OWN values (role, personality, beliefs, likes/dislikes, behaviorProfile), not generic morality; name the value matched or contradicted in relationshipValue. Known only as "told by": evidence quotes learnedOf, ordinary, one axis ±1, reason shows the chain, e.g. "Kai's almsgiving reached the Bishop via the almoner; matches his devotion to charity."
 
 Relationship rubric: ${relationshipRubric || '(none)'}
 Impact rubric: ${impactRubric || '(none)'}

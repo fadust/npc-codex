@@ -45,6 +45,8 @@ import {
     relationshipChangeReasonGrounded,
     relationshipAxisEvidenceGrounded,
     filterRelationshipDeltaByEvidence,
+    filterHearsayRelationshipDelta,
+    relationshipValuesText,
     prepareFullWindowRelationshipPayload,
     relationshipSummaryConsistent,
     calibrateRelationshipSummary,
@@ -97,7 +99,7 @@ import {
     normalizeFormPortraitAssets,
 } from './core.js';
 import { applyNpcBirthdayUpdate, normalizeBirthDate } from './birthday.js';
-import { knowledgeToEditorText, knowledgeFromEditorText, applyKnowledgeDecisions } from './knowledge.js';
+import { knowledgeToEditorText, knowledgeFromEditorText, applyKnowledgeDecisions, propagatePlayerKnowledge, newPlayerKnowledge } from './knowledge.js';
 import { sheetToEditor, sheetFromEditor, SHEET_EDITOR_FIELDS, normalizeSheet } from './sheet.js';
 import { PROFILE_SYSTEM_PROMPT, buildRaceProfilePrompt, buildProfessionProfilePrompt, parseRaceProfile, parseProfessionProfile, deriveSheet, rankTier, profileKey } from './derive.js';
 import { scheduleStatuses, tickStatuses } from './status.js';
@@ -2688,13 +2690,16 @@ function transcriptMentionsNpcRecord(transcript, npc) {
     return labels.some(label => haystack.includes(` ${label} `));
 }
 
-function currentExchangeRelationshipRelevant(npc, transcript, raw = null, { currentExchangeOnly = false } = {}) {
+function currentExchangeRelationshipRelevant(npc, transcript, raw = null, { currentExchangeOnly = false, presentCounts = false } = {}) {
     if (!npc || npc.archived) return false;
     // Full-window reconciliation must never turn historical presence or a previous live flag
     // into a fresh relationship event. Only an explicit name/alias participation cue in the
     // current exchange can make an omitted existing dossier a relationship target. Quick scans
     // already operate on the current exchange, so their returned row remains sufficient.
     if (transcriptMentionsNpcRecord(transcript, npc)) return true;
+    // A single-reply scan reads only this exchange, so an NPC it reports present witnessed it
+    // even when the prose never names them.
+    if (presentCounts && raw?.present === true) return true;
     if (currentExchangeOnly) return false;
     return Boolean(raw);
 }
@@ -3728,14 +3733,20 @@ async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript,
     // Relationship reconciliation is keyed to the CURRENT exchange, not to whether the broad
     // dossier scanner happened to return a row. This prevents an NPC who acts early in a long
     // response from being skipped merely because the response ends with another cast/location.
+    // `preselected` targets (NPCs who learned of the player's act) skip the participation check.
+    // relevantIds lists every NPC this exchange already scored, here or by the broad scanner.
+    const relevantIds = [];
     const targets = (Array.isArray(existingNpcs) ? existingNpcs : [])
         .filter(npc => !npc?.archived && !isTerminalNpcDeath(npc))
         .filter(npc => {
+            if (options.preselected) return true;
             const raw = returned.find(item => rawScanMatchesExisting(item, npc));
-            if (!currentExchangeRelationshipRelevant(npc, prose, raw, { ...options, currentExchangeOnly: true })) return false;
+            const relevant = currentExchangeRelationshipRelevant(npc, prose, raw, { ...options, currentExchangeOnly: true, presentCounts: !options.currentExchangeOnly });
+            if (relevant || (raw && hasCompletePrimaryRelationshipDecision(raw, transcript))) relevantIds.push(npc.id);
+            if (!relevant) return false;
             return !raw || !hasCompletePrimaryRelationshipDecision(raw, transcript);
         });
-    if (!targets.length) return { decisions: new Map(), used: false, responseChars: 0, retried: false, targetCount: 0 };
+    if (!targets.length) return { decisions: new Map(), used: false, responseChars: 0, retried: false, targetCount: 0, relevantIds };
 
     const decisions = new Map();
     let responseChars = 0;
@@ -3751,6 +3762,7 @@ async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript,
                 relationshipCriteria: settings.relationshipCriteria,
                 impactCriteria: settings.relationshipImpactCriteria,
                 relationshipCaps: settings.relationshipCaps,
+                learned: options.learned,
             });
             const { parsed: relationshipParsed, raw, retried: batchRetried } = await generateParsedNpcJson(ctx, {
                 systemPrompt: "You are NPC Codex's isolated relationship evaluator. Use only the supplied targets and current exchange. Return only the requested JSON object.",
@@ -3771,11 +3783,20 @@ async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript,
                 const normalized = normalizeScanNpc(rawDecision);
                 const requestedHasDelta = Object.values(normalized.relationshipDelta).some(value => value !== 0);
                 const reasonPresent = Boolean(String(normalized.relationshipChangeReason || '').trim());
-                const relationshipDelta = requestedHasDelta && reasonPresent
-                    ? filterRelationshipDeltaByEvidence(normalized.relationshipDelta, normalized.relationshipEvidence, transcript)
-                    : { trust: 0, affection: 0, desire: 0, tension: 0 };
+                // A target that knows the act only by hearsay is grounded in what it was told and in
+                // its own values, and capped at ordinary impact.
+                const learnedOf = options.learned?.get?.(target.id) || [];
+                const hearsayOnly = learnedOf.length > 0 && learnedOf.every(entry => entry.source === 'told');
+                const relationshipDelta = !(requestedHasDelta && reasonPresent)
+                    ? { trust: 0, affection: 0, desire: 0, tension: 0 }
+                    : hearsayOnly
+                        ? filterHearsayRelationshipDelta(normalized.relationshipDelta, normalized.relationshipEvidence, rawDecision.relationshipValue, {
+                            knowledge: learnedOf.map(entry => entry.fact).join('\n'),
+                            values: relationshipValuesText(target),
+                        })
+                        : filterRelationshipDeltaByEvidence(normalized.relationshipDelta, normalized.relationshipEvidence, transcript);
                 const hasNonZeroNormalizedDelta = Object.values(relationshipDelta).some(value => value !== 0);
-                const relationshipImpact = hasNonZeroNormalizedDelta ? normalized.relationshipImpact : 'none';
+                const relationshipImpact = !hasNonZeroNormalizedDelta ? 'none' : (hearsayOnly ? 'ordinary' : normalized.relationshipImpact);
                 const rawSummary = rawDecision.relationshipSummary ?? rawDecision.relationship_summary;
                 const explicitSummaryProvided = typeof rawSummary === 'string';
                 const explicitSummary = explicitSummaryProvided ? String(rawSummary).trim().slice(0, 700) : '';
@@ -3809,7 +3830,7 @@ async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript,
             console.warn('[NPC Codex] focused relationship batch failed; retaining safe zero/primary output for that batch.', error);
         }
     }
-    return { decisions, used: true, responseChars, retried, targetCount: targets.length, failed };
+    return { decisions, used: true, responseChars, retried, targetCount: targets.length, failed, relevantIds };
 }
 
 function prepareFullWindowRelationshipEvaluation(parsed, existingNpcs) {
@@ -4282,6 +4303,27 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             merged.state.npcs = knowledgeApplied.npcs;
             merged.report.knowledgeGuard = [...(merged.report.knowledgeGuard || []), ...knowledgeApplied.changes];
             if (lastScanMetrics) lastScanMetrics.knowledgeApplied = knowledgeApplied.applied;
+        }
+        // A meter moves when an NPC KNOWS of the player's act. Shareable player facts travel one hop
+        // along social-graph ties, then NPCs who learned of an act this scan, or whom the cast pass
+        // saw present without a name, get their own relationship pass if none evaluated them yet.
+        const hearsay = propagatePlayerKnowledge(merged.state.npcs, merged.state.socialGraph, ctx.name1 || 'User', { sourceMessageId: targetMessageId, turn: state.turn });
+        merged.state.npcs = hearsay.npcs;
+        if (hearsay.told.length) merged.report.knowledgeTold = hearsay.told;
+        const learned = newPlayerKnowledge(state.npcs, merged.state.npcs, ctx.name1 || 'User');
+        const evaluatedIds = new Set([...(relationshipPass.relevantIds || []), ...newlyAdmittedIds]);
+        const castPresentIds = new Set((castPass.cast?.npcs || []).filter(row => row?.present === true && row.id).map(row => row.id));
+        const knowingTargets = merged.state.npcs.filter(npc => npc && !npc.archived && !isTerminalNpcDeath(npc)
+            && !evaluatedIds.has(npc.id) && (learned.has(npc.id) || castPresentIds.has(npc.id)));
+        if (knowingTargets.length) {
+            const knowingPass = await runFocusedRelationshipPass(ctx, { npcs: [] }, knowingTargets, currentTranscript || transcript, settings, {
+                requestScope: operation.requestScope,
+                prose: currentProse,
+                preselected: true,
+                learned,
+            });
+            applyFocusedRelationshipDecisions(merged.state, knowingPass.decisions, settings.relationshipCaps, targetMessageId, merged.report);
+            if (lastScanMetrics) lastScanMetrics.knowingRelationshipTargets = knowingPass.targetCount;
         }
         const postCleanup = applyStaleLifecycleAfterScan(merged.state, parsedForMerge, currentTranscript || transcript, settings);
         const staleArchived = [...preCleanup.archived, ...postCleanup.archived]
