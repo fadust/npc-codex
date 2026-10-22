@@ -335,6 +335,18 @@ function currentCard(label, value, fallback = 'Unknown', mark = '') {
     return `<div class="delta-current-card${mark ? ' delta-changed' : ''}"><b>${escapeHtml(label)}${mark}</b><span>${escapeHtml(plain(value, fallback))}</span></div>`;
 }
 
+// Design review #2: unknown fields collapse into one quiet line per section; known facts keep their cards.
+function knownText(value) {
+    const text = plain(value);
+    return /^(?:unknown|unspecified|none|n\/a)$/i.test(text) ? '' : text;
+}
+
+function knownFieldsHtml(fields, wrap) {
+    const known = fields.filter(([, isKnown]) => isKnown).map(([, , html]) => html).join('');
+    const missing = fields.filter(([, isKnown]) => !isKnown).map(([name]) => name);
+    return `${known ? wrap(known) : ''}${missing.length ? `<p class="delta-unknown-line">Not yet known: ${escapeHtml(missing.join(', '))}</p>` : ''}`;
+}
+
 function changeSummaryHtml(npc, currentTurn) {
     const changes = npc?.fieldChanges;
     if (!changes || changes.latestTurn === null) return '';
@@ -961,29 +973,29 @@ class DeltaDossierUi {
             </section>
             <section class="delta-section" data-delta-section="identity">
                 <h3>Identity continuity</h3>
-                <div class="delta-current-grid">
-                    ${birthdayCard(selected)}
-                    ${currentCard('Home Base / Usual Location', selected.homeBase, 'Unknown', changedMark(selected, 'homeBase'))}
-                </div>
+                ${knownFieldsHtml([
+                    ['birthday', knownText(selected.birthday), birthdayCard(selected)],
+                    ['home base', knownText(selected.homeBase), currentCard('Home Base / Usual Location', selected.homeBase, 'Unknown', changedMark(selected, 'homeBase'))],
+                ], cards => `<div class="delta-current-grid">${cards}</div>`)}
             </section>
             <section class="delta-section" data-delta-section="current">
                 <h3>Current</h3>
-                <div class="delta-current-grid">
-                    ${currentCard('Mood', selected.mood, 'Unknown', changedMark(selected, 'mood'))}
-                    ${currentCard('Location', selected.location, 'Unknown', changedMark(selected, 'location'))}
-                    ${currentCard('Goal', selected.goal, 'Unknown', changedMark(selected, 'goal'))}
-                    ${currentCard('Condition / Activity', selected.status, selected.bucket === 'dead' ? 'Deceased' : 'Stable / unknown', changedMark(selected, 'status'))}
-                </div>
+                ${knownFieldsHtml([
+                    ['mood', knownText(selected.mood), currentCard('Mood', selected.mood, 'Unknown', changedMark(selected, 'mood'))],
+                    ['location', knownText(selected.location), currentCard('Location', selected.location, 'Unknown', changedMark(selected, 'location'))],
+                    ['goal', knownText(selected.goal), currentCard('Goal', selected.goal, 'Unknown', changedMark(selected, 'goal'))],
+                    ['condition', knownText(selected.status) || selected.bucket === 'dead', currentCard('Condition / Activity', selected.status, selected.bucket === 'dead' ? 'Deceased' : 'Stable / unknown', changedMark(selected, 'status'))],
+                ], cards => `<div class="delta-current-grid">${cards}</div>`)}
             </section>
             <section class="delta-section" data-delta-section="profile">
                 <h3>Profile</h3>
-                <div class="delta-prose-grid">
-                    <div><h4>Personality${changedMark(selected, 'personality')}</h4>${proseHtml(selected.personality)}</div>
-                    <div><h4>Speech${changedMark(selected, 'speech')}</h4>${proseHtml(selected.speech)}</div>
-                    <div class="delta-wide"><h4>Behavioral Levers${changedMark(selected, 'behaviorProfile')}</h4>${listHtml(selected.behaviorProfile, 'No behavioral levers established yet.')}</div>
-                    <div class="delta-wide"><h4>Appearance${changedMark(selected, 'appearance')}</h4>${appearanceFormsHtml(selected)}</div>
-                    <div class="delta-wide"><h4>Mannerisms${changedMark(selected, 'mannerisms')}</h4>${listHtml(selected.mannerisms)}</div>
-                </div>
+                ${knownFieldsHtml([
+                    ['personality', knownText(selected.personality), `<div><h4>Personality${changedMark(selected, 'personality')}</h4>${proseHtml(selected.personality)}</div>`],
+                    ['speech', knownText(selected.speech), `<div><h4>Speech${changedMark(selected, 'speech')}</h4>${proseHtml(selected.speech)}</div>`],
+                    ['behavioral levers', selected.behaviorProfile?.length, `<div class="delta-wide"><h4>Behavioral Levers${changedMark(selected, 'behaviorProfile')}</h4>${listHtml(selected.behaviorProfile, 'No behavioral levers established yet.')}</div>`],
+                    ['appearance', knownText(selected.appearance) || selected.appearanceModel?.appearanceForms?.length || knownText(selected.currentPresentation), `<div class="delta-wide"><h4>Appearance${changedMark(selected, 'appearance')}</h4>${appearanceFormsHtml(selected)}</div>`],
+                    ['mannerisms', selected.mannerisms?.length, `<div class="delta-wide"><h4>Mannerisms${changedMark(selected, 'mannerisms')}</h4>${listHtml(selected.mannerisms)}</div>`],
+                ], cards => `<div class="delta-prose-grid">${cards}</div>`)}
             </section>
             <section class="delta-section" data-delta-section="dynamic">
                 <h3>Player Dynamic${changedMark(selected, 'relationshipSummary')}</h3>
@@ -1179,6 +1191,8 @@ const STYLES = `
 #${ROOT_ID} .delta-section h4 { margin:0 0 5px; font-size:.77rem; letter-spacing:.05em; text-transform:uppercase; color:var(--delta-muted); }
 #${ROOT_ID} .delta-section p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
 #${ROOT_ID} .delta-muted { color:var(--delta-muted); }
+#${ROOT_ID} .delta-section .delta-unknown-line { margin-top:10px; color:var(--delta-muted); font-size:max(12px,.85em); font-style:italic; }
+#${ROOT_ID} .delta-section h3 + .delta-unknown-line { margin-top:0; }
 #${ROOT_ID} .delta-current-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 #${ROOT_ID} .delta-current-card { min-width:0; padding:10px 11px; border:1px solid rgba(255,255,255,.075); border-radius:8px; background:rgba(0,0,0,.12); }
 #${ROOT_ID} .delta-current-card b { display:block; margin-bottom:3px; font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--delta-muted); }

@@ -31,6 +31,15 @@ function raceChip(npc) {
     return `<span class="codex-chip" title="Race: assumed human (not stated by card, lore or story)"><i aria-hidden="true">${ICONS.race}</i>Human</span>`;
 }
 
+// One-line lead under the name, built only from fields with real values (design review #2).
+function leadLine(npc) {
+    const known = value => {
+        const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+        return /^(?:unknown|unspecified|none|n\/a)$/i.test(text) ? '' : text;
+    };
+    return [known(occupationOf(npc)), known(npc.location || npc.homeBase), known(npc.mood)].filter(Boolean).join(' · ');
+}
+
 export function codexHeaderHtml(npc) {
     if (!npc) return '<header class="codex-head is-empty"><div class="codex-ident"><h2>No dossier selected</h2></div></header>';
     const subtitle = [npc.gender, npc.age ? `age ${npc.age}` : npc.apparentAge ? `looks ${npc.apparentAge}` : '', npc.aliases?.length ? `aka ${npc.aliases.slice(0, 2).join(', ')}` : '']
@@ -38,12 +47,14 @@ export function codexHeaderHtml(npc) {
     const portrait = npc.portrait
         ? `<img src="${escapeHtml(npc.portrait)}" alt="${escapeHtml(npc.name)} portrait">`
         : `<span class="codex-initial" aria-hidden="true">${escapeHtml(String(npc.name || '?').trim().charAt(0).toUpperCase())}</span>`;
+    const lead = leadLine(npc);
     const tags = (npc.tags || []).map((tag, index) => `<span class="codex-chip codex-tag"><i aria-hidden="true">${ICONS.tag}</i>${escapeHtml(tag)}<button type="button" data-codex-untag="${index}" aria-label="Remove tag ${escapeHtml(tag)}">×</button></span>`).join('');
     return `<header class="codex-head" data-npc-id="${escapeHtml(npc.id)}" data-tags="${escapeHtml(JSON.stringify(npc.tags || []))}">
         <button type="button" class="codex-portrait${npc.portrait ? ' delta-portrait-expand' : ''}" data-npc-id="${escapeHtml(npc.id)}" ${npc.portrait ? `aria-label="View ${escapeHtml(npc.name)} portrait full size"` : 'tabindex="-1" aria-hidden="true"'}>${portrait}</button>
         <div class="codex-ident">
             <div class="codex-title"><h2>${escapeHtml(npc.name)}</h2><span class="delta-status delta-status-${escapeHtml(npc.bucket)}">${escapeHtml(npc.statusLabel)}</span></div>
-            <p class="codex-sub">${escapeHtml(subtitle || occupationOf(npc) || 'Identity details not established')}</p>
+            ${lead ? `<p class="codex-lead">${escapeHtml(lead)}</p>` : ''}
+            ${subtitle || !lead ? `<p class="codex-sub">${escapeHtml(subtitle || occupationOf(npc) || 'Identity details not established')}</p>` : ''}
             <div class="codex-chips">
                 ${chip('faction', 'Faction', npc.faction)}
                 ${chip('location', 'Location', npc.location || npc.homeBase)}
@@ -75,6 +86,7 @@ ${r} .codex-initial { display:grid; place-items:center; height:100%; font:700 3r
 ${r} .codex-ident { grid-area:ident; min-width:0; display:grid; align-content:start; gap:6px; }
 ${r} .codex-title { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 ${r} .codex-title h2 { margin:0; font:700 1.6rem/1.15 Georgia,"Times New Roman",serif; color:#b6eee4; }
+${r} .codex-lead { margin:0; color:var(--delta-text, #e7f1f4); font-size:.95rem; line-height:1.35; }
 ${r} .codex-sub { margin:0; color:var(--delta-muted, #a9a39a); font-size:.88rem; }
 ${r} .codex-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
 ${r} .codex-chip { display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:3px 10px; border:1px solid var(--delta-line, rgba(91,201,189,.22)); border-radius:7px; background:rgba(255,255,255,.035); color:inherit; font-size:.8rem; }
