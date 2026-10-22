@@ -2358,7 +2358,7 @@ function currentExchangeTranscript(messageId = null) {
 function currentExchangeProse(messageId = null) {
     const ctx = getContext();
     return (currentExchangeMessages(messageId) || []).map(message => {
-        const body = storyProse(message.mes || '');
+        const body = storyProse(stripFlorisLog(message.mes || ''));
         const speaker = message.name || (message.is_user ? ctx.name1 : ctx.name2) || '';
         return body ? `${speaker}: ${body}` : '';
     }).filter(Boolean).join('\n');
@@ -3720,7 +3720,7 @@ async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript,
         .filter(npc => !npc?.archived && !isTerminalNpcDeath(npc))
         .filter(npc => {
             const raw = returned.find(item => rawScanMatchesExisting(item, npc));
-            if (!currentExchangeRelationshipRelevant(npc, prose, raw, options)) return false;
+            if (!currentExchangeRelationshipRelevant(npc, prose, raw, { ...options, currentExchangeOnly: true })) return false;
             return !raw || !hasCompletePrimaryRelationshipDecision(raw, transcript);
         });
     if (!targets.length) return { decisions: new Map(), used: false, responseChars: 0, retried: false, targetCount: 0 };

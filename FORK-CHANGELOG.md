@@ -129,3 +129,27 @@ BaiBai supplies only source-verified, current-reply scene participants to the ex
 The prompt projection is intentionally reversible: stored dossier/UI presence remains the scanner result; stale/removed BaiBai data disappears on prompt rebuild. BaiBai change/ready events refresh the injection; ordinary pre-generation refresh handles late summaries. The paired BaiBai fork stamps new single-floor summaries with a chat/group/floor/cleaned-prefix/swipe fingerprint captured before provider work. Its existing getFloor API exposes presenceSourceValid separately from leaf validity. Old, carried-over and batch-only summaries cannot authorize presence. Text/earlier-branch edits or swipe/chat changes fail closed without changing summary retention. Fingerprint checks are deterministic change detection, not cryptographic authentication.
 
 Checks: production adapter tests; synthetic-host prompt delivery and invalidation; full Codex tests/compatibility/runtime smoke; module validation, prompt and Stage9 measurements; verified package. Existing prompt hashes/request budgets unchanged. Fresh checkout CRLF initially broke six LF-sensitive tests; normalizing test checkout files fixed these without changing tracked behavior. No paid-provider trial is claimed. Broader upstream adoption remains parked in the separate npc_state_delta working tree.
+
+## 22 October 2026 - compatible upstream adoption through 1.2.19
+
+Upstream main f6e92f580f1caf549f4840a8fdba5dd4af983ce3 reviewed. Adopted ordinary-scanner and standalone UI changes while retaining the deployed BaiBai presence bridge.
+
+| Upstream | Disposition |
+|---|---|
+| 1.2.9 one-pass rewrite tolerance | Parked: this fork uses separate scanner and existing image-only edit isolation; accepting arbitrary rewritten replies would weaken source checks. |
+| 1.2.10 World State presence authority | Parked broad override; retain source-verified narrow BaiBai prompt promotion, no saved actor takeover. |
+| 1.2.11 repeat habit evidence | Adopted source tags for single-exchange scans and independent-message repeat handling. Capture reminders/catch-up parked with one-pass; no new background calls. |
+| 1.2.12 relationship request reduction | Adapted narration-only targeting/context, retains Floris-log and BaiBai-image cleanup and existing scoring/dispatcher. Capture coverage flags not imported. |
+| 1.2.13 What's sent | Adopted existing actor-injection preview. Story Block tabs and one-pass reminder placement have no matching owner in our stack; parked. |
+| 1.2.14 compact hints, redundant work | Adopted expandable setting hints and unused/shared helper cleanup; fork already passes scene text and named IDs into injection. |
+| 1.2.15 relationship changes, Advanced settings | Adopted badges using our existing dossier turn, not upstream's absent reply field; settings regrouped without changing values. Story Suite tab changes parked with that integration. |
+| 1.2.16 prompt placement | Adopted correct explicit depth zero handling. No automatic depth migration or new prompt keys; user placement retained. One-pass static/tail architecture parked. |
+| 1.2.17 compact/deduplicated one-pass | Parked: would introduce a second capture workflow and change story-model output requirements. |
+| 1.2.18 helper cleanup | Adopted shared plain/escapeHtml imports. |
+| 1.2.19 existing NPC memories | Adopted profileUpdates memory ingestion through existing bounded deduplication; manual memory locks honored on both paths. Scanner/import rules clarify additions and npcs[] location. |
+
+Compatibility: saga-canon.js (TunnelVision bridge), actor-stack.js (including BaiBai), knowledge.js, actor-portrayal.js and scanner-routing.js are unchanged from deployed535e101. No settings defaults, provider/reasoning parameters, actor ownership, lifecycle format or persistent schema migration. NPC memories remain actor-specific accepted memories, not another BaiBai event-summary writer.
+
+Verification: full1171tests plus compatibility and synthetic runtime smoke passed; three additional focused source/cleanup/memory-lock tests passed. Validation, prompt measurement, Stage9 budget assertions and verified ZIP passed. Scanner/full-window/retry prompts +39characters, dossier import +52; Refresh/backfill/relationship rules and dispatcher counts/output allowances unchanged. Existing prompt budget fixture updated for these explicit memory clarifications. LF normalization was required for source-layout tests on Windows, without semantic changes to unrelated files. No fresh provider trial required for these bounded changes.
+
+Deployment/remote CI status is recorded separately in the workspace adoption report. Application remains2.0.2; no new release tag or data-format version claimed.

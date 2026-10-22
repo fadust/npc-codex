@@ -1829,7 +1829,7 @@ test('routine scanner prompt has bounded overhead and delta/profile tiers', () =
     const overhead = prompt.length - transcript.length;
     // 1.0.99 adds the user-authorized "if no named forms" qualifier to the Appearance rule.
     // fadust fork: +~460 chars for the knowledge-ledger rule and its JSON example.
-    assert.ok(overhead < 8100, `routine scanner overhead should stay below 8100 chars after the bounded Appearance clarifications and knowledge rule, got ${overhead}`);
+    assert.ok(overhead < 8150, `routine scanner overhead should stay below 8150 chars after the bounded Appearance clarifications and knowledge rule, got ${overhead}`);
     assert.match(prompt, /Return compact JSON deltas/i);
     assert.match(prompt, /Existing relationship delta example/i);
     assert.match(prompt, /Relevant live context \(dynamic fields only\)/i);

@@ -441,17 +441,15 @@ function reconcileDocumentSections(parent, markup, reset = false) {
     while (parent.children.length > children.length) parent.lastElementChild.remove();
 }
 
-// (1.2.15) The change the latest reply made to one axis, beside its meter: ▲3 / ▼2. Only for a change
-// recorded at the latest reply (an older one is history, shown below the meters); tension rising reads
-// as bad, the other axes rising as good.
+// Show a change beside its meter only in the current dossier turn; older changes stay in history.
 export function relationshipStepHtml(axis, label, change, latestReply) {
-    const reply = wholeNumber(latestReply);
-    if (!change || reply === null || wholeNumber(change.message) !== reply) return '';
+    const reply = Number.isInteger(latestReply) ? latestReply : null;
+    if (!change || reply === null || change.turn !== reply) return '';
     const step = Math.round(Number(change.delta?.[axis]) || 0);
     if (!step) return '';
     const up = step > 0;
     const good = axis === 'tension' ? !up : up;
-    const title = `${label} ${up ? 'up' : 'down'} ${Math.abs(step)} since the last reply (reply #${reply})`;
+    const title = `${label} ${up ? 'up' : 'down'} ${Math.abs(step)} at the current dossier turn ${reply}`;
     return `<span class="delta-rel-step delta-rel-step-${good ? 'good' : 'bad'}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${up ? '▲' : '▼'}${Math.abs(step)}</span>`;
 }
 
@@ -948,7 +946,7 @@ class DeltaDossierUi {
             <section class="delta-section delta-player-card" data-delta-section="player">
                 <h3>Player relationship${changedMark(selected, 'relationship')}</h3>
                 <div class="delta-rel-grid">
-                    ${RELATIONSHIP_AXES.map(([axis, label]) => relationshipAxis(label, selected.relationship[axis], axis, selected.lastRelationshipChange, this.projection?.reply)).join('')}
+                    ${RELATIONSHIP_AXES.map(([axis, label]) => relationshipAxis(label, selected.relationship[axis], axis, selected.lastRelationshipChange, this.projection?.turn)).join('')}
                 </div>
                 ${lastRelationshipChangeHtml(selected.lastRelationshipChange)}
             </section>
