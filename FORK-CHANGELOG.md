@@ -4,6 +4,8 @@ This file tracks our maintained fork's changes and its relationship to [NPC Stat
 
 ## Current fork version — 2.0.2
 
+23 October: added the read-only `imageActors` appearance API for BaiBai Image, with matching chat/source/lineage checks and exact-checkpoint historical fallback. Portrait prose is also sent as `nl` for semantic-only ComfyUI workflows. No scanner prompts, request budgets, state formats or numerical mechanics changed.
+
 Version bumped on 18 October 2026 to package the integration and fixes below. 2.0.2 adds unique nickname recall; persisted formats are unchanged. No GitHub release or tag is implied.
 
 ## Comparison checkpoint — 18 October 2026

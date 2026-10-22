@@ -1,4 +1,5 @@
 import { codexSettings } from './settings-identity.js';
+import { resolveNpcAppearance } from './appearance.js';
 import { ACTOR_OWNERS, resolveActor, actorProfiles, readStoryContinuity, withBaiBaiPresence } from './actor-stack.js';
 import { PORTRAYAL_REFERENCES, acceptPortrayal, renderPortrayal } from './actor-portrayal.js';
 /* NPC Codex - standalone SillyTavern extension */
@@ -140,6 +141,7 @@ import {
     bestAncestorState,
     chatLineage,
     fingerprintMessage,
+    imageNpcsAtFloor,
     firstLineageDivergence,
     lineageCheckpointKey,
     addUserDismissedGroup,
@@ -7620,6 +7622,23 @@ window.NPCCodex = Object.freeze({
     actorOwnership: () => ({ ...ACTOR_OWNERS, enabled: getSettings().enabled && getSettings().inject, revision: Number(stateVersions.get(getChatKey()) || 0) }),
     ownsActor: name => getSettings().enabled && getSettings().inject && chatHydrationStatus(getChatKey()) === 'ready' && !!resolveActor(eligibleActors(getChatState().npcs), name),
     actorProfiles: () => chatHydrationStatus(getChatKey()) === 'ready' ? actorProfiles(eligibleActors(getChatState().npcs), Number(stateVersions.get(getChatKey()) || 0)) : [],
+    imageActors: ({ chatId, groupId = null, floor, sourceText } = {}) => {
+        const ctx = getContext();
+        const key = getChatKey();
+        const message = ctx.chat?.[floor];
+        if (!getSettings().enabled || chatHydrationStatus(key) !== 'ready'
+            || chatId !== ctx.getCurrentChatId?.() || groupId !== (ctx.groupId || null)
+            || !message || message.is_user || typeof sourceText !== 'string'
+            || fingerprintMessage({ ...message, mes: sourceText }) !== fingerprintMessage(message)) return null;
+        const npcs = imageNpcsAtFloor(getChatState(), ctx.chat, floor);
+        if (!npcs) return null;
+        return { apiVersion: 1, chatId, groupId, floor, revision: Number(stateVersions.get(key) || 0),
+            actors: npcs.map(npc => ({ id: npc.id, name: npc.name, aliases: [...(npc.aliases || [])],
+                archived: !!npc.archived, appearance: resolveNpcAppearance(npc) ? buildNpcPortraitPrompts({ ...npc,
+                    portraitPromptPositive: '', portraitPromptNegative: '', portraitPromptReplace: false }, {
+                    format: 'natural', composition: '', stylePositive: '', styleNegative: '', useMood: false, useLocation: false,
+                }).positive : '' })) };
+    },
     getNpc: npcId => {
         const npc = getChatState().npcs.find(item => item.id === String(npcId || ''));
         return npc ? structuredClone(npc) : null;

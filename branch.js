@@ -973,6 +973,19 @@ function matchingCheckpoints(checkpoints, lineage) {
         .sort((a, b) => a.messageId - b.messageId || a.createdAt - b.createdAt);
 }
 
+// Image consumers may read an exact historical boundary, never substitute today's appearance.
+export function imageNpcsAtFloor(state, chat, floor) {
+    if (!Number.isInteger(floor) || floor < 0 || floor >= chat.length) return null;
+    const lineage = chatLineage(chat);
+    const latest = latestAssistantMessageId(chat);
+    if (floor === latest && Array.isArray(state.lineage) && state.lineage.length <= lineage.length
+        && state.lineage.every((key, i) => key === lineage[i])
+        && !(state.lastScannedMessageId > floor)) return state.npcs || [];
+    const checkpoint = matchingCheckpoints(state.checkpoints || [], lineage)
+        .filter(item => item.messageId === floor).at(-1);
+    return checkpoint?.snapshot?.npcs || null;
+}
+
 function restoreLinearBoundaryFromJournal(state, previousLineage, currentLineage, divergence) {
     if (!Number.isInteger(divergence) || divergence < 0) return null;
     if (!Array.isArray(previousLineage) || !Array.isArray(currentLineage)) return null;

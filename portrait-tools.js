@@ -12,7 +12,7 @@ export async function generateBaiBaiPortrait({ positive, negative, seed, name },
     const status = bridge.getBackendStatus();
     if (!status.configured) throw new Error(status.reason || 'Configure BaiBai Image first.');
     if (!String(positive || '').trim()) throw new Error('Positive portrait prompt is empty.');
-    const result = await bridge.generate({ prompt: positive, negative, seed, size: 'portrait', character: name, save: true });
+    const result = await bridge.generate({ prompt: positive, nl: positive, negative, seed, size: 'portrait', character: name, save: true });
     if (!/^data:image\/(?:png|jpeg|webp);base64,/i.test(result?.dataUrl || '')) throw new Error('BaiBai Image returned no supported image.');
     return { url: originalPortraitSource({ generatedFrom: result.path, dataUrl: result.dataUrl }), seed: result.seed };
 }

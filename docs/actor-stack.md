@@ -2,6 +2,10 @@
 
 NPC Codex remains the actor writer and sole actor prompt owner. Saga supplies applicable canon; BaiBai supplies recorded continuity hints and completed-event history. Selected BunnyMo references support manually approved portrayal in the existing dossier editor. No StorySuite dependency or CarrotKernel injector is installed.
 
+## Read-only image appearance
+
+`NPCStateDelta.imageActors({chatId, groupId, floor, sourceText})` supplies only IDs, names/aliases, archive flags and semantic accepted appearance to BaiBai Image. It verifies active chat, hydration and source text; the latest reply uses accepted state on the matching lineage, and older replies require an exact matching checkpoint. Unavailable history returns null rather than substituting current appearance. Image overlays these references temporarily; manual/global render overrides remain authoritative. No image plan writes a dossier, and no additional provider call is introduced. Portrait requests also supply their prose in BaiBai's `nl` field so a semantic-only ComfyUI workflow can serve both destinations.
+
 ## Upstream provenance and fixes
 
 Selected behavior was ported from kohz87/npc_codex through 136d55e7efb720a3417af45bbe5e37651bdc69f3 (October 17): configurable custom fields, role-alias matching, distinctive-name recall, mentioned/deceased reference lines and editable aliases. Existing Codex lifecycle, storage and development machinery stays authoritative.
