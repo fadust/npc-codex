@@ -563,3 +563,15 @@ body.npc-state-delta-portrait-generator-open { overflow: hidden !important; }
 .npc-state-delta-extension small.is-open .delta-hint-rest { display: inline; }
 .npc-state-delta-extension .delta-hint-more { cursor: pointer; text-decoration: underline; }
 .npc-state-delta-extension .delta-whats-sent-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; font-size: 14px; }
+
+/* Readability floor (design review #9, 2026-10-22): dossier text at least 12px, contrast at least 4.5:1.
+   The doubled id outranks the dossier styles injected from JS. The dulled empty chips (e.g. Race) are intentional and left alone. */
+#npc_codex_dossier_root#npc_codex_dossier_root :is(
+    .delta-section-jump, .delta-kicker, .delta-chat-state, .delta-status, .delta-changed-mark,
+    .delta-stat-schema, .delta-map-legend, .delta-map-label .delta-map-short, .delta-current-card b,
+    .delta-cast-copy small, .delta-rel-last-head small, .delta-map-strip-head small,
+    .delta-appearance-form-summary summary small) { font-size: 12px !important; }
+#npc_codex_dossier_root#npc_codex_dossier_root .delta-map-initial { font-size: max(12px, calc(var(--node) * .42)); }
+/* The ring word is SVG text scaled with the map (about 0.36x in a 280px map): 34 units renders about 12px. */
+#npc_codex_dossier_root#npc_codex_dossier_root .delta-map-outer-word { font-size: 34px; fill: rgba(200, 150, 120, .9); }
+#npc_codex_dossier_root#npc_codex_dossier_root :is(.delta-filter span, .delta-map-strip-head small) { opacity: .9; }
