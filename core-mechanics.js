@@ -1277,6 +1277,23 @@ export function stripUiNoise(text) {
 
 
 
+export function storyProse(text) {
+    let source = String(text ?? '')
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<!--[\s\S]*?(?:-->|$)/g, ' ')
+        .replace(/<Blocks\b[^>]*>[\s\S]*?(?:<\/Blocks\s*>|$)/gi, ' ')
+        .replace(/<details\b[^>]*>[\s\S]*?<\/details>/gi, ' ');
+    for (const tag of ['World_State', 'NPC_Inner_Chatter', 'Story_Tracker', 'CYOA', 'Bonds', 'Character_Sheet', 'New_NPC', 'NPC_Update']) {
+        source = source.replace(new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?(?:<\\/${tag}\\s*>|$)`, 'gi'), ' ');
+    }
+    return source
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 export function npcMatchesLabel(npc, label) {
     const key = normalizeName(label);
     if (!key || !npc) return false;
@@ -2893,21 +2910,47 @@ export function durableProfileEvidenceReason(field, existing, incoming, evidence
     return grounded ? cleanText(evidence.join(' '), 500) : '';
 }
 
+export function tagScanEvidence(parsed, messageId) {
+    if (!parsed || typeof parsed !== 'object' || !Number.isInteger(messageId) || messageId < 0) return parsed;
+    const rows = Array.isArray(parsed.profileUpdates) ? parsed.profileUpdates : (Array.isArray(parsed.profile_updates) ? parsed.profile_updates : null);
+    if (!rows) return parsed;
+    const tag = item => (typeof item === 'string' && item.trim() && !/^\s*\[m\d+\]/i.test(item) ? `[m${messageId}] ${item.trim()}` : item);
+    const tagged = rows.map(row => {
+        const evidence = row?.evidence;
+        if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return row;
+        return { ...row, evidence: Object.fromEntries(Object.entries(evidence).map(([field, list]) => [field, Array.isArray(list) ? list.map(tag) : list])) };
+    });
+    return Array.isArray(parsed.profileUpdates) ? { ...parsed, profileUpdates: tagged } : { ...parsed, profile_updates: tagged };
+}
+
+// (1.2.11) The message an evidence item was seen in ("[m12] …"), or '' when it carries no tag.
+const evidenceSource = item => (String(item ?? '').match(/^\s*\[m(\d+)\]/i) ?? [])[1] ?? '';
+
 function newProfileEvidence(prior = [], incoming = [], duplicateSimilarity = 0.56) {
     const before = cleanList(prior, BEHAVIOR_EVIDENCE_LIMIT * 2, DURABLE_PROFILE_LIMITS.evidence);
     return cleanList(incoming, PROFILE_EVIDENCE_LIMIT * 2, DURABLE_PROFILE_LIMITS.evidence).filter(item =>
-        !before.some(old => normalizeName(old) === normalizeName(item) || durableSemanticSimilarity(old, item) >= duplicateSimilarity));
+        !before.some(old => {
+            if (normalizeName(old) === normalizeName(item)) return true;
+            // (1.2.11) Seen in another message is another sighting, however alike the words: only a
+            // re-read of the same message (or untagged near-copies) is a duplicate.
+            const was = evidenceSource(old);
+            const now = evidenceSource(item);
+            if (was && now && was !== now) return false;
+            return durableSemanticSimilarity(old, item) >= duplicateSimilarity;
+        }));
 }
 
 // A lever swing needs the behaviour seen again in a later scene. Two scenes of the same behaviour
 // are often narrated in similar words, so for Behavioral Levers only a near-copy (a replayed or
 // re-scanned observation) is a duplicate; related but distinct wording counts as a second sighting.
+// (1.2.11) So for Mannerisms: a habit is the same act again, in much the same words.
 const BEHAVIOR_EVIDENCE_DUPLICATE_SIMILARITY = 0.85;
+const REPEAT_EVIDENCE_FIELDS = new Set(['behaviorProfile', 'mannerisms']);
 
 function gradualProfileEvolutionReady(field, beforeEvidence, incomingEvidence) {
     const prior = beforeEvidence[field] || [];
     const fresh = newProfileEvidence(prior, incomingEvidence[field] || [],
-        field === 'behaviorProfile' ? BEHAVIOR_EVIDENCE_DUPLICATE_SIMILARITY : 0.56);
+        REPEAT_EVIDENCE_FIELDS.has(field) ? BEHAVIOR_EVIDENCE_DUPLICATE_SIMILARITY : 0.56);
     if (!prior.length || !fresh.length) return false;
     return fresh.some(now => prior.some(old => profileEvidenceRelated(old, now)));
 }
@@ -4360,7 +4403,8 @@ function applyIncoming(existing, incoming, turn, relationshipCaps = DEFAULT_RELA
     if (normalizeName(incomingName) === normalizeName(merged.name) && incoming.identityKind) {
         merged.identityKind = inferNpcIdentityKind(merged.name, incoming.identityKind);
     }
-    merged.memories = mergeImportantMemories(existing.memories, incoming.memories, incoming.memoryRetention, lifecycleOptions.memoryInputLimit || 3);
+    merged.memories = manualFields.has('memories') ? normalizeStoredMemories(existing.memories)
+        : mergeImportantMemories(existing.memories, incoming.memories, incoming.memoryRetention, lifecycleOptions.memoryInputLimit || 3);
     if (incoming.memoryDecision && !manualFields.has('memories')) {
         const remembered = applyMemoryDecision(merged, incoming.memoryDecision, { turn, sourceMessageId });
         merged.episodes = remembered.npc.episodes;
@@ -5258,6 +5302,13 @@ function applyDurableProfileUpdate(npc, raw = {}, options = {}) {
         }
     }
 
+    // Upstream 1.2.19: accept additive memories from either scanner channel, preserving locks.
+    if (!manualFields.has('memories') && (incoming.memories || []).length) {
+        const before = JSON.stringify(npc.memories || []);
+        npc.memories = mergeImportantMemories(npc.memories, incoming.memories, incoming.memoryRetention, options.memoryInputLimit || 3);
+        if (JSON.stringify(npc.memories) !== before) changed = true;
+    }
+
     const evidenceChanged = JSON.stringify(beforeEvidence) !== JSON.stringify(evidence);
     npc.profileEvidence = evidence;
     if (changed || evidenceChanged) npc.updatedAt = Date.now();
@@ -5639,6 +5690,7 @@ export function mergeScanResult(state, scanResult, options = {}) {
     // Personality/Speech/Appearance/Mannerisms accumulate evidence and refine even when the
     // scanner had no live-state delta worth returning for that NPC.
     const profileUpdateOptions = {
+        memoryInputLimit,
         developmentContext: options.developmentContext || '',
         targeted: options.allowTargetedDurableSeed === true || options.developmentSingleTarget === true,
     };

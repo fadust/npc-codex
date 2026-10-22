@@ -63,6 +63,8 @@ import {
     manualLifeStateRecord,
     protectTerminalNpc,
     parseScanJson,
+    tagScanEvidence,
+    storyProse,
     npcMatchesLabel,
     normalizeName,
     normalizeCustomFieldNames,
@@ -2329,12 +2331,12 @@ function currentExchangeUserDevelopmentContext(messageId = null) {
     return '';
 }
 
-function currentExchangeTranscript(messageId = null) {
+function currentExchangeMessages(messageId = null) {
     const ctx = getContext();
     const chat = ctx.chat || [];
     let assistantId = Number.isInteger(messageId) ? messageId : chat.length - 1;
     while (assistantId >= 0 && (chat[assistantId]?.is_system || chat[assistantId]?.is_user)) assistantId -= 1;
-    if (assistantId < 0) return recentTranscript(2);
+    if (assistantId < 0) return null;
     let userId = -1;
     for (let i = assistantId - 1; i >= 0; i -= 1) {
         if (chat[i]?.is_system) continue;
@@ -2342,11 +2344,24 @@ function currentExchangeTranscript(messageId = null) {
         // Do not walk across an older assistant turn looking for a distant user message.
         if (!chat[i]?.is_user) break;
     }
-    return [userId >= 0 ? chat[userId] : null, chat[assistantId]]
-        .filter(Boolean)
-        .map(cleanMessage)
-        .filter(Boolean)
-        .join('\n');
+    return [userId >= 0 ? chat[userId] : null, chat[assistantId]].filter(Boolean);
+}
+
+function currentExchangeTranscript(messageId = null) {
+    const messages = currentExchangeMessages(messageId);
+    if (!messages) return recentTranscript(2);
+    return messages.map(cleanMessage).filter(Boolean).join('\n');
+}
+
+// (1.2.12) The current exchange's story alone (narration and dialogue, no World State or blocks):
+// who a relationship moment involves, and what the relationship evaluator is sent.
+function currentExchangeProse(messageId = null) {
+    const ctx = getContext();
+    return (currentExchangeMessages(messageId) || []).map(message => {
+        const body = storyProse(message.mes || '');
+        const speaker = message.name || (message.is_user ? ctx.name1 : ctx.name2) || '';
+        return body ? `${speaker}: ${body}` : '';
+    }).filter(Boolean).join('\n');
 }
 
 // Story day of a message: its own dated World State block, else the nearest earlier dated message
@@ -2479,7 +2494,7 @@ function updateInjection() {
     const prompt = buildInjection(eligibleActors(state.npcs), sceneText, state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds, customFieldNames: settings.customFieldNames, recallScores, storyDay: storyDayAt(latestMessageId(true)) });
     scheduleRecallRefresh(state, sceneText, injectionKey);
     const present = eligibleActors(state.npcs).filter(npc => npc?.present && !npc?.archived);
-    const depth = Math.max(0, Math.min(20, Number(settings.injectDepth) || 1));
+    const depth = Math.max(0, Math.min(20, Number.isFinite(Number(settings.injectDepth)) ? Number(settings.injectDepth) : 1));
     lastInjection = {
         text: prompt,
         reason: prompt ? '' : (present.length ? 'No present NPC was selected for injection.' : 'No NPC is marked present in the latest scanned scene.'),
@@ -2498,17 +2513,31 @@ function updateInjection() {
     );
 }
 
+function renderWhatsSent() {
+    const root = document.querySelector('[data-delta-whats-sent]');
+    if (!root) return;
+    const preview = injectionPreview();
+    const head = document.createElement('small');
+    head.textContent = preview.text
+        ? `${preview.placement} · approximately ${preview.estimatedTokens} tokens · last built ${preview.builtAt}`
+        : preview.reason || 'Nothing is currently sent.';
+    const body = document.createElement('pre');
+    body.className = 'delta-whats-sent-text';
+    body.textContent = preview.text;
+    root.replaceChildren(head, body);
+}
+
 function injectionPreview() {
     const settings = getSettings();
     const state = getChatKey() === 'no-chat' ? { npcs: [] } : getChatState();
     const text = String(lastInjection.text || '');
     const lines = text.split('\n');
-    const injectedNpcs = lines.map(line => line.match(/^- (.+?)(?: \(named by player\))?: IDENTITY/)?.[1]).filter(Boolean);
+    const injectedNpcs = lines.map(line => line.match(/^- (.+?)(?: \(named by player\))?: (?:IDENTITY|KNOWLEDGE GATE)/)?.[1]).filter(Boolean);
     const referencedNpcs = lines.map(line => line.match(/^- (.+?) \((?:mentioned, not present|deceased)/)?.[1]).filter(Boolean);
     return {
         sending: Boolean(text),
         reason: lastInjection.reason || '',
-        placement: `In chat as a system message, ${lastInjection.depth ?? (Number(settings.injectDepth) || 1)} message(s) from the end`,
+        placement: `In chat as a system message, ${lastInjection.depth ?? (Number.isFinite(Number(settings.injectDepth)) ? Number(settings.injectDepth) : 1)} message(s) from the end`,
         builtAt: lastInjection.at ? new Date(lastInjection.at).toISOString() : '',
         presentNpcs: (state.npcs || []).filter(npc => npc?.present && !npc?.archived).map(npc => npc.name),
         namedByPlayer: (lastInjection.namedByPlayer || []).filter(name => injectedNpcs.includes(name)),
@@ -3678,6 +3707,8 @@ async function runCastPass(ctx, existingNpcs, transcript, options = {}) {
 
 async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript, settings, options = {}) {
     const returned = Array.isArray(parsed?.npcs) ? parsed.npcs : [];
+    // Empty prose means no story participants; never fall back to structured rosters.
+    const prose = options.prose === undefined ? transcript : String(options.prose);
     // Relationship reconciliation is keyed to the CURRENT exchange, not to whether the broad
     // dossier scanner happened to return a row. This prevents an NPC who acts early in a long
     // response from being skipped merely because the response ends with another cast/location.
@@ -3685,7 +3716,7 @@ async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript,
         .filter(npc => !npc?.archived && !isTerminalNpcDeath(npc))
         .filter(npc => {
             const raw = returned.find(item => rawScanMatchesExisting(item, npc));
-            if (!currentExchangeRelationshipRelevant(npc, transcript, raw, options)) return false;
+            if (!currentExchangeRelationshipRelevant(npc, prose, raw, options)) return false;
             return !raw || !hasCompletePrimaryRelationshipDecision(raw, transcript);
         });
     if (!targets.length) return { decisions: new Map(), used: false, responseChars: 0, retried: false, targetCount: 0 };
@@ -3698,7 +3729,7 @@ async function runFocusedRelationshipPass(ctx, parsed, existingNpcs, transcript,
         const batch = targets.slice(offset, offset + 4);
         try {
             const relationshipPrompt = buildRelationshipPassPrompt({
-                transcript,
+                transcript: prose,
                 targets: batch,
                 userName: ctx.name1 || 'User',
                 relationshipCriteria: settings.relationshipCriteria,
@@ -3938,6 +3969,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
     if (getChatKey() !== scanChatKey || (sourceFingerprint !== null && sourceFingerprint !== fingerprintMessage(getContext().chat?.[messageId] || {}))) return false;
     const scanLineage = chatLineage(ctx.chat || []);
     const currentTranscript = currentExchangeTranscript(messageId);
+    const currentProse = currentExchangeProse(messageId);
     const fullWindowScan = Boolean(!manual && settings.fullScanEveryTurn);
     const transcript = (manual || fullWindowScan) ? recentTranscript(settings.scanDepth) : currentTranscript;
     const userDevelopmentContext = (manual || fullWindowScan)
@@ -4012,7 +4044,8 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             return false;
         }
 
-        const resolvedParsed = resolveInterimIdentityPromotions(parsed, state.npcs, state.candidates);
+        const singleReply = !manual && !fullWindowScan && Number.isInteger(messageId);
+        const resolvedParsed = resolveInterimIdentityPromotions(singleReply ? tagScanEvidence(parsed, messageId) : parsed, state.npcs, state.candidates);
         profileUpdateCount = Array.isArray(resolvedParsed.profileUpdates) ? resolvedParsed.profileUpdates.length : (Array.isArray(resolvedParsed.profile_updates) ? resolvedParsed.profile_updates.length : 0);
         // Relationship-edge extraction is a separate channel from ordinary NPC delta admission.
         // Add a deterministic fallback for explicit binary statements so a missed lifecycle field
@@ -4034,7 +4067,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
             state.npcs,
             currentTranscript || transcript,
             settings,
-            { currentExchangeOnly: manual || fullWindowScan, requestScope: operation.requestScope },
+            { currentExchangeOnly: manual || fullWindowScan, requestScope: operation.requestScope, prose: currentProse },
         );
         const castPass = await runCastPass(ctx, state.npcs, currentTranscript || transcript, { requestScope: operation.requestScope });
         if (!canonRevisionCurrent(scanCanonRevision) || !canonRevisionCurrent(castPass.canonRevision)) return false;
@@ -4122,7 +4155,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
                         batch,
                         currentTranscript || transcript,
                         settings,
-                        { currentExchangeOnly: true, requestScope: operation.requestScope },
+                        { currentExchangeOnly: true, requestScope: operation.requestScope, prose: currentProse },
                     );
                     for (const [id, decision] of result.decisions || []) combinedDecisions.set(id, decision);
                     combinedTargetCount += Number(result.targetCount || 0);
@@ -4385,9 +4418,14 @@ function buildSettingsHtml() {
         settingRow('npc_state_delta_full_scan_every_turn', 'Full scan every turn', '<input id="npc_state_delta_full_scan_every_turn" type="checkbox">', 'With Auto scan, reconcile the whole scan context after every reply instead of only the latest exchange. Overrides Scan every; relationship deltas still come only from the newest exchange.'),
         settingsSlot('full-cast'),
         settingRow('npc_state_delta_scan_every', 'Scan every', numberControl('npc_state_delta_scan_every', 1, 20, 'replies'), 'Quick-scan cadence when Full scan every turn is off.'),
+        settingRow('npc_state_delta_admission_mode', 'NPC admission', '<select id="npc_state_delta_admission_mode" class="text_pole"><option value="conservative">Conservative</option><option value="balanced">Balanced</option><option value="manual_only">Manual only</option></select>', 'Conservative: proper names immediately, role labels after recurrence. Balanced: also direct or persistent role NPCs. Manual only: every dossier needs Add NPC.'),
+    ].join('');
+    const advanced = [
         settingRow('npc_state_delta_scan_depth', 'Scan context', numberControl('npc_state_delta_scan_depth', 2, 30, 'messages'), 'History window for full, manual and Refresh scans. Quick automatic scans read only the latest user + assistant exchange.'),
         settingsSlot('scanner-output'),
-        settingRow('npc_state_delta_admission_mode', 'NPC admission', '<select id="npc_state_delta_admission_mode" class="text_pole"><option value="conservative">Conservative</option><option value="balanced">Balanced</option><option value="manual_only">Manual only</option></select>', 'Conservative: proper names immediately, role labels after recurrence. Balanced: also direct or persistent role NPCs. Manual only: every dossier needs Add NPC.'),
+        settingRow('npc_state_delta_inject_budget', 'Injection budget', numberControl('npc_state_delta_inject_budget', 512, 6000, 'tokens', { step: 100, prefix: '<small>~</small>' }), 'Upper limit; only what the present NPCs need is used. The default 4000 lets detailed dossiers reach the roleplay model in full. When it runs short, lower-priority fields, then lower-ranked NPCs, are trimmed first.'),
+        settingRow('npc_state_delta_mid_delete_rewind', 'Rewind dossiers on middle deletion', '<input id="npc_state_delta_mid_delete_rewind" type="checkbox">', 'Off (default): deleting a message from the middle undoes only what that message changed and keeps later changes. On: every dossier rewinds to how it was just before the deleted message, discarding what later messages changed (no model requests).'),
+        settingRow('npc_state_delta_branch_rescan', 'Rescan changed branches', '<input id="npc_state_delta_branch_rescan" type="checkbox">', 'Re-evaluate the surviving branch after a swipe, edit or middle-message deletion.'),
     ].join('');
     const roster = `
         <h4 class="delta-settings-subhead">In-chat display</h4>
@@ -4395,7 +4433,6 @@ function buildSettingsHtml() {
         <label>Custom field names (up to six)<input id="npc_codex_custom_field_names" class="text_pole" value="${escapeHtml(getSettings().customFieldNames.join(', '))}" placeholder="Level, Class"></label>
         <h4 class="delta-settings-subhead">Generation injection</h4>
         ${settingRow('npc_state_delta_inject', 'Inject present NPC state', '<input id="npc_state_delta_inject" type="checkbox">', 'Only active NPCs present in the latest scanned scene are injected into generation.')}
-        ${settingRow('npc_state_delta_inject_budget', 'Injection budget', numberControl('npc_state_delta_inject_budget', 512, 6000, 'tokens', { step: 100, prefix: '<small>~</small>' }), 'Upper limit; only what the present NPCs need is used. The default 4000 lets detailed dossiers reach the roleplay model in full. When it runs short, lower-priority fields, then lower-ranked NPCs, are trimmed first.')}
         <h4 class="delta-settings-subhead">Vector memory recall</h4>
         ${settingRow('npc_state_delta_recall_enabled', 'Recall memories by meaning', '<input id="npc_state_delta_recall_enabled" type="checkbox">', 'Uses the Similharity server plugin + Qdrant. Falls back to keyword recall when unavailable.')}
         ${settingRow('npc_state_delta_recall_model', 'Embedding model', '<input id="npc_state_delta_recall_model" type="text" class="text_pole">', 'Model id on the embedding server, e.g. text-embedding-embeddinggemma-2.')}
@@ -4408,8 +4445,6 @@ function buildSettingsHtml() {
         ${settingRow('npc_state_delta_max', 'Maximum active NPCs', numberControl('npc_state_delta_max', 1, 100), 'Archived dossiers do not use an active slot.')}
         ${settingRow('npc_state_delta_archive_deaths', 'Archive confirmed deaths', '<input id="npc_state_delta_archive_deaths" type="checkbox">', 'Explicit current-timeline deaths archive instead of deleting. Ambiguous death language is ignored.')}
         ${settingRow('npc_state_delta_reactivate_archived', 'Reactivate on clear return', '<input id="npc_state_delta_reactivate_archived" type="checkbox">', 'Manual archives return when the NPC clearly reappears. Death archives need an explicit living return.')}
-        ${settingRow('npc_state_delta_mid_delete_rewind', 'Rewind dossiers on middle deletion', '<input id="npc_state_delta_mid_delete_rewind" type="checkbox">', 'Off (default): deleting a message from the middle undoes only what that message changed and keeps later changes. On: every dossier rewinds to how it was just before the deleted message, discarding what later messages changed (no model requests).')}
-        ${settingRow('npc_state_delta_branch_rescan', 'Rescan changed branches', '<input id="npc_state_delta_branch_rescan" type="checkbox">', 'Re-evaluate the surviving branch after a swipe, edit or middle-message deletion.')}
         <h4 class="delta-settings-subhead">Stale cleanup</h4>
         ${settingRow('npc_state_delta_auto_prune_stale', 'Auto-manage stale NPCs', '<input id="npc_state_delta_auto_prune_stale" type="checkbox">', 'Long-absent NPCs auto-archive, then stale auto-archives are deleted later. Manual, death and protected records are kept; deleted names can be rediscovered.')}
         ${settingRow('npc_state_delta_stale_archive_after', 'Auto-archive after', numberControl('npc_state_delta_stale_archive_after', 10, 999, 'replies'), 'Default 30. Replies since the NPC was last present or active off-screen.')}
@@ -4523,6 +4558,8 @@ function buildSettingsHtml() {
             ${settingsGroup('calendar', 'Calendar & birthdays', 'Fantasy months and optional campaign clock', settingsSlot('calendar'))}
             ${settingsGroup('portrait', 'Portrait generation', 'Image Generation prompts and style', portrait)}
             ${settingsGroup('rules', 'Scanner rules', 'Advanced relationship, memory and behavior rubrics', rules)}
+            ${settingsGroup('advanced', 'Advanced', 'Context, output and injection limits, branch handling', advanced)}
+            ${settingsGroup('sent', "What's sent", 'Current actor prompt handed to SillyTavern', `<div data-delta-whats-sent></div><button type="button" id="npc_state_delta_sent_refresh" class="menu_button">Refresh preview</button>`)}
             ${settingsGroup('maintenance', 'Data & maintenance', 'Backup, diagnostics and this chat', maintenance)}
           </div>
         </div>
@@ -4544,12 +4581,54 @@ function readOpenSettingsGroups() {
 }
 
 // Remember which settings groups the player keeps open; presentation only, never canonical state.
+const HINT_COMPACT_CHARS = 110;
+function compactSettingHints(root) {
+    for (const small of root?.querySelectorAll?.('.npc-state-delta-setting-row > span:first-child > small:not([data-delta-hint])') || []) {
+        small.dataset.deltaHint = '1';
+        if (small.children?.length) continue;
+        const text = String(small.textContent || '').trim();
+        const split = text.length > HINT_COMPACT_CHARS ? text.match(/^(.{20,160}?[.!?])\s+(\S[\s\S]*)$/) : null;
+        if (!split) continue;
+        const rest = document.createElement('span');
+        rest.className = 'delta-hint-rest';
+        rest.textContent = ` ${split[2]}`;
+        const more = document.createElement('span');
+        more.className = 'delta-hint-more';
+        more.setAttribute('role', 'button');
+        more.setAttribute('tabindex', '0');
+        more.textContent = 'more';
+        small.title = text;
+        small.replaceChildren(document.createTextNode(split[1]), rest, document.createTextNode(' '), more);
+    }
+}
+
+function toggleSettingHint(event) {
+    const more = event.target?.closest?.('.delta-hint-more');
+    if (!more) return;
+    if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+    // Inside the row's label: keep the click from toggling the setting.
+    event.preventDefault();
+    event.stopPropagation();
+    const small = more.parentElement;
+    const open = !small.classList.contains('is-open');
+    small.classList.toggle('is-open', open);
+    more.textContent = open ? 'less' : 'more';
+}
+
 function bindSettingsGroupMemory(root) {
     const groups = [...(root?.querySelectorAll?.('[data-delta-settings-group]') || [])];
     const open = new Set(readOpenSettingsGroups());
     for (const group of groups) group.open = open.has(group.dataset.deltaSettingsGroup);
+    for (const group of groups) if (group.open) setTimeout(() => compactSettingHints(group), 0);
+    root?.addEventListener?.('click', toggleSettingHint, true);
+    root?.addEventListener?.('keydown', toggleSettingHint, true);
+    root?.addEventListener?.('click', event => {
+        if (event.target?.closest?.('#npc_state_delta_sent_refresh')) renderWhatsSent();
+    });
     root?.addEventListener?.('toggle', event => {
         if (!event.target?.matches?.('[data-delta-settings-group]')) return;
+        if (event.target.open) compactSettingHints(event.target);
+        if (event.target.open && event.target.dataset.deltaSettingsGroup === 'sent') renderWhatsSent();
         const next = groups.filter(group => group.open).map(group => group.dataset.deltaSettingsGroup);
         try { globalThis.localStorage?.setItem?.(SETTINGS_OPEN_GROUPS_KEY, JSON.stringify(next)); } catch { /* optional */ }
     }, true);

@@ -603,3 +603,8 @@ body.npc-state-delta-portrait-generator-open { overflow: hidden !important; }
     }
   }
 }
+
+.npc-state-delta-extension .delta-hint-rest { display: none; }
+.npc-state-delta-extension small.is-open .delta-hint-rest { display: inline; }
+.npc-state-delta-extension .delta-hint-more { cursor: pointer; text-decoration: underline; }
+.npc-state-delta-extension .delta-whats-sent-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; font-size: 14px; }
