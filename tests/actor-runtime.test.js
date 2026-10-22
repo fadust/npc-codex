@@ -100,3 +100,25 @@ async function ariAutomaticChecks(mockState, eventSource, manualAddNpc, sleep, e
     delete globalThis.Saga;
 }
 test('Ari ten-turn production event loop applies automatic scans, personality and terminal continuity without manual rescue', () => runAriHostChecks(ariAutomaticChecks));
+
+async function presenceBridgeChecks(mockState, eventSource, manualAddNpc, sleep, extRoot) {
+    const runtime = globalThis.NPCStateDelta;
+    Object.assign(mockState.extensionSettings.npc_state_delta, { enabled: true, inject: true, autoScan: false });
+    mockState.context.chat = [{ is_user: true, mes: 'Wait.' }, { is_user: false, mes: 'The room is quiet.' }];
+    await manualAddNpc('Ari Vale');
+    let valid = true;
+    globalThis.STBaiBaiBook = { getFloor: floor => ({ apiVersion: 1, floor, role: 'assistant',
+        chat: { id: mockState.context.getCurrentChatId(), groupId: null, length: 2 },
+        memory: { valid: true, presenceSourceValid: valid, delta: { sceneFocus: { situation: 'Ari waits.', participants: ['Ari Vale'] } } } }) };
+    mockState.quietResponder = async args => /isolated dossier scanner/i.test(args.systemPrompt || '')
+        ? JSON.stringify({ npcs: [{ name: 'Ari Vale', present: false, relationshipImpact: 'none' }] }) : '{"people":[],"npcs":[]}';
+    assert.equal(await runtime.scan(), true);
+    assert.equal(runtime.getState().npcs.find(n => n.name === 'Ari Vale').present, false, 'scanner record remains canonical');
+    assert.match(runtime.injectionPreview().text, /Ari Vale/, 'fresh BaiBai correction reaches the actual host prompt');
+    valid = false;
+    assert.equal(await runtime.scan(), true);
+    assert.doesNotMatch(runtime.injectionPreview().text, /Ari Vale/, 'invalidated correction is not sticky');
+    delete globalThis.STBaiBaiBook;
+}
+
+test('BaiBai presence reaches the production prompt while leaving scanner records intact', () => runAriHostChecks(presenceBridgeChecks));
