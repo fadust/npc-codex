@@ -1,4 +1,4 @@
-import { ACTOR_OWNERS, resolveActor, actorProfiles, readStoryContinuity } from './actor-stack.js';
+import { ACTOR_OWNERS, resolveActor, actorProfiles, readStoryContinuity, withBaiBaiPresence } from './actor-stack.js';
 import { PORTRAYAL_REFERENCES, acceptPortrayal, renderPortrayal } from './actor-portrayal.js';
 /* NPC Codex - standalone SillyTavern extension */
 import { extension_settings, getContext } from '../../../extensions.js';
@@ -2491,9 +2491,13 @@ function updateInjection() {
     const namedNpcIds = namedByPlayerNpcIds(state);
     const sceneText = recentTranscript(4);
     const recallScores = recallCache.chatKey === injectionKey ? recallCache.scores : null;
-    const prompt = buildInjection(eligibleActors(state.npcs), sceneText, state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds, customFieldNames: settings.customFieldNames, recallScores, storyDay: storyDayAt(latestMessageId(true)) });
+    const sceneActors = withBaiBaiPresence(state.npcs, globalThis.STBaiBaiBook, {
+        chatId: ctx.getCurrentChatId?.(), groupId: ctx.groupId == null ? null : String(ctx.groupId),
+        chatLength: ctx.chat?.length || 0, floor: latestMessageId(true),
+    });
+    const prompt = buildInjection(eligibleActors(sceneActors), sceneText, state.turn, settings.injectLimit, settings.behaviorCriteria, settings.injectBudgetTokens, state.socialGraph, { namedNpcIds, customFieldNames: settings.customFieldNames, recallScores, storyDay: storyDayAt(latestMessageId(true)) });
     scheduleRecallRefresh(state, sceneText, injectionKey);
-    const present = eligibleActors(state.npcs).filter(npc => npc?.present && !npc?.archived);
+    const present = eligibleActors(sceneActors).filter(npc => npc?.present && !npc?.archived);
     const depth = Math.max(0, Math.min(20, Number.isFinite(Number(settings.injectDepth)) ? Number(settings.injectDepth) : 1));
     lastInjection = {
         text: prompt,
@@ -7360,6 +7364,8 @@ async function init() {
     installUiCaptureBridge();
     registerEvents();
     startInlineWatchdog();
+    globalThis.addEventListener?.('st-baibai-book:changed', updateInjection);
+    globalThis.addEventListener?.('st-baibai-book:ready', updateInjection);
     globalThis.addEventListener?.('pagehide', flushCurrentChatOnPageHide);
     globalThis.addEventListener?.('pageshow', () => { void refreshCurrentChatFromServer('pageshow'); });
     globalThis.document?.addEventListener?.('visibilitychange', () => {
