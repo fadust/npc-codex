@@ -71,7 +71,7 @@ jobs:
           if (!core.includes("./core-mechanics.js")) throw new Error('canonical core mechanics owner missing');
           if (!fs.readFileSync('branch.js', 'utf8').includes("./branch-core.js")) throw new Error('canonical branch core owner missing');
           if (configured.some(path => /(?:^|[-_.])legacy(?:[-_.]|$)|(?:^|[-_.])v\d{3,}(?:[-_.]|$)/i.test(path))) throw new Error('active runtime inventory contains legacy/version-labelled paths');
-          if (!readme.startsWith(`# NPC State Delta v${manifest.version}`)) throw new Error('README title/version mismatch');
+          if (!readme.startsWith(`# NPC Codex v${manifest.version}`)) throw new Error('README title/version mismatch');
           if (manifest.js !== 'bootstrap.js' || !fs.readFileSync('bootstrap.js', 'utf8').includes("await import('./index.js')")) throw new Error('entrypoint mismatch');
           console.log(`Delta ${manifest.version}; ${configured.length} canonical active runtime modules`);
           NODE
