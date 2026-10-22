@@ -174,6 +174,6 @@ ${r} .delta-stat-log ul { margin:0; padding-left:18px; display:grid; gap:3px; fo
 ${r} .delta-stat-log small { color:var(--delta-muted); }
 ${r} .delta-stat-state { color:var(--delta-muted); font-size:.78rem; }
 ${r} .delta-stat-tag { display:inline-block; padding:0 6px; border-radius:6px; font-size:.72rem; background:rgba(91,201,189,.16); color:var(--delta-accent-soft); }
-@media (max-width: 760px) { ${r} .delta-stat-core-grid { grid-template-columns:1fr; } ${r} .delta-stat-columns { grid-template-columns:1fr; } }
+
 `;
 }

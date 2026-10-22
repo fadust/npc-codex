@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 async function hotfixChecks(mockState, eventSource, manualAddNpc, sleep, extRoot) {
     const runtime = globalThis.NPCStateDelta;
-    const settings = mockState.extensionSettings.npc_state_delta;
+    const settings = mockState.extensionSettings.npc_codex;
     const storage = await import(pathToFileURL(path.join(extRoot, 'storage.js')).href);
     const open = async (id, chat = []) => {
         mockState.context.groupId = null;

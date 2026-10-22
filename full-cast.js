@@ -1,11 +1,12 @@
+import { codexSettings } from './settings-identity.js';
 /* NPC Codex optional full-cast scanning owner. */
 import { extension_settings, getContext } from '../../../extensions.js';
 import { npcParticipatesInExchange } from './scan-context.js';
 
-const EXTENSION_NAME = 'npc_state_delta';
+const EXTENSION_NAME = 'npc_codex';
 const FULL_CAST_KEY = 'fullCastScanEveryTurn';
-const CONTROL_ID = 'npc_state_delta_full_cast_scan';
-const SCAN_BUTTON_ID = 'npc_state_delta_full_cast_scan_now';
+const CONTROL_ID = 'npc_codex_full_cast_scan';
+const SCAN_BUTTON_ID = 'npc_codex_full_cast_scan_now';
 const WAIT_LIMIT_MS = 120000;
 let initialized = false;
 let sequence = 0;
@@ -14,6 +15,7 @@ let userSnapshotChatKey = '';
 
 const api = () => (globalThis.NPCCodex || globalThis.NPCStateDelta) || null;
 const cfg = () => {
+    codexSettings(extension_settings);
     const root = extension_settings[EXTENSION_NAME] ||= {};
     if (root[FULL_CAST_KEY] === undefined) root[FULL_CAST_KEY] = false;
     return root;
@@ -160,7 +162,7 @@ export async function runFullCastScan(messageId = null, before = null, { manual 
 }
 
 function mountControls() {
-    const panel = document.querySelector?.('#npc_state_delta_settings');
+    const panel = document.querySelector?.('#npc_codex_settings');
     const rowSlot = panel?.querySelector?.('[data-delta-settings-slot="full-cast"]');
     const actionSlot = panel?.querySelector?.('[data-delta-settings-slot="full-cast-action"]');
     if (!rowSlot || !actionSlot) return false;

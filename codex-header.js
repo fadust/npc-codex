@@ -84,7 +84,7 @@ ${r} .codex-tabs-slot { grid-area:tabs; margin-top:8px; }
 ${r} .codex-tabs-slot .delta-map-switch { display:flex; gap:4px; border:0; background:none; padding:0; }
 ${r} .codex-tabs-slot .delta-map-switch button { min-width:120px; padding:9px 18px; border:1px solid var(--delta-line, rgba(91,201,189,.2)); border-bottom:0; border-radius:8px 8px 0 0; background:rgba(255,255,255,.03); color:inherit; }
 ${r} .codex-tabs-slot .delta-map-switch button[aria-selected="true"] { background:color-mix(in srgb, var(--delta-accent, #5bc9bd) 16%, transparent); border-color:var(--delta-accent, #5bc9bd); color:#b6eee4; }
-@media (min-width: 900px) {
+
 ${r} .delta-library.npc-codex-cast-collapsed { grid-template-columns:minmax(250px,32%) minmax(0,1fr); grid-template-rows:minmax(0,1fr) !important; }
 ${r} .delta-library.npc-codex-cast-collapsed > .delta-cast { display:none !important; }
 ${r} .npc-codex-cast-collapsed .delta-hero { display:grid !important; grid-column:1; grid-row:1; }
@@ -110,10 +110,6 @@ ${r} .delta-cast-card .delta-cast-copy { position:static !important; background:
 ${r} .delta-cast-card .delta-cast-copy b { font-size:.92rem !important; }
 ${r} .delta-cast-card .delta-cast-copy small { font-size:.74rem !important; display:block !important; }
 ${r} .delta-cast-card .delta-cast-copy .delta-status { justify-self:start; backdrop-filter:none; }
-}
-@media (max-width: 899px) {
-${r} .codex-head { grid-template-columns:auto minmax(0,1fr); grid-template-areas:"pic ident" "quote quote" "actions actions" "tabs tabs"; }
-${r} .codex-portrait { width:76px; height:76px; }
-${r} .codex-tabs-slot .delta-map-switch button { min-width:0; flex:1 1 0; padding:8px; }
-}`;
+
+`;
 }

@@ -53,7 +53,7 @@ test('all dossiers are structurally validated before any malformed native import
     for (const malformed of [null, 'not a dossier', [], { id: 5 }, { relationship: 'bad' }, { relationshipProgress: { trust: 'not numeric' } }]) {
         const original = { npcs: [shape(), malformed] };
         const manifest = new TextEncoder().encode(JSON.stringify({
-            format: 'npc_state_delta_bundle', formatVersion: 1, state: original,
+            format: 'npc_codex_bundle', formatVersion: 1, state: original,
         }));
         const encoded = new Uint8Array(12 + manifest.length);
         encoded.set(new TextEncoder().encode('NPCSTB01'));
@@ -131,7 +131,7 @@ function uncheckedBundle(manifest) {
     return result;
 }
 test('native validation rejects unsafe object metadata, reserved IDs and excessive nested history', () => {
-    const base = () => ({ format: 'npc_state_delta_bundle', formatVersion: 1, state: { npcs: [shape()] } });
+    const base = () => ({ format: 'npc_codex_bundle', formatVersion: 1, state: { npcs: [shape()] } });
     for (const key of ['__proto__', 'constructor', 'prototype']) {
         const manifest = base();
         manifest.state.npcs[0].notes = JSON.parse(`{"${key}":{"polluted":true}}`);

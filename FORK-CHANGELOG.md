@@ -128,7 +128,7 @@ BaiBai supplies only source-verified, current-reply scene participants to the ex
 
 The prompt projection is intentionally reversible: stored dossier/UI presence remains the scanner result; stale/removed BaiBai data disappears on prompt rebuild. BaiBai change/ready events refresh the injection; ordinary pre-generation refresh handles late summaries. The paired BaiBai fork stamps new single-floor summaries with a chat/group/floor/cleaned-prefix/swipe fingerprint captured before provider work. Its existing getFloor API exposes presenceSourceValid separately from leaf validity. Old, carried-over and batch-only summaries cannot authorize presence. Text/earlier-branch edits or swipe/chat changes fail closed without changing summary retention. Fingerprint checks are deterministic change detection, not cryptographic authentication.
 
-Checks: production adapter tests; synthetic-host prompt delivery and invalidation; full Codex tests/compatibility/runtime smoke; module validation, prompt and Stage9 measurements; verified package. Existing prompt hashes/request budgets unchanged. Fresh checkout CRLF initially broke six LF-sensitive tests; normalizing test checkout files fixed these without changing tracked behavior. No paid-provider trial is claimed. Broader upstream adoption remains parked in the separate npc_state_delta working tree.
+Checks: production adapter tests; synthetic-host prompt delivery and invalidation; full Codex tests/compatibility/runtime smoke; module validation, prompt and Stage9 measurements; verified package. Existing prompt hashes/request budgets unchanged. Fresh checkout CRLF initially broke six LF-sensitive tests; normalizing test checkout files fixed these without changing tracked behavior. No paid-provider trial is claimed. Broader upstream adoption remains parked in the separate npc_codex working tree.
 
 ## 22 October 2026 - compatible upstream adoption through 1.2.19
 
@@ -153,3 +153,11 @@ Compatibility: saga-canon.js (TunnelVision bridge), actor-stack.js (including Ba
 Verification: full1171tests plus compatibility and synthetic runtime smoke passed; three additional focused source/cleanup/memory-lock tests passed. Validation, prompt measurement, Stage9 budget assertions and verified ZIP passed. Scanner/full-window/retry prompts +39characters, dossier import +52; Refresh/backfill/relationship rules and dispatcher counts/output allowances unchanged. Existing prompt budget fixture updated for these explicit memory clarifications. LF normalization was required for source-layout tests on Windows, without semantic changes to unrelated files. No fresh provider trial required for these bounded changes.
 
 Deployment/remote CI status is recorded separately in the workspace adoption report. Application remains2.0.2; no new release tag or data-format version claimed.
+
+## 22 October 2026 - desktop-only UI
+
+User requested removing mobile UI/features. Removed phone/tablet viewport and coarse-pointer stylesheet overrides, safe-area layouts, mobile fullscreen portrait dialogs, duplicate touchend handlers, and the phone-only Social Map cap/listener/short label. Desktop Codex header layout is now unconditional. Retained shared Pointer Events for mouse dragging, keyboard controls, viewport clamping, high-DPI images, desktop container queries and storage concurrency protections. Removed retired mobile-only assertions and phone/tablet browser fixture viewports. No scanner, canon/presence bridge, prompt, settings defaults or saved-data changes.
+
+### 22 October 2026 — NPC Codex namespace
+
+Renamed active underscore identifiers, controls, prompt key, package/install folder and persisted format names to `npc_codex`. Existing settings move to the new key with a non-serialized legacy bridge alias, and readers still accept pre-rename sidecars/native bundles. Existing file pointers and data remain owned by the same Codex records. Historical source provenance and upstream repository URLs retain their original names. No prompt wording, generation settings or actor ownership changes.

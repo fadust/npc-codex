@@ -4,7 +4,7 @@ NPC Codex remains the actor writer and sole actor prompt owner. Saga supplies ap
 
 ## Upstream provenance and fixes
 
-Selected behavior was ported from kohz87/npc_state_delta through 136d55e7efb720a3417af45bbe5e37651bdc69f3 (October 17): configurable custom fields, role-alias matching, distinctive-name recall, mentioned/deceased reference lines and editable aliases. Existing Codex lifecycle, storage and development machinery stays authoritative.
+Selected behavior was ported from kohz87/npc_codex through 136d55e7efb720a3417af45bbe5e37651bdc69f3 (October 17): configurable custom fields, role-alias matching, distinctive-name recall, mentioned/deceased reference lines and editable aliases. Existing Codex lifecycle, storage and development machinery stays authoritative.
 
 1. Custom fields require explicit evidence for the named actor, field and complete value. Another actor's value, numeric substrings, an empty source and negation cannot establish the field. A changed established value also requires a reason. Manual locks apply. Short aliases do not establish custom facts.
 2. Role aliases require continuity evidence. The controller passes pre-scan presence through its presence reset, and the Saga admission adapter uses the same identity guard.

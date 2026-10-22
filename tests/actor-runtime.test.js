@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 async function ariChecks(mockState, eventSource, manualAddNpc, sleep, extRoot) {
     const runtime = globalThis.NPCStateDelta;
     const fixture = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'tests/fixtures/layer1-ari.json'), 'utf8'));
-    const settings = mockState.extensionSettings.npc_state_delta;
+    const settings = mockState.extensionSettings.npc_codex;
     Object.assign(settings, { autoScan: false, enabled: true, inject: true });
     Object.assign(mockState.context, { name2: fixture.card.name, characters: [{ ...fixture.card, avatar: 'ari.png' }], characterId: 0 });
     await manualAddNpc(fixture.card.name);
@@ -59,7 +59,7 @@ test('Ari fixture executes ownership, read-only profiles and stale canon rejecti
 async function ariAutomaticChecks(mockState, eventSource, manualAddNpc, sleep, extRoot) {
     const runtime = globalThis.NPCStateDelta;
     const fixture = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'tests/fixtures/layer1-ari.json'), 'utf8'));
-    const settings = mockState.extensionSettings.npc_state_delta;
+    const settings = mockState.extensionSettings.npc_codex;
     Object.assign(settings, { autoScan: true, scanEvery: 1, enabled: true, inject: true, fullScanEveryTurn: false });
     Object.assign(mockState.context, { name2: fixture.card.name, characters: [{ ...fixture.card, avatar: 'ari.png' }], characterId: 0, chat: [] });
     let turn = 0, promptEpoch = 0;
@@ -103,7 +103,7 @@ test('Ari ten-turn production event loop applies automatic scans, personality an
 
 async function presenceBridgeChecks(mockState, eventSource, manualAddNpc, sleep, extRoot) {
     const runtime = globalThis.NPCStateDelta;
-    Object.assign(mockState.extensionSettings.npc_state_delta, { enabled: true, inject: true, autoScan: false });
+    Object.assign(mockState.extensionSettings.npc_codex, { enabled: true, inject: true, autoScan: false });
     mockState.context.chat = [{ is_user: true, mes: 'Wait.' }, { is_user: false, mes: 'The room is quiet.' }];
     await manualAddNpc('Ari Vale');
     let valid = true;

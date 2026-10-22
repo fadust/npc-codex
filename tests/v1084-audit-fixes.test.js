@@ -181,7 +181,7 @@ async function auditRuntimeChecks(mockState, eventSource, manualAddNpc, sleep, s
     // BUG-07: the editor reports success only once the save is on the server.
     const mira = runtime.getState().npcs.find(npc => npc.name === 'Mira Stale');
     const previousGetElementById = document.getElementById;
-    document.getElementById = id => (id === 'npc_state_delta_edit_birthday' ? { value: runtime.getNpc(mira.id)?.birthDateDisplay || '' } : null);
+    document.getElementById = id => (id === 'npc_codex_edit_birthday' ? { value: runtime.getNpc(mira.id)?.birthDateDisplay || '' } : null);
     globalThis.fetch = async (url, options = {}) => (url === '/api/files/upload'
         ? { ok: false, status: 403, json: async () => ({}), text: async () => 'forbidden' }
         : baseFetch(url, options));

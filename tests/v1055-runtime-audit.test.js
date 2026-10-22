@@ -39,7 +39,7 @@ async function unpointeredSessionChecks(mockState, eventSource, manualAddNpc, sl
     const visitor = runtime.getState().npcs.find(npc => npc.name === 'Local Visitor');
     const previousGetElementById = document.getElementById;
     // Minimal editor fields: an unchanged birthday display so the synthetic save reaches the guard under test.
-    document.getElementById = id => (id === 'npc_state_delta_edit_birthday'
+    document.getElementById = id => (id === 'npc_codex_edit_birthday'
         ? { value: runtime.getNpc(visitor.id)?.birthDateDisplay || '' }
         : null);
     const saveOpenEditor = async () => {

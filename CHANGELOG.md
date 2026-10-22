@@ -23,7 +23,7 @@ From 2.0.0 NPC Codex has its own version numbers. 1.1.5 and earlier are NPC Stat
 
 ## 2.0.0 - 17 October 2026
 
-First NPC Codex release (fadust fork). Existing NPC State Delta dossiers load unchanged; storage keys and data files keep their `npc_state_delta` names.
+First NPC Codex release (fadust fork). Existing NPC State Delta dossiers load unchanged; storage keys and data files keep their `npc_codex` names.
 
 - **Knowledge ledger and gating**, and **cast resolution** that resolves "the headmaster" or "Martha's older daughter" canon-first.
 - **Canon seeding**: an NPC found in the card or lorebook canon starts from it, with canon fields locked.

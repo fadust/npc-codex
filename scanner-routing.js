@@ -1,3 +1,4 @@
+import { codexSettings } from './settings-identity.js';
 /* NPC Codex: request-scoped routing for the existing NPC scanner. */
 
 export const SCANNER_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
@@ -17,11 +18,11 @@ export function normalizeScannerMaxOutputTokens(value) {
 }
 
 export function configuredScannerMaxOutputTokens(ctx) {
-    return normalizeScannerMaxOutputTokens(ctx?.extensionSettings?.npc_state_delta?.scannerMaxOutputTokens);
+    return normalizeScannerMaxOutputTokens(codexSettings(ctx?.extensionSettings)?.scannerMaxOutputTokens);
 }
 
 export function selectedScannerProfileId(ctx) {
-    const value = ctx?.extensionSettings?.npc_state_delta?.scannerConnectionProfile;
+    const value = codexSettings(ctx?.extensionSettings)?.scannerConnectionProfile;
     return typeof value === 'string' ? value.trim() : '';
 }
 

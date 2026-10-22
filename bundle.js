@@ -102,7 +102,7 @@ export function encodeNpcStateBundle(state, { appVersion = 'unknown', chatKey = 
     const formPortraits = formPortraitsForManifest(source, npcs, binaryOffsetRef, imageParts);
 
     const manifest = {
-        format: 'npc_state_delta_bundle',
+        format: 'npc_codex_bundle',
         formatVersion: FORMAT_VERSION,
         appVersion: String(appVersion || 'unknown'),
         exportedAt: new Date().toISOString(),
@@ -146,7 +146,7 @@ function validateManifest(manifest) {
             if (item && typeof item === 'object') queue.push({ value: item, depth: depth + 1 });
         }
     }
-    if (!manifest || manifest.format !== 'npc_state_delta_bundle') throw new Error('Not an NPC Codex bundle.');
+    if (!manifest || !['npc_codex_bundle', 'npc_state_delta_bundle'].includes(manifest.format)) throw new Error('Not an NPC Codex bundle.');
     if (manifest.formatVersion !== FORMAT_VERSION) throw new Error(`Unsupported NPC Codex bundle version: ${manifest.formatVersion}.`);
     if (!manifest.state || !Array.isArray(manifest.state.npcs)) throw new Error('NPC Codex bundle is missing its dossier registry.');
     const ids = new Set();

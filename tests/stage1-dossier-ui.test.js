@@ -115,7 +115,7 @@ test('Stage 1 UI is a thin adapter over the existing runtime editor/settings own
   assert.match(uiSource, /Condition \/ Activity/);
   assert.match(uiSource, /Home Base \/ Usual Location/);
   assert.doesNotMatch(uiSource, /proseHtml\(selected\.appearance\)/, 'resolved flat appearance must not be rendered beside the form model');
-  assert.match(uiSource, /npc_state_delta_settings/);
+  assert.match(uiSource, /npc_codex_settings/);
   assert.match(uiSource, /MutationObserver/);
   assert.doesNotMatch(uiSource, /persistCritical\s*\(/);
   assert.doesNotMatch(uiSource, /applyNpcStateCommand\s*\(/);

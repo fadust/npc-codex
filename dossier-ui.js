@@ -12,10 +12,10 @@ import { openPortraitImage, originalPortraitSource } from './dossier-tools-core.
 
 const KNOWLEDGE_LABELS = Object.freeze({ knows: 'Knows', secret: 'Secret', unaware: 'Does not know' });
 
-const ROOT_ID = 'npc_state_delta_dossier_root';
+const ROOT_ID = 'npc_codex_dossier_root';
 const OPEN_REQUEST_GUARD = '__npcStateDeltaOpenDossierRequests';
-const STYLE_ID = 'npc_state_delta_dossier_stage1_styles';
-const SETTINGS_ID = 'npc_state_delta_settings';
+const STYLE_ID = 'npc_codex_dossier_stage1_styles';
+const SETTINGS_ID = 'npc_codex_settings';
 const OBSERVER_RETRY_MS = 750;
 const OBSERVER_RETRY_LIMIT = 80;
 
@@ -713,7 +713,7 @@ class DeltaDossierUi {
             return;
         }
         if (!this.panelOpen || event.key !== 'Escape' || event.defaultPrevented
-            || document.getElementById('npc_state_delta_tools_overlay')) return;
+            || document.getElementById('npc_codex_tools_overlay')) return;
         const uiStatus = this.safeUiStatus();
         if (uiStatus?.editorMounted || uiStatus?.portraitGeneratorOpen) return;
         event.preventDefault();
@@ -1254,22 +1254,6 @@ const STYLES = `
 #${ROOT_ID} .delta-lightbox img { min-height:0; max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; box-shadow:0 18px 60px rgba(0,0,0,.6); cursor:default; }
 #${ROOT_ID} .delta-lightbox-close { position:absolute; left:50%; bottom:16px; transform:translateX(-50%); }
 #${SETTINGS_ID}.npc-state-delta-stage1-settings-target { outline:2px solid #5bc9bd; outline-offset:4px; }
-@media (max-width: 900px) {
-  #${ROOT_ID} .delta-panel { width:100vw; height:100dvh; border-radius:0; border-left:0; border-right:0; }
-  #${ROOT_ID} .delta-library { grid-template-rows:minmax(0,1fr) 172px; }
-  #${ROOT_ID} .delta-spread { grid-template-columns:minmax(250px,38%) minmax(0,1fr); }
-  #${ROOT_ID} .delta-cast-tools { align-items:stretch; flex-direction:column; }
-  #${ROOT_ID} .delta-search-label { flex:0 0 auto; max-width:none; }
-}
-@media (max-width: 650px) {
-  #${ROOT_ID} .delta-launcher { right:10px; bottom:66px; }
-  #${ROOT_ID} .delta-brand .delta-kicker, #${ROOT_ID} .delta-chat-state { display:none; }
-  #${ROOT_ID} .delta-topbar { padding-left:10px; }
-  #${ROOT_ID} .delta-spread { display:block; overflow:auto; }
-  #${ROOT_ID} .delta-hero { min-height:max(330px,min(62dvh,540px)); border-right:0; border-bottom:1px solid rgba(91,201,189,.16); }
-  #${ROOT_ID} .delta-document { overflow:visible; }
-  #${ROOT_ID} .delta-current-grid, #${ROOT_ID} .delta-prose-grid, #${ROOT_ID} .delta-two-column, #${ROOT_ID} .delta-rel-grid { grid-template-columns:1fr; }
-  #${ROOT_ID} .delta-prose-grid .delta-wide { grid-column:auto; }
-  #${ROOT_ID} .delta-cast-card { flex-basis:190px; }
-}
+
+
 `;

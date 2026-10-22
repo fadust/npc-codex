@@ -53,11 +53,11 @@ test('chat change hydration is chat-affine and stale async completion is rejecte
 
 
 test('manual dossier editor validates birthday corrections through the canonical birthday engine',()=>{
-  assert.match(source,/npc_state_delta_edit_birthday/);
+  assert.match(source,/npc_codex_edit_birthday/);
   assert.match(source,/normalizeBirthDate\(birthdayInput\)/);
   assert.match(source,/applyNpcBirthdayUpdate\(next,/);
   assert.match(source,/birthDateState: 'correct'/);
   assert.match(source,/Manual dossier birthday correction\./);
   assert.match(source,/correctedBirthday\.birthDateSourceMessageId = null/);
-  assert.match(source,/set\('npc_state_delta_edit_birthday', npc\.birthDateDisplay \|\| ''\)/);
+  assert.match(source,/set\('npc_codex_edit_birthday', npc\.birthDateDisplay \|\| ''\)/);
 });

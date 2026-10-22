@@ -6,7 +6,6 @@ import { parseKeyRelationshipEntry, resolveNpcReference } from './social.js';
 export const MAP_SPAN = 780;
 export const MAP_CENTER = MAP_SPAN / 2;
 export const DESKTOP_NODE_CAP = 24;
-export const PHONE_NODE_CAP = 16;
 
 export const MAP_LENSES = Object.freeze([
     Object.freeze({ key: 'warmth', label: 'Warmth', negative: 'cold · hostile' }),

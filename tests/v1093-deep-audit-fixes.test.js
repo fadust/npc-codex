@@ -279,7 +279,7 @@ async function deepAuditRuntimeChecks(mockState, eventSource, manualAddNpc, slee
         payload.writerId = 'remote-other-session';
         mockState.files.set(pointer.path, JSON.stringify(payload));
     };
-    const settings = mockState.extensionSettings.npc_state_delta;
+    const settings = mockState.extensionSettings.npc_codex;
 
     // RB92-01: sending re-checks the server, so a newer dossier is adopted before the local turn.
     await open('rb92-send', ['Mira waits by the gate.', 'Mira watches the road.']);
@@ -403,11 +403,11 @@ async function deepAuditRuntimeChecks(mockState, eventSource, manualAddNpc, slee
     const popup = mockState.popupCalls.at(-1);
     const editorHtml = String(popup.content?.innerHTML ?? popup.content ?? '');
     const values = new Map();
-    for (const match of editorHtml.matchAll(/id="(npc_state_delta_edit_[a-z_]+)"([^>]*)>/g)) {
+    for (const match of editorHtml.matchAll(/id="(npc_codex_edit_[a-z_]+)"([^>]*)>/g)) {
         values.set(match[1], { value: (match[2].match(/value="([^"]*)"/) || [])[1] ?? '', checked: /\bchecked\b/.test(match[2]) });
     }
-    for (const match of editorHtml.matchAll(/id="(npc_state_delta_edit_[a-z_]+)"[^>]*>([^<]*)<\/textarea>/g)) values.set(match[1], { value: match[2], checked: false });
-    values.set('npc_state_delta_edit_role', { value: 'Canceled Refresh alchemist draft', checked: false });
+    for (const match of editorHtml.matchAll(/id="(npc_codex_edit_[a-z_]+)"[^>]*>([^<]*)<\/textarea>/g)) values.set(match[1], { value: match[2], checked: false });
+    values.set('npc_codex_edit_role', { value: 'Canceled Refresh alchemist draft', checked: false });
     document.getElementById = id => values.get(id) || null;
     let releaseRead;
     let markEntered;

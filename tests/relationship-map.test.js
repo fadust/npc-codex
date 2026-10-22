@@ -9,7 +9,6 @@ import {
     mapRadius,
     mapStatus,
     normalizeRelationshipMapSettings,
-    PHONE_NODE_CAP,
     relationshipDelta,
     resolveMapBonds,
     selectMapNpcs,
@@ -103,7 +102,6 @@ test('the map leaves out the dead and stale removals, shows the scene, caps the 
     assert.equal(desktop.total, 43, 'the dead and stale removals are not counted; a manual archive is');
     assert.ok(desktop.shown.some(item => item.id === 'here') && desktop.shown.some(item => item.id === 'busy'));
     assert.ok(desktop.shown.some(item => item.id === 'n0') && !desktop.shown.some(item => item.id === 'n20'), 'the strongest by the lens fill the cap');
-    assert.equal(selectMapNpcs(cast, { lens: 'trust', cap: PHONE_NODE_CAP }).shown.length, 16, 'phones show 16');
     assert.ok(desktop.shown.some(item => item.id === 'gone'), 'a manual archive competes by strength like anyone else');
     assert.ok(!desktop.shown.some(item => ['stale', 'dead'].includes(item.id)), 'stale removals and the dead never appear, even when marked present');
     const kept = selectMapNpcs(cast, { lens: 'trust', selectedId: 'n19' });
@@ -112,7 +110,6 @@ test('the map leaves out the dead and stale removals, shows the scene, caps the 
     assert.ok(!selectMapNpcs(cast, { lens: 'trust', selectedId: 'dead' }).shown.some(item => item.id === 'dead'), 'not even when its dossier is selected');
     assert.equal(buildMapModel({ turn: 1, npcs: cast }, { selectedId: 'stale' }).selected, null, 'the strip waits for a pick on the map');
     const crowd = Array.from({ length: 30 }, (_, i) => npc(`p${i}`, { present: true }));
-    assert.equal(selectMapNpcs(crowd, { cap: PHONE_NODE_CAP }).shown.length, 30, 'everyone in the scene is shown even past the cap');
 });
 
 test('the model lists every shown node with a position inside the map, and flags an all-neutral start', () => {

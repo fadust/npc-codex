@@ -1,3 +1,4 @@
+import { codexSettings } from './settings-identity.js';
 /* NPC Codex scanner-output setting and compact cast-card polish. */
 import { extension_settings, getContext } from '../../../extensions.js';
 import {
@@ -5,13 +6,14 @@ import {
     SCANNER_MAX_OUTPUT_TOKENS_MAX,
 } from './scanner-routing.js';
 
-const EXTENSION_NAME = 'npc_state_delta';
-const SETTINGS_ID = 'npc_state_delta_settings';
-const CONTROL_ID = 'npc_state_delta_scanner_max_output_tokens';
-const STYLE_ID = 'npc_state_delta_scanner_output_ui_styles';
+const EXTENSION_NAME = 'npc_codex';
+const SETTINGS_ID = 'npc_codex_settings';
+const CONTROL_ID = 'npc_codex_scanner_max_output_tokens';
+const STYLE_ID = 'npc_codex_scanner_output_ui_styles';
 const GUARD = '__npcStateDeltaScannerOutputUi';
 
 function settings() {
+    codexSettings(extension_settings);
     if (!extension_settings[EXTENSION_NAME] || typeof extension_settings[EXTENSION_NAME] !== 'object') {
         extension_settings[EXTENSION_NAME] = {};
     }
@@ -70,21 +72,15 @@ function injectStyles() {
     style.id = STYLE_ID;
     style.textContent = `
 /* Fixed card targets must fit the actual remaining rail after controls and safe areas. */
-#npc_state_delta_dossier_root .delta-cast-card{max-height:100%!important}
+#npc_codex_dossier_root .delta-cast-card{max-height:100%!important}
 
 /* Give portrait-led cast cards enough vertical room for face + metadata instead of cropping them into tiles. */
-#npc_state_delta_dossier_root .delta-library{grid-template-rows:minmax(0,1fr) 226px!important}
-#npc_state_delta_dossier_root .delta-cast-card{flex-basis:132px!important;width:132px!important;min-width:132px!important;height:168px!important}
-#npc_state_delta_dossier_root .delta-cast-copy{padding-top:34px!important;padding-bottom:8px!important}
+#npc_codex_dossier_root .delta-library{grid-template-rows:minmax(0,1fr) 226px!important}
+#npc_codex_dossier_root .delta-cast-card{flex-basis:132px!important;width:132px!important;min-width:132px!important;height:168px!important}
+#npc_codex_dossier_root .delta-cast-copy{padding-top:34px!important;padding-bottom:8px!important}
 
-@media(max-width:900px){
-  #npc_state_delta_dossier_root .delta-library{grid-template-rows:minmax(0,1fr) 236px!important}
-  #npc_state_delta_dossier_root .delta-cast-card{flex-basis:124px!important;width:124px!important;min-width:124px!important;height:160px!important}
-}
-@media(max-width:620px){
-  #npc_state_delta_dossier_root .delta-library{grid-template-rows:minmax(0,1fr) 258px!important}
-  #npc_state_delta_dossier_root .delta-cast-card{flex-basis:116px!important;width:116px!important;min-width:116px!important;height:150px!important}
-}
+
+
 `;
     document.head.appendChild(style);
 }

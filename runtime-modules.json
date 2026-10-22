@@ -3,6 +3,7 @@
   "applicationVersion": "2.0.2",
   "entrypoint": "bootstrap.js",
   "modules": [
+    { "path": "settings-identity.js", "role": "settings-name-compatibility", "required": true },
     { "path": "actor-stack.js", "role": "actor-ownership", "required": true },
     { "path": "actor-portrayal.js", "role": "actor-portrayal", "required": true },
     { "path": "portrayal-references.js", "role": "portrayal-references", "required": true },

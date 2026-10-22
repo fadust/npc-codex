@@ -1,8 +1,8 @@
 /* NPC Codex supporting tools: portrait manager, native data transfer, and diagnostics. */
 import { PORTRAIT_STYLE_PROMPT_LIMIT, PORTRAIT_COMPOSITION_PROMPT_LIMIT } from './core-mechanics.js';
 
-const OVERLAY_ID = 'npc_state_delta_tools_overlay';
-const DOSSIER_ROOT_ID = 'npc_state_delta_dossier_root';
+const OVERLAY_ID = 'npc_codex_tools_overlay';
+const DOSSIER_ROOT_ID = 'npc_codex_dossier_root';
 const TOOL_EVENT_LIMIT = 60;
 const PROMPT_DRAFT_LIMIT = 20;
 const PORTRAIT_FILE_LIMIT = 16 * 1024 * 1024;

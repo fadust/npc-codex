@@ -34,7 +34,7 @@ test('present NPCs in chat support Full, Compact and Off display modes', () => {
     assert.match(index, /presentCastDisplay: 'full'/);
     assert.match(index, /PRESENT_CAST_DISPLAY_MODES = Object\.freeze\(\['full', 'compact', 'off'\]\)/);
     assert.match(index, /assign\('presentCastDisplay', normalizePresentCastDisplay\(settings\.presentCastDisplay\)\)/);
-    assert.match(index, /id="npc_state_delta_present_cast_display"[^>]*><option value="full">Full cards<\/option><option value="compact">Compact strip<\/option><option value="off">Off<\/option>/);
+    assert.match(index, /id="npc_codex_present_cast_display"[^>]*><option value="full">Full cards<\/option><option value="compact">Compact strip<\/option><option value="off">Off<\/option>/);
     assert.match(index, /function inlineEntriesForRender\(state\) \{\s*\/\/[^\n]*\n\s*if \(presentCastDisplayMode\(\) === 'off'\) return \[\];/);
     assert.match(index, /function startInlineWatchdog\(\) \{[\s\S]*?if \(presentCastDisplayMode\(\) === 'off'\) return stopInlineWatchdog\(\);/);
     assert.match(index, /class="npc-state-delta-present-chip"/);
@@ -42,11 +42,6 @@ test('present NPCs in chat support Full, Compact and Off display modes', () => {
 });
 
 
-test('present NPC gallery keeps sparse rosters card-sized on tablet instead of stretching to the block', () => {
-    assert.match(css, /@media \(min-width: 701px\) and \(max-width: 1180px\)[\s\S]*?\.npc-state-delta-present-grid \{[^}]*grid-template-columns:\s*repeat\(auto-fill, minmax\(145px, 180px\)\)[^}]*justify-content:\s*start/s);
-    assert.doesNotMatch(css, /npc-state-delta-present-grid \{[^}]*repeat\(auto-fit, minmax\(145px, 1fr\)\)/s);
-    assert.match(css, /@media \(max-width: 700px\)[\s\S]*?\.npc-state-delta-present-grid \{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s);
-});
 
 test('present cards resolve the current canonical NPC name after identity promotion', () => {
     assert.match(index, /const displayName = npc\.name \|\| 'NPC'/);
@@ -61,10 +56,10 @@ test('dossier uses trust affection desire tension and strict presence wording', 
 });
 
 test('relationship tuning exposes baseline, caps, editable rubrics, and delta audit UI', () => {
-    for (const id of ['npc_state_delta_base_trust', 'npc_state_delta_base_affection', 'npc_state_delta_base_desire', 'npc_state_delta_base_tension']) assert.match(index, new RegExp(id));
-    for (const id of ['npc_state_delta_cap_ordinary', 'npc_state_delta_cap_meaningful', 'npc_state_delta_cap_major', 'npc_state_delta_cap_extreme']) assert.match(index, new RegExp(id));
-    assert.match(index, /npc_state_delta_relationship_criteria/);
-    assert.match(index, /npc_state_delta_impact_criteria/);
+    for (const id of ['npc_codex_base_trust', 'npc_codex_base_affection', 'npc_codex_base_desire', 'npc_codex_base_tension']) assert.match(index, new RegExp(id));
+    for (const id of ['npc_codex_cap_ordinary', 'npc_codex_cap_meaningful', 'npc_codex_cap_major', 'npc_codex_cap_extreme']) assert.match(index, new RegExp(id));
+    assert.match(index, /npc_codex_relationship_criteria/);
+    assert.match(index, /npc_codex_impact_criteria/);
     assert.match(index, /Reset relationship rules/);
     assert.match(dossierUi, /Last relationship change/);
     assert.match(css, /npc-state-delta-rubric-textarea/);
@@ -73,34 +68,34 @@ test('relationship tuning exposes baseline, caps, editable rubrics, and delta au
 test('important memory criteria are editable and resettable from settings', () => {
     assert.match(index, /<h4>Important memories<\/h4>/);
     assert.match(index, /Important memory criteria/);
-    assert.match(index, /npc_state_delta_memory_criteria/);
-    assert.match(index, /npc_state_delta_reset_memory_rules/);
+    assert.match(index, /npc_codex_memory_criteria/);
+    assert.match(index, /npc_codex_reset_memory_rules/);
     assert.match(index, /Reset memory criteria/);
     assert.match(index, /Existing memories are shown to the scanner/i);
     assert.match(index, /Lived memories <small>One per line/i);
-    assert.match(index, /episodesFromEditorText\(editorField\('npc_state_delta_edit_memories'\), current\.episodes\)/);
+    assert.match(index, /episodesFromEditorText\(editorField\('npc_codex_edit_memories'\), current\.episodes\)/);
 });
 
 
 test('present-only behavior injection and manual dossier editor controls are exposed', () => {
     assert.match(index, /Inject present NPC state/);
-    assert.match(index, /npc_state_delta_behavior_criteria/);
+    assert.match(index, /npc_codex_behavior_criteria/);
     assert.match(index, /Relationship-to-behavior rubric/);
     assert.match(index, /npc-state-delta-roster-edit/);
     assert.match(index, /Save dossier/);
     assert.match(index, /Protect edited stable profile fields/);
     assert.match(index, /Leave off to use manual edits as an organic baseline/);
     assert.match(index, /\$\{locked\.length \? 'checked' : ''\}/);
-    assert.match(index, /npc_state_delta_edit_trust/);
-    assert.match(index, /npc_state_delta_edit_affection/);
-    assert.match(index, /npc_state_delta_edit_desire/);
-    assert.match(index, /npc_state_delta_edit_tension/);
-    assert.match(index, /npc_state_delta_edit_behavior_profile/);
+    assert.match(index, /npc_codex_edit_trust/);
+    assert.match(index, /npc_codex_edit_affection/);
+    assert.match(index, /npc_codex_edit_desire/);
+    assert.match(index, /npc_codex_edit_tension/);
+    assert.match(index, /npc_codex_edit_behavior_profile/);
     assert.match(index, /Behavioral Levers/);
     assert.match(index, /Max \${BEHAVIOR_PROFILE_LIMIT} compact target-general response\/decision rules/);
     assert.match(index, /Player Dynamic/);
     assert.match(index, /Condition \/ Activity/);
-    assert.doesNotMatch(index, /npc_state_delta_edit_importance/);
+    assert.doesNotMatch(index, /npc_codex_edit_importance/);
     assert.match(index, /const Popup = ctx\.Popup/);
     assert.match(index, /allowVerticalScrolling: true/);
     assert.match(css, /npc-state-delta-editor-popup/);
@@ -135,17 +130,17 @@ test('roster exposes present versus current off-screen World State activity', ()
 
 
 test('generation injection budget is player-configurable in settings', () => {
-    assert.match(index, /npc_state_delta_inject_budget/);
+    assert.match(index, /npc_codex_inject_budget/);
     assert.match(index, /Injection budget/);
     assert.match(index, /Upper limit; only what the present NPCs need is used/);
 });
 
 
 test('relationship UI is bipolar around neutral zero and legacy audit values are finite-filtered', () => {
-    for (const id of ['npc_state_delta_base_trust', 'npc_state_delta_base_affection', 'npc_state_delta_base_desire', 'npc_state_delta_base_tension']) {
+    for (const id of ['npc_codex_base_trust', 'npc_codex_base_affection', 'npc_codex_base_desire', 'npc_codex_base_tension']) {
         assert.match(index, new RegExp(`${id}[^>]*min=\"-100\"[^>]*max=\"100\"`));
     }
-    for (const id of ['npc_state_delta_edit_trust', 'npc_state_delta_edit_affection', 'npc_state_delta_edit_desire', 'npc_state_delta_edit_tension']) {
+    for (const id of ['npc_codex_edit_trust', 'npc_codex_edit_affection', 'npc_codex_edit_desire', 'npc_codex_edit_tension']) {
         assert.match(index, new RegExp(`${id}[^>]*min=\"-100\"[^>]*max=\"100\"`));
     }
     assert.match(index, /Number\.isFinite\(value\)/);
@@ -153,14 +148,14 @@ test('relationship UI is bipolar around neutral zero and legacy audit values are
 
 
 test('dossier exposes species/race, age, form-owned appearance, and portrait generation controls', () => {
-    assert.match(index, /npc_state_delta_edit_species/);
+    assert.match(index, /npc_codex_edit_species/);
     assert.match(index, /Species \/ Race/);
-    assert.match(index, /npc_state_delta_edit_home_base/);
+    assert.match(index, /npc_codex_edit_home_base/);
     assert.match(index, /Home Base \/ Usual Location/);
-    assert.match(index, /npc_state_delta_edit_age/);
-    assert.match(index, /npc_state_delta_edit_apparent_age/);
+    assert.match(index, /npc_codex_edit_age/);
+    assert.match(index, /npc_codex_edit_apparent_age/);
     assert.match(index, /Apparent age/);
-    assert.doesNotMatch(index, /npc_state_delta_edit_appearance/);
+    assert.doesNotMatch(index, /npc_codex_edit_appearance/);
     assert.match(continuityUi, /Named forms/);
     assert.match(continuityUi, /Apply appearance</);
     assert.match(continuityUi, /Face, body &amp; proportions \(enduring\)/);
@@ -168,14 +163,14 @@ test('dossier exposes species/race, age, form-owned appearance, and portrait gen
     assert.match(continuityUi, /Current form/);
     assert.match(index, /Age:/);
     assert.match(index, /buildNpcPortraitPrompts/);
-    assert.match(index, /npc_state_delta_portrait_style_positive[^\n]+maxlength=\"\$\{PORTRAIT_STYLE_PROMPT_LIMIT\}\"/);
-    assert.match(index, /npc_state_delta_portrait_style_negative[^\n]+maxlength=\"\$\{PORTRAIT_STYLE_PROMPT_LIMIT\}\"/);
-    assert.match(index, /npc_state_delta_portrait_composition[^\n]+maxlength=\"\$\{PORTRAIT_COMPOSITION_PROMPT_LIMIT\}\"/);
-    assert.match(index, /npc_state_delta_edit_portrait_positive[^\n]+maxlength=\"\$\{PORTRAIT_NPC_PROMPT_LIMIT\}\"/);
-    assert.match(index, /npc_state_delta_edit_portrait_negative[^\n]+maxlength=\"\$\{PORTRAIT_NPC_PROMPT_LIMIT\}\"/);
-    assert.doesNotMatch(index, /npc_state_delta_portrait_style_(?:positive|negative)[^\n]+maxlength=\"2400\"/);
+    assert.match(index, /npc_codex_portrait_style_positive[^\n]+maxlength=\"\$\{PORTRAIT_STYLE_PROMPT_LIMIT\}\"/);
+    assert.match(index, /npc_codex_portrait_style_negative[^\n]+maxlength=\"\$\{PORTRAIT_STYLE_PROMPT_LIMIT\}\"/);
+    assert.match(index, /npc_codex_portrait_composition[^\n]+maxlength=\"\$\{PORTRAIT_COMPOSITION_PROMPT_LIMIT\}\"/);
+    assert.match(index, /npc_codex_edit_portrait_positive[^\n]+maxlength=\"\$\{PORTRAIT_NPC_PROMPT_LIMIT\}\"/);
+    assert.match(index, /npc_codex_edit_portrait_negative[^\n]+maxlength=\"\$\{PORTRAIT_NPC_PROMPT_LIMIT\}\"/);
+    assert.doesNotMatch(index, /npc_codex_portrait_style_(?:positive|negative)[^\n]+maxlength=\"2400\"/);
     assert.match(fs.readFileSync(path.join(root, 'portrait-tools.js'), 'utf8'), />Generate Portrait<\/button>/);
-    assert.doesNotMatch(index, /<b>Current thoughts<\/b>|Thought basis|npc_state_delta_edit_thought/i);
+    assert.doesNotMatch(index, /<b>Current thoughts<\/b>|Thought basis|npc_codex_edit_thought/i);
 });
 
 test('scanner uses current-exchange auto context and keeps wider history for manual scans', () => {
@@ -194,7 +189,7 @@ test('scanner uses current-exchange auto context and keeps wider history for man
     assert.match(index, /settings\.fullScanEveryTurn \|\| state\.assistantSinceScan >= settings\.scanEvery/);
     assert.match(index, /prepareFullWindowRelationshipEvaluation\(resolvedParsed, state\.npcs\)/);
     assert.match(index, /runFocusedRelationshipPass\(\s*ctx,\s*fullWindowRelationship\.evaluation,\s*state\.npcs,\s*currentTranscript \|\| transcript,\s*settings,\s*\{ currentExchangeOnly: manual \|\| fullWindowScan, requestScope: operation\.requestScope, prose: currentProse \},\s*\)/);
-    assert.match(index, /npc_state_delta_admission_mode/);
+    assert.match(index, /npc_codex_admission_mode/);
     assert.match(index, /Conservative/);
     assert.match(index, /Balanced/);
     assert.match(index, /Manual only/);
@@ -211,7 +206,6 @@ test('inline card truth follows merged presence and settings roster editor uses 
     assert.match(index, /function wireSettingsRosterEditor/);
     assert.match(index, /querySelectorAll\('\.npc-state-delta-roster-edit'\)/);
     assert.match(index, /addEventListener\?\.\('pointerup'/);
-    assert.match(index, /document\.addEventListener\('touchend'/);
     assert.match(index, /event\.stopImmediatePropagation\?\.\(\)/);
     assert.match(index, /role="button" tabindex="0"[^>]*npc-state-delta-roster-edit|npc-state-delta-roster-edit" role="button" tabindex="0"/);
     assert.match(index, /const Popup = ctx\.Popup/);
@@ -220,7 +214,7 @@ test('inline card truth follows merged presence and settings roster editor uses 
     assert.match(index, /allowVerticalScrolling: true/);
     assert.doesNotMatch(index, /overlay\.style\.zIndex = '2147483000'/);
     assert.match(css, /npc-state-delta-editor-popup/);
-    assert.equal((index.match(/id="npc_state_delta_edit_personality"/g) || []).length, 1, 'editor must not render duplicate Personality controls');
+    assert.equal((index.match(/id="npc_codex_edit_personality"/g) || []).length, 1, 'editor must not render duplicate Personality controls');
 });
 
 
@@ -236,7 +230,6 @@ test('UI integration remounts inline cards on SillyTavern render lifecycle and c
     assert.match(index, /document\.addEventListener\('pointerup', activateNpcEditorFromEvent, true\);/);
     assert.match(index, /document\.addEventListener\('click', activatePresentCardFromEvent, true\);/);
     assert.match(index, /document\.addEventListener\('click', activateNpcEditorFromEvent, true\);/);
-    assert.match(index, /document\.addEventListener\('touchend'/);
     assert.match(index, /eventTargetClosest\(event, '\.npc-state-delta-roster-edit'\)/);
     assert.match(index, /class="menu_button npc-state-delta-roster-edit"/);
     assert.match(index, /\$\(document\)\.on\('click\.npcStateDelta', '\.npc-state-delta-roster-edit'/);
@@ -310,31 +303,31 @@ test('per-NPC Scan dossier workflow and Key Relationships controls are exposed',
     assert.match(index, /skipRelationshipUpdate: true/);
     assert.match(index, /no matching Megumin dossier block found.*scanning recent story context instead/i);
     assert.match(index, /dossier-import/);
-    assert.match(index, /npc_state_delta_edit_key_relationships/);
+    assert.match(index, /npc_codex_edit_key_relationships/);
     assert.match(index, /Key relationships/);
-    assert.match(index, /cleanEditorList\(editorField\('npc_state_delta_edit_key_relationships'\), KEY_RELATIONSHIP_LIMIT\)/);
+    assert.match(index, /cleanEditorList\(editorField\('npc_codex_edit_key_relationships'\), KEY_RELATIONSHIP_LIMIT\)/);
     assert.match(index, /keyRelationships: \[\.\.\.\(npc\.keyRelationships \|\| \[\]\)\]/);
     assert.match(dossierUi, /Important bonds/);
 });
 
 
 test('stale NPC lifecycle is configurable and recurring NPCs can be protected', () => {
-    assert.match(index, /npc_state_delta_auto_prune_stale/);
+    assert.match(index, /npc_codex_auto_prune_stale/);
     assert.match(index, /Auto-manage stale NPCs/);
-    assert.match(index, /npc_state_delta_stale_archive_after/);
-    assert.match(index, /npc_state_delta_stale_delete_after/);
+    assert.match(index, /npc_codex_stale_archive_after/);
+    assert.match(index, /npc_codex_stale_delete_after/);
     assert.match(index, /staleArchiveAfter:\s*30/);
     assert.match(index, /staleDeleteAfter:\s*50/);
     assert.match(index, /applyStaleLifecycleAfterScan/);
     assert.match(index, /Archived dossiers do not use an active slot/);
-    assert.match(index, /npc_state_delta_edit_retention_protected/);
+    assert.match(index, /npc_codex_edit_retention_protected/);
     assert.match(index, /Keep this NPC from automatic stale cleanup/);
     assert.match(index, /retentionProtected/);
     assert.match(index, /Deleted stale NPCs can be rediscovered if they return/);
 });
 
 test('minor NPC toggle hides portrait cards without disabling dossier tracking', () => {
-    assert.match(index, /npc_state_delta_edit_minor/);
+    assert.match(index, /npc_codex_edit_minor/);
     assert.match(index, /Hide present-NPC card/);
     assert.match(index, /!npc\.minor/);
     assert.match(index, /next\.minor = Boolean/);
@@ -344,15 +337,15 @@ test('minor NPC toggle hides portrait cards without disabling dossier tracking',
 
 test('v0.2 portrait generation settings expose theme, positive/negative prompts, and backend-neutral controls', () => {
     for (const id of [
-        'npc_state_delta_portrait_generation_enabled',
-        'npc_state_delta_portrait_theme_preset',
-        'npc_state_delta_portrait_style_positive',
-        'npc_state_delta_portrait_style_negative',
-        'npc_state_delta_portrait_composition',
-        'npc_state_delta_portrait_prompt_format',
-        'npc_state_delta_portrait_use_mood',
-        'npc_state_delta_portrait_use_location',
-        'npc_state_delta_portrait_save_gallery',
+        'npc_codex_portrait_generation_enabled',
+        'npc_codex_portrait_theme_preset',
+        'npc_codex_portrait_style_positive',
+        'npc_codex_portrait_style_negative',
+        'npc_codex_portrait_composition',
+        'npc_codex_portrait_prompt_format',
+        'npc_codex_portrait_use_mood',
+        'npc_codex_portrait_use_location',
+        'npc_codex_portrait_save_gallery',
     ]) assert.match(index, new RegExp(id));
     assert.match(index, /SillyTavern Image Generation/i);
     assert.match(index, /Fantasy Anime/);
@@ -366,19 +359,18 @@ test('v0.2 portrait generation settings expose theme, positive/negative prompts,
 test('portrait generator is a review-before-apply workflow with per-NPC prompt overrides', () => {
     assert.match(index, /function portraitGeneratorHtml/);
     assert.match(index, /npc-state-delta-portrait-generator-preview/);
-    assert.match(index, /id="npc_state_delta_portrait_positive"/);
-    assert.match(index, /id="npc_state_delta_portrait_negative"/);
+    assert.match(index, /id="npc_codex_portrait_positive"/);
+    assert.match(index, /id="npc_codex_portrait_negative"/);
     assert.match(index, /Reset from dossier/);
     assert.match(index, /> Generate</);
     assert.match(index, /Use as Portrait/);
-    assert.match(index, /npc_state_delta_edit_portrait_positive/);
-    assert.match(index, /npc_state_delta_edit_portrait_negative/);
-    assert.match(index, /npc_state_delta_edit_portrait_replace/);
+    assert.match(index, /npc_codex_edit_portrait_positive/);
+    assert.match(index, /npc_codex_edit_portrait_negative/);
+    assert.match(index, /npc_codex_edit_portrait_replace/);
     assert.match(index, /portraitPromptPositive/);
     assert.match(index, /portraitPromptNegative/);
     assert.match(index, /portraitPromptReplace/);
     assert.match(css, /\.npc-state-delta-portrait-generator-overlay\s*\{[^}]*position:\s*fixed[^}]*inset:\s*0/s);
-    assert.match(css, /@media \(min-width: 701px\) and \(max-width: 1180px\)[\s\S]*?\.npc-state-delta-portrait-generator-dialog\s*\{[^}]*width:\s*100vw;[^}]*height:\s*100dvh/s);
 });
 
 test('native portrait bridge uses quiet SillyTavern imagine command and separate negative prompt', () => {
@@ -403,8 +395,8 @@ test('portrait generator top layer stays above the full-screen dossier on tablet
 });
 test('settings panel buttons override the host min-content button width', () => {
     // SillyTavern's .menu_button is width:min-content, which stacks each word of a label inside a grid cell.
-    assert.match(css, /\.delta-settings-quick-actions \.menu_button,\n#npc_state_delta_settings \.npc-state-delta-custom-preset-actions \.menu_button,\n#npc_state_delta_settings \.delta-settings-maintenance-actions > \.menu_button \{ width: 100%; \}/);
-    assert.match(css, /\.npc-state-delta-calendar-actions > \.menu_button,\n#npc_state_delta_settings \.delta-settings-danger > \.menu_button \{ width: auto; white-space: nowrap; \}/);
+    assert.match(css, /\.delta-settings-quick-actions \.menu_button,\n#npc_codex_settings \.npc-state-delta-custom-preset-actions \.menu_button,\n#npc_codex_settings \.delta-settings-maintenance-actions > \.menu_button \{ width: 100%; \}/);
+    assert.match(css, /\.npc-state-delta-calendar-actions > \.menu_button,\n#npc_codex_settings \.delta-settings-danger > \.menu_button \{ width: auto; white-space: nowrap; \}/);
 });
 
 test('opening the dossier never focuses the search box (no phone/tablet keyboard)', () => {

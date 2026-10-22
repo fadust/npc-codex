@@ -7,7 +7,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sourceRoot = path.resolve(here, '..');
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'npc-state-delta-runtime-'));
-const extRoot = path.join(tempRoot, 'public', 'scripts', 'extensions', 'third-party', 'npc_state_delta');
+const extRoot = path.join(tempRoot, 'public', 'scripts', 'extensions', 'third-party', 'npc_codex');
 fs.mkdirSync(extRoot, { recursive: true });
 for (const name of ['index.js', 'core.js', 'core-mechanics.js', 'bundle.js', 'branch.js', 'branch-core.js', 'social.js', 'storage.js', 'identity.js', 'hardening-core.js']) {
     fs.copyFileSync(path.join(sourceRoot, name), path.join(extRoot, name));
@@ -330,14 +330,14 @@ function emitDocumentEvent(name, event) {
     for (const fn of documentListeners.get(name) || []) fn(event);
 }
 globalThis.document = {
-    body: { appendChild(node) { if (node?.id === 'npc_state_delta_editor_overlay') editorOverlay = node; if (node) node.isConnected = true; }, contains(node) { return Boolean(node?.isConnected); } },
+    body: { appendChild(node) { if (node?.id === 'npc_codex_editor_overlay') editorOverlay = node; if (node) node.isConnected = true; }, contains(node) { return Boolean(node?.isConnected); } },
     addEventListener(name, fn) {
         const list = documentListeners.get(name) || [];
         list.push(fn);
         documentListeners.set(name, list);
     },
     querySelector(selector) {
-        if (selector === '#npc_state_delta_editor_overlay') return editorOverlay;
+        if (selector === '#npc_codex_editor_overlay') return editorOverlay;
         if (selector === '#chat') return chatRoot;
         const match = String(selector).match(/\.mes\[(?:data-)?mesid=\"(\d+)\"\]/);
         return match && mockState.messageDomReady ? getMessageElement(Number(match[1])) : null;
@@ -359,11 +359,11 @@ const uiHandlers = new Map();
 const makeQuery = (selector) => {
     const isHost = selector === '#extensions_settings2';
     const isLegacyHost = selector === '#extensions_settings' || selector === '#extensionsMenu';
-    const isPanel = selector === '#npc_state_delta_settings';
+    const isPanel = selector === '#npc_codex_settings';
     const exists = selector === document || isHost || (mounted && !isLegacyHost) || (isPanel && mounted);
     const q = {
         length: exists ? 1 : 0,
-        append(html) { if (String(html).includes('id="npc_state_delta_settings"')) mounted = true; return q; },
+        append(html) { if (String(html).includes('id="npc_codex_settings"')) mounted = true; return q; },
         off() { return q; },
         on(event, target, handler) {
             if (selector === document && typeof target === 'string' && typeof handler === 'function') uiHandlers.set(`${event}|${target}`, handler);
@@ -397,7 +397,7 @@ async function manualAddNpc(name) {
     const previous = globalThis.prompt;
     globalThis.prompt = () => name;
     try {
-        const add = uiHandlers.get('click.npcStateDelta|#npc_state_delta_add_manual');
+        const add = uiHandlers.get('click.npcStateDelta|#npc_codex_add_manual');
         assert.equal(typeof add, 'function', 'manual Add must be connected to the production settings handler');
         await add();
     } finally { globalThis.prompt = previous; }
@@ -410,29 +410,29 @@ try {
     assert.equal(mounted, true, 'settings panel should mount');
     assert.equal(globalThis.NPCStateDelta?.version, JSON.parse(fs.readFileSync(path.join(sourceRoot, 'manifest.json'), 'utf8')).version);
     assert.equal(globalThis.NPCCodex, globalThis.NPCStateDelta, 'fork API and compatibility alias must share one state owner');
-    assert.ok(mockState.extensionSettings.npc_state_delta, 'settings namespace should initialize');
-    assert.equal(mockState.extensionSettings.npc_state_delta.admissionMode, 'conservative');
-    assert.equal(mockState.extensionSettings.npc_state_delta.chats, undefined, 'live NPC database should not be stored in extension_settings');
+    assert.ok(mockState.extensionSettings.npc_codex, 'settings namespace should initialize');
+    assert.equal(mockState.extensionSettings.npc_codex.admissionMode, 'conservative');
+    assert.equal(mockState.extensionSettings.npc_codex.chats, undefined, 'live NPC database should not be stored in extension_settings');
     assert.equal((mockState.listeners.get('message_sent') || []).length, 1);
     eventSource.emit('app_ready');
     eventSource.emit('extension_settings_loaded');
     await sleep(20);
     assert.equal((mockState.listeners.get('message_sent') || []).length, 1, 'lifecycle retries must not duplicate listeners');
-    assert.equal(mockState.extensionSettings.npc_state_delta.injectBudgetTokens, 4000, 'new installs default to a 4000-token injection budget');
-    mockState.extensionSettings.npc_state_delta.injectBudgetTokens = 1800;
-    delete mockState.extensionSettings.npc_state_delta.injectBudgetDefaultUpgraded;
+    assert.equal(mockState.extensionSettings.npc_codex.injectBudgetTokens, 4000, 'new installs default to a 4000-token injection budget');
+    mockState.extensionSettings.npc_codex.injectBudgetTokens = 1800;
+    delete mockState.extensionSettings.npc_codex.injectBudgetDefaultUpgraded;
     globalThis.NPCStateDelta.dataFile(); // any settings read runs the normalizer
-    assert.equal(mockState.extensionSettings.npc_state_delta.injectBudgetTokens, 4000, 'an install still on the old 1800 default moves to 4000 once');
-    mockState.extensionSettings.npc_state_delta.injectBudgetTokens = 1800;
+    assert.equal(mockState.extensionSettings.npc_codex.injectBudgetTokens, 4000, 'an install still on the old 1800 default moves to 4000 once');
+    mockState.extensionSettings.npc_codex.injectBudgetTokens = 1800;
     globalThis.NPCStateDelta.dataFile();
-    assert.equal(mockState.extensionSettings.npc_state_delta.injectBudgetTokens, 1800, 'a deliberately chosen 1800 budget is kept');
-    mockState.extensionSettings.npc_state_delta.injectBudgetTokens = 4000;
-    mockState.extensionSettings.npc_state_delta.relationshipBaseline = { trust: 0, affection: -12, desire: 0, tension: -7 };
-    mockState.extensionSettings.npc_state_delta.relationshipCaps = { ordinary: 2, meaningful: 3, major: 9, extreme: 18 };
-    mockState.extensionSettings.npc_state_delta.relationshipCriteria = 'Runtime custom relationship rubric.';
-    mockState.extensionSettings.npc_state_delta.relationshipImpactCriteria = 'Runtime custom impact rubric.';
-    mockState.extensionSettings.npc_state_delta.memoryCriteria = 'Runtime custom memory rubric.';
-    mockState.extensionSettings.npc_state_delta.behaviorCriteria = 'Runtime custom behavior rubric.';
+    assert.equal(mockState.extensionSettings.npc_codex.injectBudgetTokens, 1800, 'a deliberately chosen 1800 budget is kept');
+    mockState.extensionSettings.npc_codex.injectBudgetTokens = 4000;
+    mockState.extensionSettings.npc_codex.relationshipBaseline = { trust: 0, affection: -12, desire: 0, tension: -7 };
+    mockState.extensionSettings.npc_codex.relationshipCaps = { ordinary: 2, meaningful: 3, major: 9, extreme: 18 };
+    mockState.extensionSettings.npc_codex.relationshipCriteria = 'Runtime custom relationship rubric.';
+    mockState.extensionSettings.npc_codex.relationshipImpactCriteria = 'Runtime custom impact rubric.';
+    mockState.extensionSettings.npc_codex.memoryCriteria = 'Runtime custom memory rubric.';
+    mockState.extensionSettings.npc_codex.behaviorCriteria = 'Runtime custom behavior rubric.';
 
     // Removed text commands are inert. The retained settings Add creates an off-screen dossier.
     mockState.context.chat.push({ is_user: true, is_system: false, name: 'Kazuma', mes: '(OOC: NPC Codex: add Yunyun)' });
@@ -565,19 +565,19 @@ try {
     emitDocumentEvent('keydown', { key: 'Escape', preventDefault() {}, stopPropagation() {} });
     assert.equal(globalThis.NPCStateDelta.uiStatus().portraitGeneratorOpen, false, 'Escape closes the portrait-generator layer');
     // Compact renders a one-line strip; Off removes the block and stops chat observation.
-    mockState.extensionSettings.npc_state_delta.presentCastDisplay = 'compact';
+    mockState.extensionSettings.npc_codex.presentCastDisplay = 'compact';
     globalThis.NPCStateDelta.renderInline();
     assert.equal(inlineAnchors.length, 1);
     assert.match(inlineAnchors[0].innerHTML, /npc-state-delta-present-strip/);
     assert.match(inlineAnchors[0].innerHTML, /class="npc-state-delta-present-chip" data-npc-id="[^"]+"[^>]*aria-label="Open Yunyun dossier"/);
     assert.doesNotMatch(inlineAnchors[0].innerHTML, /npc-state-delta-present-grid/);
-    mockState.extensionSettings.npc_state_delta.presentCastDisplay = 'off';
+    mockState.extensionSettings.npc_codex.presentCastDisplay = 'off';
     globalThis.NPCStateDelta.render();
     globalThis.NPCStateDelta.renderInline();
     assert.equal(inlineAnchors.length, 0, 'Off removes the in-chat block');
     assert.equal(globalThis.NPCStateDelta.uiStatus().inlineObserver, false, 'Off stops observing host message redraws');
     assert.ok((globalThis.NPCStateDelta.getState().inlineCards || []).length > 0, 'inlineCards history is still retained while display is Off');
-    mockState.extensionSettings.npc_state_delta.presentCastDisplay = 'full';
+    mockState.extensionSettings.npc_codex.presentCastDisplay = 'full';
     globalThis.NPCStateDelta.render();
     globalThis.NPCStateDelta.renderInline();
     assert.equal(inlineAnchors.length, 1, 'switching back to Full remounts the block');
@@ -608,7 +608,7 @@ try {
     assert.equal(savedPortraitSettings.portraitUseMood, false);
     assert.equal(savedPortraitSettings.portraitUseLocation, true);
     assert.equal(savedPortraitSettings.portraitSaveToGallery, true);
-    assert.deepEqual(mockState.extensionSettings.npc_state_delta.portraitStylePositive, savedPortraitSettings.portraitStylePositive);
+    assert.deepEqual(mockState.extensionSettings.npc_codex.portraitStylePositive, savedPortraitSettings.portraitStylePositive);
     assert.equal(savedPortraitSettings.portraitCustomPresets.length, 1);
     assert.equal(savedPortraitSettings.portraitCustomPresets[0].name, 'Custom 1');
     assert.match(savedPortraitSettings.portraitCustomPresets[0].positive, /custom violet key visual/);
@@ -896,7 +896,7 @@ try {
         assert.deepEqual(globalThis.NPCStateDelta.getState().npcs.find(n => n.name === 'Yunyun').relationship, yunyunBefore.relationship);
 
         // Opt-in: rewind every dossier to just before the deleted message, discarding later changes.
-        mockState.extensionSettings.npc_state_delta.midDeleteRewind = true;
+        mockState.extensionSettings.npc_codex.midDeleteRewind = true;
         const rewindBefore = structuredClone(globalThis.NPCStateDelta.getState().npcs.find(n => n.name === 'Yunyun'));
         mockState.quietResponder = async () => JSON.stringify({ npcs: [
             { name: 'Yunyun', present: true, mood: 'shaken', relationshipImpact: 'meaningful', relationshipDelta: { trust: 2, affection: 1, desire: 0, tension: 0 },
@@ -924,7 +924,7 @@ try {
         assert.deepEqual(rewound.relationship, rewindBefore.relationship);
         assert.equal(globalThis.NPCStateDelta.uiStatus().branchReconciliations.at(-1).rewoundToBoundary, true);
         assert.equal(mockState.rawCalls.length, rawCallsBeforeRewind, 'the rewind makes no model requests');
-        mockState.extensionSettings.npc_state_delta.midDeleteRewind = false;
+        mockState.extensionSettings.npc_codex.midDeleteRewind = false;
         mockState.context.chat.length = 2;
         eventSource.emit('message_deleted', 2);
         await sleep(600);
@@ -951,7 +951,7 @@ try {
     state = globalThis.NPCStateDelta.getState();
     assert.equal(state.npcs.find(n => n.name === 'Yunyun').archived, true);
     assert.equal(state.npcs.find(n => n.name === 'Yunyun').present, false);
-    const promptAfterArchive = [...mockState.prompts].reverse().find(args => args?.[0] === 'npc_state_delta_live_dossier')?.[1] || '';
+    const promptAfterArchive = [...mockState.prompts].reverse().find(args => args?.[0] === 'npc_codex_live_dossier')?.[1] || '';
     assert.doesNotMatch(promptAfterArchive, /- Yunyun:/);
     assert.equal(await globalThis.NPCStateDelta.restore(yunyunId), true);
     state = globalThis.NPCStateDelta.getState();
@@ -1106,10 +1106,10 @@ try {
     assert.ok(lioraInline?.cards.some(card => card.name === 'Liora'), 'if merged state marks Liora present, the same scan must record her inline card');
     assert.equal(autoRetryAttempt, 2, 'automatic/manual scanner path should retry exactly once after truncation');
 
-    const savedMiraFullScan = mockState.extensionSettings.npc_state_delta.fullScanEveryTurn;
-    const savedMiraBaseline = structuredClone(mockState.extensionSettings.npc_state_delta.relationshipBaseline);
-    mockState.extensionSettings.npc_state_delta.relationshipBaseline = { trust: 0, affection: 0, desire: 0, tension: 0 };
-    mockState.extensionSettings.npc_state_delta.fullScanEveryTurn = true;
+    const savedMiraFullScan = mockState.extensionSettings.npc_codex.fullScanEveryTurn;
+    const savedMiraBaseline = structuredClone(mockState.extensionSettings.npc_codex.relationshipBaseline);
+    mockState.extensionSettings.npc_codex.relationshipBaseline = { trust: 0, affection: 0, desire: 0, tension: 0 };
+    mockState.extensionSettings.npc_codex.fullScanEveryTurn = true;
     mockState.context.chat.push({ is_user: false, is_system: false, name: 'Megumin', swipe_id: 0, mes: 'Earlier, Mira returned Kazuma\'s dropped purse untouched after finding it on the guild floor.' });
     mockState.context.chat.push({ is_user: true, is_system: false, name: 'Kazuma', mes: 'I invite Mira to share a bowl of stew with me and thank her for staying.' });
     mockState.context.chat.push({ is_user: false, is_system: false, name: 'Megumin', swipe_id: 0, mes: 'Mira accepts and stays to eat with Kazuma, lingering through an easy conversation before the bowls are cleared.' });
@@ -1182,13 +1182,13 @@ try {
     assert.equal(mira.present, true, 'automatic historical enrichment must not erase the live presence established by the full scan');
     assert.equal(mira.seenCount, 1, 'automatic historical enrichment must not count as a second sighting in the same turn');
     assert.equal(state.pendingBackfills.some(item => item.npcId === mira.id), false);
-    mockState.extensionSettings.npc_state_delta.relationshipBaseline = savedMiraBaseline;
-    mockState.extensionSettings.npc_state_delta.fullScanEveryTurn = savedMiraFullScan;
+    mockState.extensionSettings.npc_codex.relationshipBaseline = savedMiraBaseline;
+    mockState.extensionSettings.npc_codex.fullScanEveryTurn = savedMiraFullScan;
 
-    const savedCastFullScan = mockState.extensionSettings.npc_state_delta.fullScanEveryTurn;
-    const savedCastDepth = mockState.extensionSettings.npc_state_delta.scanDepth;
-    mockState.extensionSettings.npc_state_delta.fullScanEveryTurn = true;
-    mockState.extensionSettings.npc_state_delta.scanDepth = 2;
+    const savedCastFullScan = mockState.extensionSettings.npc_codex.fullScanEveryTurn;
+    const savedCastDepth = mockState.extensionSettings.npc_codex.scanDepth;
+    mockState.extensionSettings.npc_codex.fullScanEveryTurn = true;
+    mockState.extensionSettings.npc_codex.scanDepth = 2;
     const miraBeforeCast = structuredClone(globalThis.NPCStateDelta.getState().npcs.find(n => n.name === 'Mira'));
     mockState.context.chat.push({ is_user: true, is_system: false, name: 'Kazuma', mes: 'I help Mira gather her scattered spell notes, then head across town to the apothecary.' });
     mockState.context.chat.push({ is_user: false, is_system: false, name: 'Megumin', swipe_id: 0, mes: 'Mira accepts the recovered notes with visible relief and thanks Kazuma for taking the time to help. Later, at the apothecary, a new clerk named Neri introduces herself and points out the herb shelves.' });
@@ -1257,8 +1257,8 @@ try {
     assert.equal(miraContinuityCalls, 1, 'cast sweep/participant repair should reconcile Mira exactly once');
     assert.equal(neriBackfillCalls, 1, 'new NPC should receive one targeted deep reconciliation');
     assert.equal(state.pendingBackfills.some(item => item.npcId === miraAfterCast.id || item.npcId === neri.id), false, 'successful cast reconciliation should drain the current Mira/Neri requests without deleting unrelated retry backlog');
-    mockState.extensionSettings.npc_state_delta.fullScanEveryTurn = savedCastFullScan;
-    mockState.extensionSettings.npc_state_delta.scanDepth = savedCastDepth;
+    mockState.extensionSettings.npc_codex.fullScanEveryTurn = savedCastFullScan;
+    mockState.extensionSettings.npc_codex.scanDepth = savedCastDepth;
 
     let malformedRetryAttempt = 0;
     mockState.quietResponder = async (args = {}) => {
@@ -1436,9 +1436,9 @@ try {
     assert.equal(globalThis.NPCStateDelta.getState().npcs.some(n => n.name === 'Luna'), false, 'test cleanup should remove imported Luna');
     assert.equal(globalThis.NPCStateDelta.getState().pendingBackfills.some(item => item.label === 'Luna'), false, 'manual removal should also clear queued backfill');
 
-    mockState.extensionSettings.npc_state_delta.fullScanEveryTurn = true;
-    mockState.extensionSettings.npc_state_delta.scanEvery = 20;
-    mockState.extensionSettings.npc_state_delta.scanDepth = 4;
+    mockState.extensionSettings.npc_codex.fullScanEveryTurn = true;
+    mockState.extensionSettings.npc_codex.scanEvery = 20;
+    mockState.extensionSettings.npc_codex.scanDepth = 4;
     const fullScanTarget = globalThis.NPCStateDelta.getState().npcs.find(n => !n.archived);
     assert.ok(fullScanTarget, 'runtime should retain at least one active dossier for full-scan validation');
     const relationshipBeforeFullScan = structuredClone(fullScanTarget.relationship);
@@ -1481,8 +1481,8 @@ try {
 
     // Stages 5-7: exercise the production focused/Refresh/backfill paths, not facade-only calls.
     const savedReviewSettings = Object.fromEntries(['autoScan', 'autoArchiveDeaths', 'fullScanEveryTurn', 'relationshipBaseline']
-        .map(key => [key, structuredClone(mockState.extensionSettings.npc_state_delta[key])]));
-    Object.assign(mockState.extensionSettings.npc_state_delta, {
+        .map(key => [key, structuredClone(mockState.extensionSettings.npc_codex[key])]));
+    Object.assign(mockState.extensionSettings.npc_codex, {
         autoScan: false, autoArchiveDeaths: false, fullScanEveryTurn: false,
         relationshipBaseline: { trust: 0, affection: 0, desire: 0, tension: 0 },
     });
@@ -1557,7 +1557,7 @@ try {
     assert.ok(sentinel.deathCorrection);
     await globalThis.NPCStateDelta.deleteNpc(sentinelId);
     await globalThis.NPCStateDelta.flush();
-    Object.assign(mockState.extensionSettings.npc_state_delta, savedReviewSettings);
+    Object.assign(mockState.extensionSettings.npc_codex, savedReviewSettings);
 
     const persistenceTarget = globalThis.NPCStateDelta.getState().npcs.find(n => !n.archived);
     assert.ok(persistenceTarget, 'runtime should retain an NPC for persistence race validation');
@@ -1597,7 +1597,7 @@ try {
     releaseDeleteUpload();
     await pendingDeleteWrite;
     await sleep(100);
-    assert.equal(mockState.extensionSettings.npc_state_delta.dataFiles['chat:megumin.png:smoke-chat'], undefined);
+    assert.equal(mockState.extensionSettings.npc_codex.dataFiles['chat:megumin.png:smoke-chat'], undefined);
     assert.equal(mockState.files.has(deletedPointer.path), false);
 
     mockState.context.groupId = 'party-1';
@@ -1625,8 +1625,8 @@ try {
     assert.equal(ownerBKey, 'chat:yunyun.png:shared-save');
     assert.notEqual(ownerAKey, ownerBKey);
 
-    mockState.extensionSettings.npc_state_delta.dataFiles[ownerAKey] ||= { path: '/unused-owner-a' };
-    mockState.extensionSettings.npc_state_delta.dataFiles[ownerBKey] ||= { path: '/unused-owner-b' };
+    mockState.extensionSettings.npc_codex.dataFiles[ownerAKey] ||= { path: '/unused-owner-a' };
+    mockState.extensionSettings.npc_codex.dataFiles[ownerBKey] ||= { path: '/unused-owner-b' };
     mockState.hostChatsByAvatar.set('megumin.png', []);
     mockState.hostChatsByAvatar.set('yunyun.png', [{ file_name: 'shared-save.jsonl' }]);
     const resolvedDeletedOwner = await globalThis.__NPCStateDeltaLifecycle.resolveDeletedKey('shared-save', 'chat', '');
@@ -1634,8 +1634,8 @@ try {
     mockState.hostChatsByAvatar.set('megumin.png', [{ file_name: 'shared-save.jsonl' }]);
     const unresolvedWhenBothOwn = await globalThis.__NPCStateDeltaLifecycle.resolveDeletedKey('shared-save', 'chat', '');
     assert.equal(unresolvedWhenBothOwn, '', 'destructive lookup must fail closed when both owners still claim the filename');
-    delete mockState.extensionSettings.npc_state_delta.dataFiles[ownerAKey];
-    delete mockState.extensionSettings.npc_state_delta.dataFiles[ownerBKey];
+    delete mockState.extensionSettings.npc_codex.dataFiles[ownerAKey];
+    delete mockState.extensionSettings.npc_codex.dataFiles[ownerBKey];
     await sleep(120);
 
     console.log('Runtime smoke: file persistence, branch safety, OOC removal, chat cleanup, group ownership, and same-filename character isolation passed.');

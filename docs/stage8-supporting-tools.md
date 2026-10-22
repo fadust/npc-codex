@@ -55,7 +55,7 @@ The browser scrollbar is visually hidden so the rail reads as a cast carousel ra
 
 ## Adaptive editor and life state
 
-The native dossier editor remains the canonical field editor and uses the dossier-sized desktop envelope plus full-screen narrow/tablet/mobile behavior. The popup now has exactly one maintained scrolling region: SillyTavern's outer popup content is overflow-contained and `#npc_state_delta_editor_content` owns vertical scrolling. Save/Cancel remain outside that body.
+The native dossier editor remains the canonical field editor and uses the dossier-sized desktop envelope plus full-screen narrow/tablet/mobile behavior. The popup now has exactly one maintained scrolling region: SillyTavern's outer popup content is overflow-contained and `#npc_codex_editor_content` owns vertical scrolling. Save/Cancel remain outside that body.
 
 The existing editor controls are reorganized without creating replacement field owners:
 

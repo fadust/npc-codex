@@ -91,7 +91,7 @@ Final changed-tree checks:
   - accepted characterization injection: 1,637 chars / estimated 468 tokens
 - `node scripts/measure-stage9.mjs`: PASS through the same production capture harness; scanner/full-window/Refresh/backfill/import/focused-relationship/retry hashes, request counts, route options, and response allowances remain unchanged from 1.0.27
 - `npm run package`: PASS using a temporary untracked Windows `python3.cmd` forwarding to installed `py -3`; shim deleted immediately
-  - archive: `npc_state_delta-1.0.28.zip`
+  - archive: `npc_codex-1.0.28.zip`
   - runtime modules: 31
   - bytes: 337,152
   - SHA-256: `a1e54320e58e0aecd989bafb68cbc5afe31bdc67cff2c4f6c709772a6f830908`

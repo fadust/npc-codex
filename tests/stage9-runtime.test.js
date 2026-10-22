@@ -47,7 +47,7 @@ async function additionalChecks(mockState, eventSource, manualAddNpc, sleep, ext
         new DataView(bytes.buffer).setUint32(8, text.length, true); bytes.set(text, 12); return bytes;
     };
     const beforeImport = runtime.getState();
-    await assert.rejects(runtime.importBytes(bundleBytes({ format: 'npc_state_delta_bundle', formatVersion: 1,
+    await assert.rejects(runtime.importBytes(bundleBytes({ format: 'npc_codex_bundle', formatVersion: 1,
         state: { npcs: [{ ...npc, name: 'Must not partially replace' }] }, portableSettings: { scannerConnectionProfile: 'foreign' },
     })), /unsupported portable setting/);
     assert.deepEqual(runtime.getState(), beforeImport);
@@ -116,7 +116,7 @@ async function additionalChecks(mockState, eventSource, manualAddNpc, sleep, ext
         await runtime.scan();
         assert.equal(runtime.getNpc(npc.id).age, '7');
         assert.equal(runtime.getNpc(npc.id).apparentAge, '~7');
-        const injection = [...mockState.prompts].reverse().find(args => args[0] === 'npc_state_delta_live_dossier')?.[1] || '';
+        const injection = [...mockState.prompts].reverse().find(args => args[0] === 'npc_codex_live_dossier')?.[1] || '';
         assert.match(injection, /Continuity Probe/);
         assert.match(injection, /(?:age|chronological)[^\n]{0,25}7/i);
         await runtime.flush();
@@ -206,7 +206,7 @@ async function additionalChecks(mockState, eventSource, manualAddNpc, sleep, ext
         let dialog;
         document.body.appendChild = node => {
             originalAppend.call(document.body, node);
-            if (node.id !== 'npc_state_delta_portrait_generator_overlay') return;
+            if (node.id !== 'npc_codex_portrait_generator_overlay') return;
             dialog = node;
             const controls = new Map();
             node.querySelector = selector => {
@@ -234,7 +234,7 @@ async function additionalChecks(mockState, eventSource, manualAddNpc, sleep, ext
             // A capture-phase legacy handler must not consume Escape above another tools dialog.
             runtime.openPortraitGenerator(npc.id);
             const oldLookup = document.getElementById;
-            document.getElementById = id => id === 'npc_state_delta_tools_overlay' ? { isConnected: true } : oldLookup?.(id);
+            document.getElementById = id => id === 'npc_codex_tools_overlay' ? { isConnected: true } : oldLookup?.(id);
             emitDocumentEvent('keydown', { key: 'Escape', preventDefault() {}, stopPropagation() {} });
             assert.equal(runtime.uiStatus().portraitGeneratorOpen, true);
             document.getElementById = oldLookup;

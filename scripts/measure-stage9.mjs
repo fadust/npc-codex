@@ -49,7 +49,7 @@ for (const routeName of ['default', 'profile']) {
                 options: Object.fromEntries(Object.entries(options).filter(([key]) => key !== 'signal')) });
             return response();
         };
-        const ctx = { extensionSettings: { npc_state_delta: {}, connectionManager: { profiles: [profile] } },
+        const ctx = { extensionSettings: { npc_codex: {}, connectionManager: { profiles: [profile] } },
             generateRaw(options) { return capture([{ role: 'system', content: options.systemPrompt }, { role: 'user', content: options.prompt }], options.responseLength,
                 { quietToLoud: options.quietToLoud, instructOverride: options.instructOverride, trimNames: options.trimNames }); },
             ConnectionManagerRequestService: { getProfile: () => profile, isProfileSupported: () => true,

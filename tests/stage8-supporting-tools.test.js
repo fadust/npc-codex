@@ -39,7 +39,7 @@ test('Diagnostics retains the manual full-cast follow-up action', () => {
 
 test('supporting tools bind to the accepted Stage 1 dossier root', () => {
     const previousDocument = globalThis.document;
-    const root = { id: 'npc_state_delta_dossier_root' };
+    const root = { id: 'npc_codex_dossier_root' };
     globalThis.document = { getElementById: id => id === root.id ? root : null };
     try {
         assert.equal(uiRoot(), root);

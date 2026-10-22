@@ -227,7 +227,7 @@ test('dossier UI places gender between species and role and makes it searchable'
 
     assert.match(dossierUiSource, /npc\?\.species,\s*\n\s*npc\?\.gender,\s*\n\s*npc\?\.role/);
     assert.match(dossierUiSource, /\[npc\.species, npc\.gender, npc\.role\]/);
-    assert.match(runtimeSource, /id="npc_state_delta_edit_gender"/);
+    assert.match(runtimeSource, /id="npc_codex_edit_gender"/);
     assert.match(runtimeSource, /Gender<select/);
 });
 

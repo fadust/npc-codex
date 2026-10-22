@@ -13,7 +13,7 @@ function fixture(profileId = '') {
     const profiles = [{ id: 'fast', name: 'Fast' }];
     const ctx = {
         extensionSettings: {
-            npc_state_delta: { scannerConnectionProfile: profileId, scannerMaxOutputTokens: 0 },
+            npc_codex: { scannerConnectionProfile: profileId, scannerMaxOutputTokens: 0 },
             connectionManager: { profiles },
             disabledExtensions: [],
         },
@@ -38,14 +38,14 @@ test('scanner output setting normalizes disabled, bounded, and oversized values'
 
 test('configured scanner output setting remains separate from the roleplay connection', () => {
     const { ctx } = fixture('fast');
-    ctx.extensionSettings.npc_state_delta.scannerMaxOutputTokens = 12000;
+    ctx.extensionSettings.npc_codex.scannerMaxOutputTokens = 12000;
     assert.equal(configuredScannerMaxOutputTokens(ctx), 12000);
     assert.equal(ctx.extensionSettings.connectionManager.selectedProfile, undefined);
 });
 
 test('default scanner route applies the configured maximum only to scanner request options', async () => {
     const { ctx, calls } = fixture('');
-    ctx.extensionSettings.npc_state_delta.scannerMaxOutputTokens = 7000;
+    ctx.extensionSettings.npc_codex.scannerMaxOutputTokens = 7000;
     const payload = { prompt: 'scan', responseLength: 1800 };
     await dispatchScannerRequest(ctx, payload, { route: { profileId: '' } });
     assert.equal(calls.host.length, 1);
@@ -55,10 +55,10 @@ test('default scanner route applies the configured maximum only to scanner reque
 
 test('profile scanner route applies and pins the configured maximum across later calls', async () => {
     const { ctx, calls } = fixture('fast');
-    ctx.extensionSettings.npc_state_delta.scannerMaxOutputTokens = 9000;
+    ctx.extensionSettings.npc_codex.scannerMaxOutputTokens = 9000;
     const route = { profileId: 'fast' };
     await dispatchScannerRequest(ctx, { prompt: 'scan', responseLength: 1800 }, { route });
-    ctx.extensionSettings.npc_state_delta.scannerMaxOutputTokens = 3000;
+    ctx.extensionSettings.npc_codex.scannerMaxOutputTokens = 3000;
     await dispatchScannerRequest(ctx, { prompt: 'retry', responseLength: 5200 }, { route });
     assert.equal(calls.profile.length, 2);
     assert.deepEqual(calls.profile.map(call => call[2]), [9000, 9000]);
@@ -67,7 +67,7 @@ test('profile scanner route applies and pins the configured maximum across later
 
 test('zero scanner output setting preserves built-in request lengths', async () => {
     const { ctx, calls } = fixture('fast');
-    ctx.extensionSettings.npc_state_delta.scannerMaxOutputTokens = 0;
+    ctx.extensionSettings.npc_codex.scannerMaxOutputTokens = 0;
     await dispatchScannerRequest(ctx, { prompt: 'relationship', responseLength: 900 }, { route: { profileId: 'fast' } });
     assert.equal(calls.profile[0][2], 900);
 });
@@ -78,13 +78,12 @@ test('scanner output UI mounts into the Scanning slot, leaves panel styling to s
     const css = fs.readFileSync(new URL('../style.css', import.meta.url), 'utf8');
     assert.match(source, /Maximum output tokens/);
     assert.match(source, /\[data-delta-settings-slot="scanner-output"\]/);
-    assert.match(index, /settingsSlot\('full-cast'\)[\s\S]*npc_state_delta_scan_depth[\s\S]*settingsSlot\('scanner-output'\)/, 'full cast and output limit sit inside Scanning');
-    assert.doesNotMatch(source, /moveFullCastIntoScanning|npc_state_delta_full_cast_scan|#\$\{SETTINGS_ID\} \./, 'no relocation or settings CSS outside the settings owner');
+    assert.match(index, /settingsSlot\('full-cast'\)[\s\S]*npc_codex_scan_depth[\s\S]*settingsSlot\('scanner-output'\)/, 'full cast and output limit sit inside Scanning');
+    assert.doesNotMatch(source, /moveFullCastIntoScanning|npc_codex_full_cast_scan|#\$\{SETTINGS_ID\} \./, 'no relocation or settings CSS outside the settings owner');
     assert.match(source, /class="delta-setting-number"/);
     assert.match(css, /\.delta-settings-maintenance-actions \{ display: grid; grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
     assert.match(css, /\.npc-state-delta-tuning-actions \{ display: flex; flex-wrap: wrap;/);
     assert.match(css, /@container npc-delta-settings \(max-width: 500px\)/);
     assert.match(source, /delta-cast-card[^}]*height:168px/s);
-    assert.match(source, /@media\(max-width:620px\)[\s\S]*height:150px/);
     assert.match(source, /roleplay or image-generation limits/);
 });

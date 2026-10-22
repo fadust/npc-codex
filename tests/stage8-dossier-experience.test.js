@@ -69,7 +69,7 @@ test('editor synchronization is idempotent so MutationObserver refresh cannot se
 
 test('launcher remains direct-to-dossier and is presented as a circular 48px floating control', () => {
     assert.doesNotMatch(source, /openLauncherHub|data-hub-action|delta-experience-hub/);
-    assert.match(source, /npc_state_delta_dossier_launcher\{border-radius:50%!important\}/);
+    assert.match(source, /npc_codex_dossier_launcher\{border-radius:50%!important\}/);
     assert.match(source, /delta-open-settings/);
 });
 
@@ -91,12 +91,12 @@ test('dossier library starts collapsed and expands from its heading', () => {
     // Collapsed by default and again whenever the panel closes; presentation only, never stored.
     assert.match(source, /let libraryCollapsed = true;/);
     assert.match(source, /observe\(panel, \{ attributes: true, attributeFilter: \['hidden'\] \}\)/);
-    assert.doesNotMatch(source, /LIBRARY_COLLAPSED_KEY|npc_state_delta_library_collapsed/);
+    assert.doesNotMatch(source, /LIBRARY_COLLAPSED_KEY|npc_codex_library_collapsed/);
 });
 
 test('editor uses one scroll body and task-grouped form sections', () => {
     assert.match(source, /\.npc-state-delta-editor-popup \.popup-content\{[^}]*overflow:hidden!important/);
-    assert.match(source, /#npc_state_delta_editor_content\{[^}]*overflow-y:auto!important/);
+    assert.match(source, /#npc_codex_editor_content\{[^}]*overflow-y:auto!important/);
     assert.match(source, /editorSection\('Identity & profile'/);
     assert.match(source, /editorSection\('Current state'/);
     assert.match(source, /editorSection\('Relationships'/);
@@ -111,19 +111,19 @@ test('settings are grouped by task and extension-wide backup diagnostics live in
     const html = index.slice(index.indexOf('function buildSettingsHtml()'), index.indexOf('function readOpenSettingsGroups()'));
     const groups = [...html.matchAll(/settingsGroup\('([a-z]+)', '([^']+)'/g)].map(match => match[2]);
     assert.deepEqual(groups, ['Scanning', 'Roster & continuity', 'Calendar & birthdays', 'Portrait generation', 'Scanner rules', 'Advanced', 'Data & maintenance']);
-    assert.match(html, /delta-settings-quickbar[\s\S]*npc_state_delta_enabled[\s\S]*npc_state_delta_auto[\s\S]*data-delta-settings-open-dossiers[\s\S]*npc_state_delta_scan_now[\s\S]*npc_state_delta_add_manual/);
+    assert.match(html, /delta-settings-quickbar[\s\S]*npc_codex_enabled[\s\S]*npc_codex_auto[\s\S]*data-delta-settings-open-dossiers[\s\S]*npc_codex_scan_now[\s\S]*npc_codex_add_manual/);
     assert.match(html, /delta-settings-maintenance-actions[\s\S]*data-delta-settings-backup[\s\S]*data-delta-settings-restore[\s\S]*data-delta-settings-diagnostics/);
-    assert.match(html, /npc_state_delta_roster_summary[\s\S]*delta-settings-danger[\s\S]*npc_state_delta_clear_chat/);
+    assert.match(html, /npc_codex_roster_summary[\s\S]*delta-settings-danger[\s\S]*npc_codex_clear_chat/);
     assert.match(html, /native SillyTavern Image Generation handoff/);
-    assert.match(html, /npc_state_delta_portrait_generation_enabled/);
-    assert.match(html, /npc_state_delta_portrait_save_gallery/);
+    assert.match(html, /npc_codex_portrait_generation_enabled/);
+    assert.match(html, /npc_codex_portrait_save_gallery/);
     assert.match(index, /dispatchEvent\?\.\(new CustomEvent\('npc-state-delta:settings-mounted'/);
     assert.match(source, /data-delta-settings-backup/);
     assert.match(source, /data-delta-settings-restore/);
     assert.match(source, /data-delta-settings-diagnostics/);
     assert.match(source, /data-delta-settings-open-dossiers/);
     assert.match(source, /delta-tools-data,[\s\S]*delta-tools-diagnostics-button\{display:none!important\}/);
-    assert.doesNotMatch(source, /ensureSettingsExperience|moveSettingsRows|#npc_state_delta_settings /, 'the dossier experience never restructures or styles the settings panel');
+    assert.doesNotMatch(source, /ensureSettingsExperience|moveSettingsRows|#npc_codex_settings /, 'the dossier experience never restructures or styles the settings panel');
 });
 
 test('cohesive experience keeps selected dossier actions routed through the maintained Portrait tool', () => {

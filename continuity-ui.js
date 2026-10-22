@@ -9,7 +9,7 @@ import {
 } from './appearance.js';
 import { activeChatKey, api, escapeHtml, flushDurably, plain, stage1Refresh } from './dossier-tools-core.js';
 
-const STYLE_ID = 'npc_state_delta_continuity_ui_styles';
+const STYLE_ID = 'npc_codex_continuity_ui_styles';
 const UNKNOWN_FORM = '__unknown__';
 const NO_FORM = '__none__';
 let normalizeQueued = false;
@@ -61,11 +61,7 @@ function injectStyles() {
       /* SillyTavern's .menu_button is width:min-content; keep the Apply label on one line. */
       .delta-editor-appearance-actions > .menu_button { width:auto; white-space:nowrap; margin:0; }
       .delta-editor-appearance-actions small { opacity:.72; }
-      @media (max-width:700px) {
-        .delta-editor-appearance-forms .delta-editor-section-grid { grid-template-columns:minmax(0,1fr); }
-        .delta-editor-appearance-forms .delta-appearance-wide { grid-column:auto; }
-        .delta-editor-appearance-actions button { min-height:44px; }
-      }
+
     `;
     document.head.appendChild(style);
 }
@@ -115,7 +111,7 @@ function toggleUnclassifiedAppearance(section) {
 }
 
 function ensureAppearanceEditor(editor) {
-    const content = editor?.querySelector?.('#npc_state_delta_editor_content');
+    const content = editor?.querySelector?.('#npc_codex_editor_content');
     const npcId = editorNpcId(editor);
     if (!content || !npcId) return false;
     let section = editorAppearanceSection(editor);
@@ -178,7 +174,7 @@ async function applyAppearanceEditor(editor) {
         unclassifiedAppearance: section.querySelector('[data-delta-unclassified-appearance]')?.value || '',
         currentAppearance: section.querySelector('[data-delta-current-appearance]')?.value || '',
         formsText: section.querySelector('[data-delta-appearance-forms]')?.value || '',
-    }, { chatKey, lockAppearance: Boolean(editor.querySelector('#npc_state_delta_edit_lock_profile')?.checked) });
+    }, { chatKey, lockAppearance: Boolean(editor.querySelector('#npc_codex_edit_lock_profile')?.checked) });
     if (!applied) throw new Error('The canonical appearance edit was rejected because its target changed.');
     const saved = await flushDurably(chatKey, 'appearance forms');
     if (!saved.persisted) throw new Error('Appearance forms applied locally, but durable save failed. Your edits are retained.');

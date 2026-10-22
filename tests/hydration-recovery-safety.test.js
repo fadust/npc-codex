@@ -75,11 +75,11 @@ test('portrait custom presets use the current named persistent library without l
 
 test('portrait custom preset library exposes named management and keeps visual controls per preset', () => {
     for (const id of [
-        'npc_state_delta_portrait_custom_preset',
-        'npc_state_delta_portrait_custom_add',
-        'npc_state_delta_portrait_custom_duplicate',
-        'npc_state_delta_portrait_custom_rename',
-        'npc_state_delta_portrait_custom_delete',
+        'npc_codex_portrait_custom_preset',
+        'npc_codex_portrait_custom_add',
+        'npc_codex_portrait_custom_duplicate',
+        'npc_codex_portrait_custom_rename',
+        'npc_codex_portrait_custom_delete',
     ]) assert.match(index, new RegExp(id));
     assert.match(index, /PORTRAIT_CUSTOM_PRESET_LIMIT = 24/);
     assert.match(index, /promptFormat: next\.portraitPromptFormat/);

@@ -1,3 +1,4 @@
+import { codexSettings } from './settings-identity.js';
 import { ACTOR_OWNERS, resolveActor, actorProfiles, readStoryContinuity, withBaiBaiPresence } from './actor-stack.js';
 import { PORTRAYAL_REFERENCES, acceptPortrayal, renderPortrayal } from './actor-portrayal.js';
 /* NPC Codex - standalone SillyTavern extension */
@@ -186,9 +187,9 @@ import {
     resolveOwnedLifecycleKey,
 } from './hardening-core.js';
 
-const EXTENSION_NAME = 'npc_state_delta';
-const PROMPT_KEY = 'npc_state_delta_live_dossier';
-const UI_ID = 'npc_state_delta_settings';
+const EXTENSION_NAME = 'npc_codex';
+const PROMPT_KEY = 'npc_codex_live_dossier';
+const UI_ID = 'npc_codex_settings';
 let eventsRegistered = false;
 let initialized = false;
 let mountRetryTimer = null;
@@ -545,8 +546,8 @@ function persistSettings() {
 }
 
 function getSettings() {
-    let settings = extension_settings[EXTENSION_NAME];
-    let dirty = false;
+    let dirty = !extension_settings[EXTENSION_NAME] && !!extension_settings.npc_state_delta;
+    let settings = codexSettings(extension_settings);
     if (!settings || typeof settings !== 'object') {
         settings = structuredClone(DEFAULTS);
         extension_settings[EXTENSION_NAME] = settings;
@@ -2905,44 +2906,44 @@ function setNpcChatRefreshIndicator(npcId, busy) {
 function syncOpenNpcEditorFields(npc) {
     if (!npc || !editorIsMounted()) return;
     const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ''; };
-    set('npc_state_delta_edit_name', npc.name || '');
-    set('npc_state_delta_edit_aliases', (npc.aliases || []).join('\n'));
+    set('npc_codex_edit_name', npc.name || '');
+    set('npc_codex_edit_aliases', (npc.aliases || []).join('\n'));
     set('npc_codex_custom_fields', JSON.stringify(npc.customFields || {}, null, 2));
-    set('npc_state_delta_edit_role', npc.role || '');
-    set('npc_state_delta_edit_species', npc.species || '');
-    set('npc_state_delta_edit_gender', npc.gender || '');
-    set('npc_state_delta_edit_home_base', npc.homeBase || '');
-    set('npc_state_delta_edit_age', npc.age || '');
-    set('npc_state_delta_edit_birthday', npc.birthDateDisplay || '');
-    set('npc_state_delta_edit_apparent_age', npc.apparentAge || '');
-    set('npc_state_delta_edit_personality', npc.personality || '');
-    set('npc_state_delta_edit_speech', npc.speech || '');
-    set('npc_state_delta_edit_behavior_profile', (npc.behaviorProfile || []).join('\n'));
-    set('npc_state_delta_edit_background', npc.background || '');
-    set('npc_state_delta_edit_mannerisms', (npc.mannerisms || []).join('\n'));
-    set('npc_state_delta_edit_key_relationships', (npc.keyRelationships || []).join('\n'));
-    set('npc_state_delta_edit_relationship_summary', npc.relationshipSummary || '');
-    set('npc_state_delta_edit_mood', npc.mood || '');
-    set('npc_state_delta_edit_location', npc.location || '');
-    set('npc_state_delta_edit_goal', npc.goal || '');
-    set('npc_state_delta_edit_status', npc.status || '');
-    set('npc_state_delta_edit_memories', episodesToEditorText(npc));
-    set('npc_state_delta_edit_intentions', intentionsToEditorText(npc));
-    set('npc_state_delta_edit_beliefs', beliefsToEditorText(npc));
-    set('npc_state_delta_edit_likes', normalizePreferences(npc.likes).join('; '));
-    set('npc_state_delta_edit_dislikes', normalizePreferences(npc.dislikes).join('; '));
-    set('npc_state_delta_edit_knowledge', knowledgeToEditorText(npc.knowledge));
+    set('npc_codex_edit_role', npc.role || '');
+    set('npc_codex_edit_species', npc.species || '');
+    set('npc_codex_edit_gender', npc.gender || '');
+    set('npc_codex_edit_home_base', npc.homeBase || '');
+    set('npc_codex_edit_age', npc.age || '');
+    set('npc_codex_edit_birthday', npc.birthDateDisplay || '');
+    set('npc_codex_edit_apparent_age', npc.apparentAge || '');
+    set('npc_codex_edit_personality', npc.personality || '');
+    set('npc_codex_edit_speech', npc.speech || '');
+    set('npc_codex_edit_behavior_profile', (npc.behaviorProfile || []).join('\n'));
+    set('npc_codex_edit_background', npc.background || '');
+    set('npc_codex_edit_mannerisms', (npc.mannerisms || []).join('\n'));
+    set('npc_codex_edit_key_relationships', (npc.keyRelationships || []).join('\n'));
+    set('npc_codex_edit_relationship_summary', npc.relationshipSummary || '');
+    set('npc_codex_edit_mood', npc.mood || '');
+    set('npc_codex_edit_location', npc.location || '');
+    set('npc_codex_edit_goal', npc.goal || '');
+    set('npc_codex_edit_status', npc.status || '');
+    set('npc_codex_edit_memories', episodesToEditorText(npc));
+    set('npc_codex_edit_intentions', intentionsToEditorText(npc));
+    set('npc_codex_edit_beliefs', beliefsToEditorText(npc));
+    set('npc_codex_edit_likes', normalizePreferences(npc.likes).join('; '));
+    set('npc_codex_edit_dislikes', normalizePreferences(npc.dislikes).join('; '));
+    set('npc_codex_edit_knowledge', knowledgeToEditorText(npc.knowledge));
     {
         const sheetFields = sheetToEditor(npc.sheet);
-        set('npc_state_delta_edit_sheet_archetype', sheetFields.archetype);
-        set('npc_state_delta_edit_sheet_rank', sheetFields.rank);
-        for (const field of SHEET_EDITOR_FIELDS) set(`npc_state_delta_edit_sheet_${field.key}`, sheetFields[field.key]);
+        set('npc_codex_edit_sheet_archetype', sheetFields.archetype);
+        set('npc_codex_edit_sheet_rank', sheetFields.rank);
+        for (const field of SHEET_EDITOR_FIELDS) set(`npc_codex_edit_sheet_${field.key}`, sheetFields[field.key]);
     }
-    set('npc_state_delta_edit_trust', relationshipNumber(npc.relationship?.trust));
-    set('npc_state_delta_edit_affection', relationshipNumber(npc.relationship?.affection));
-    set('npc_state_delta_edit_desire', relationshipNumber(npc.relationship?.desire));
-    set('npc_state_delta_edit_tension', relationshipNumber(npc.relationship?.tension));
-    const lock = document.getElementById('npc_state_delta_edit_lock_profile');
+    set('npc_codex_edit_trust', relationshipNumber(npc.relationship?.trust));
+    set('npc_codex_edit_affection', relationshipNumber(npc.relationship?.affection));
+    set('npc_codex_edit_desire', relationshipNumber(npc.relationship?.desire));
+    set('npc_codex_edit_tension', relationshipNumber(npc.relationship?.tension));
+    const lock = document.getElementById('npc_codex_edit_lock_profile');
     if (lock) lock.checked = Boolean((npc.manualProfileFields || []).length);
 }
 
@@ -4392,7 +4393,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
 }
 
 function setScanIndicator(busy) {
-    const button = $('#npc_state_delta_scan_now');
+    const button = $('#npc_codex_scan_now');
     if (!button.length) return;
     button.toggleClass('npc-state-delta-busy', busy);
     button.html(busy ? '<i class="fa-solid fa-spinner fa-spin"></i> Scanning dossier...' : '<i class="fa-solid fa-wand-magic-sparkles"></i> Scan dossier now');
@@ -4418,71 +4419,71 @@ function settingsSlot(name) {
 // (full cast, scanner output, calendar) mount their own controls into the named slots.
 function buildSettingsHtml() {
     const scanning = [
-        settingRow('npc_state_delta_scanner_connection_profile', 'Scanner connection profile', '<select id="npc_state_delta_scanner_connection_profile" class="text_pole"></select>', 'Routes every NPC scan, Refresh, focused pass and retry. Default keeps the current roleplay route; an unavailable profile never falls back silently.'),
-        settingRow('npc_state_delta_full_scan_every_turn', 'Full scan every turn', '<input id="npc_state_delta_full_scan_every_turn" type="checkbox">', 'With Auto scan, reconcile the whole scan context after every reply instead of only the latest exchange. Overrides Scan every; relationship deltas still come only from the newest exchange.'),
+        settingRow('npc_codex_scanner_connection_profile', 'Scanner connection profile', '<select id="npc_codex_scanner_connection_profile" class="text_pole"></select>', 'Routes every NPC scan, Refresh, focused pass and retry. Default keeps the current roleplay route; an unavailable profile never falls back silently.'),
+        settingRow('npc_codex_full_scan_every_turn', 'Full scan every turn', '<input id="npc_codex_full_scan_every_turn" type="checkbox">', 'With Auto scan, reconcile the whole scan context after every reply instead of only the latest exchange. Overrides Scan every; relationship deltas still come only from the newest exchange.'),
         settingsSlot('full-cast'),
-        settingRow('npc_state_delta_scan_every', 'Scan every', numberControl('npc_state_delta_scan_every', 1, 20, 'replies'), 'Quick-scan cadence when Full scan every turn is off.'),
-        settingRow('npc_state_delta_admission_mode', 'NPC admission', '<select id="npc_state_delta_admission_mode" class="text_pole"><option value="conservative">Conservative</option><option value="balanced">Balanced</option><option value="manual_only">Manual only</option></select>', 'Conservative: proper names immediately, role labels after recurrence. Balanced: also direct or persistent role NPCs. Manual only: every dossier needs Add NPC.'),
+        settingRow('npc_codex_scan_every', 'Scan every', numberControl('npc_codex_scan_every', 1, 20, 'replies'), 'Quick-scan cadence when Full scan every turn is off.'),
+        settingRow('npc_codex_admission_mode', 'NPC admission', '<select id="npc_codex_admission_mode" class="text_pole"><option value="conservative">Conservative</option><option value="balanced">Balanced</option><option value="manual_only">Manual only</option></select>', 'Conservative: proper names immediately, role labels after recurrence. Balanced: also direct or persistent role NPCs. Manual only: every dossier needs Add NPC.'),
     ].join('');
     const advanced = [
-        settingRow('npc_state_delta_scan_depth', 'Scan context', numberControl('npc_state_delta_scan_depth', 2, 30, 'messages'), 'History window for full, manual and Refresh scans. Quick automatic scans read only the latest user + assistant exchange.'),
+        settingRow('npc_codex_scan_depth', 'Scan context', numberControl('npc_codex_scan_depth', 2, 30, 'messages'), 'History window for full, manual and Refresh scans. Quick automatic scans read only the latest user + assistant exchange.'),
         settingsSlot('scanner-output'),
-        settingRow('npc_state_delta_inject_budget', 'Injection budget', numberControl('npc_state_delta_inject_budget', 512, 6000, 'tokens', { step: 100, prefix: '<small>~</small>' }), 'Upper limit; only what the present NPCs need is used. The default 4000 lets detailed dossiers reach the roleplay model in full. When it runs short, lower-priority fields, then lower-ranked NPCs, are trimmed first.'),
-        settingRow('npc_state_delta_mid_delete_rewind', 'Rewind dossiers on middle deletion', '<input id="npc_state_delta_mid_delete_rewind" type="checkbox">', 'Off (default): deleting a message from the middle undoes only what that message changed and keeps later changes. On: every dossier rewinds to how it was just before the deleted message, discarding what later messages changed (no model requests).'),
-        settingRow('npc_state_delta_branch_rescan', 'Rescan changed branches', '<input id="npc_state_delta_branch_rescan" type="checkbox">', 'Re-evaluate the surviving branch after a swipe, edit or middle-message deletion.'),
+        settingRow('npc_codex_inject_budget', 'Injection budget', numberControl('npc_codex_inject_budget', 512, 6000, 'tokens', { step: 100, prefix: '<small>~</small>' }), 'Upper limit; only what the present NPCs need is used. The default 4000 lets detailed dossiers reach the roleplay model in full. When it runs short, lower-priority fields, then lower-ranked NPCs, are trimmed first.'),
+        settingRow('npc_codex_mid_delete_rewind', 'Rewind dossiers on middle deletion', '<input id="npc_codex_mid_delete_rewind" type="checkbox">', 'Off (default): deleting a message from the middle undoes only what that message changed and keeps later changes. On: every dossier rewinds to how it was just before the deleted message, discarding what later messages changed (no model requests).'),
+        settingRow('npc_codex_branch_rescan', 'Rescan changed branches', '<input id="npc_codex_branch_rescan" type="checkbox">', 'Re-evaluate the surviving branch after a swipe, edit or middle-message deletion.'),
     ].join('');
     const roster = `
         <h4 class="delta-settings-subhead">In-chat display</h4>
-        ${settingRow('npc_state_delta_present_cast_display', 'Present NPCs in chat', '<select id="npc_state_delta_present_cast_display" class="text_pole"><option value="full">Full cards</option><option value="compact">Compact strip</option><option value="off">Off</option></select>', 'Shown under the latest reply (or as a Megumin tab). Tapping an NPC opens its dossier. Off adds nothing to the chat; presence tracking and injection are unaffected.')}
+        ${settingRow('npc_codex_present_cast_display', 'Present NPCs in chat', '<select id="npc_codex_present_cast_display" class="text_pole"><option value="full">Full cards</option><option value="compact">Compact strip</option><option value="off">Off</option></select>', 'Shown under the latest reply (or as a Megumin tab). Tapping an NPC opens its dossier. Off adds nothing to the chat; presence tracking and injection are unaffected.')}
         <label>Custom field names (up to six)<input id="npc_codex_custom_field_names" class="text_pole" value="${escapeHtml(getSettings().customFieldNames.join(', '))}" placeholder="Level, Class"></label>
         <h4 class="delta-settings-subhead">Generation injection</h4>
-        ${settingRow('npc_state_delta_inject', 'Inject present NPC state', '<input id="npc_state_delta_inject" type="checkbox">', 'Only active NPCs present in the latest scanned scene are injected into generation.')}
+        ${settingRow('npc_codex_inject', 'Inject present NPC state', '<input id="npc_codex_inject" type="checkbox">', 'Only active NPCs present in the latest scanned scene are injected into generation.')}
         <h4 class="delta-settings-subhead">Vector memory recall</h4>
-        ${settingRow('npc_state_delta_recall_enabled', 'Recall memories by meaning', '<input id="npc_state_delta_recall_enabled" type="checkbox">', 'Uses the Similharity server plugin + Qdrant. Falls back to keyword recall when unavailable.')}
-        ${settingRow('npc_state_delta_recall_model', 'Embedding model', '<input id="npc_state_delta_recall_model" type="text" class="text_pole">', 'Model id on the embedding server, e.g. text-embedding-embeddinggemma-2.')}
-        ${settingRow('npc_state_delta_recall_api', 'Embedding server', '<input id="npc_state_delta_recall_api" type="text" class="text_pole">', 'OpenAI-compatible URL (LM Studio: http://127.0.0.1:1234).')}
-        ${settingRow('npc_state_delta_recall_qdrant', 'Qdrant URL', '<input id="npc_state_delta_recall_qdrant" type="text" class="text_pole">', '')}
-        ${settingRow('npc_state_delta_derive_stats', 'Derive NPC stats', '<input id="npc_state_delta_derive_stats" type="checkbox">', 'Fills the Stat tab from race, profession and rank (an untrained human is 30). One small call the first time a race or profession appears in a world. Stats only colour action scenes; the prompt never gets numbers.')}
-        ${settingRow('npc_state_delta_generate_birthdays', 'Generate missing birthdays', '<input id="npc_state_delta_generate_birthdays" type="checkbox">', 'Off: an unknown birthday stays empty (nothing is invented). On: a stable fallback date is generated.')}
+        ${settingRow('npc_codex_recall_enabled', 'Recall memories by meaning', '<input id="npc_codex_recall_enabled" type="checkbox">', 'Uses the Similharity server plugin + Qdrant. Falls back to keyword recall when unavailable.')}
+        ${settingRow('npc_codex_recall_model', 'Embedding model', '<input id="npc_codex_recall_model" type="text" class="text_pole">', 'Model id on the embedding server, e.g. text-embedding-embeddinggemma-2.')}
+        ${settingRow('npc_codex_recall_api', 'Embedding server', '<input id="npc_codex_recall_api" type="text" class="text_pole">', 'OpenAI-compatible URL (LM Studio: http://127.0.0.1:1234).')}
+        ${settingRow('npc_codex_recall_qdrant', 'Qdrant URL', '<input id="npc_codex_recall_qdrant" type="text" class="text_pole">', '')}
+        ${settingRow('npc_codex_derive_stats', 'Derive NPC stats', '<input id="npc_codex_derive_stats" type="checkbox">', 'Fills the Stat tab from race, profession and rank (an untrained human is 30). One small call the first time a race or profession appears in a world. Stats only colour action scenes; the prompt never gets numbers.')}
+        ${settingRow('npc_codex_generate_birthdays', 'Generate missing birthdays', '<input id="npc_codex_generate_birthdays" type="checkbox">', 'Off: an unknown birthday stays empty (nothing is invented). On: a stable fallback date is generated.')}
         ${settingsSlot('relationship-map')}
         <h4 class="delta-settings-subhead">Roster lifecycle</h4>
-        ${settingRow('npc_state_delta_max', 'Maximum active NPCs', numberControl('npc_state_delta_max', 1, 100), 'Archived dossiers do not use an active slot.')}
-        ${settingRow('npc_state_delta_archive_deaths', 'Archive confirmed deaths', '<input id="npc_state_delta_archive_deaths" type="checkbox">', 'Explicit current-timeline deaths archive instead of deleting. Ambiguous death language is ignored.')}
-        ${settingRow('npc_state_delta_reactivate_archived', 'Reactivate on clear return', '<input id="npc_state_delta_reactivate_archived" type="checkbox">', 'Manual archives return when the NPC clearly reappears. Death archives need an explicit living return.')}
+        ${settingRow('npc_codex_max', 'Maximum active NPCs', numberControl('npc_codex_max', 1, 100), 'Archived dossiers do not use an active slot.')}
+        ${settingRow('npc_codex_archive_deaths', 'Archive confirmed deaths', '<input id="npc_codex_archive_deaths" type="checkbox">', 'Explicit current-timeline deaths archive instead of deleting. Ambiguous death language is ignored.')}
+        ${settingRow('npc_codex_reactivate_archived', 'Reactivate on clear return', '<input id="npc_codex_reactivate_archived" type="checkbox">', 'Manual archives return when the NPC clearly reappears. Death archives need an explicit living return.')}
         <h4 class="delta-settings-subhead">Stale cleanup</h4>
-        ${settingRow('npc_state_delta_auto_prune_stale', 'Auto-manage stale NPCs', '<input id="npc_state_delta_auto_prune_stale" type="checkbox">', 'Long-absent NPCs auto-archive, then stale auto-archives are deleted later. Manual, death and protected records are kept; deleted names can be rediscovered.')}
-        ${settingRow('npc_state_delta_stale_archive_after', 'Auto-archive after', numberControl('npc_state_delta_stale_archive_after', 10, 999, 'replies'), 'Default 30. Replies since the NPC was last present or active off-screen.')}
-        ${settingRow('npc_state_delta_stale_delete_after', 'Auto-delete after', numberControl('npc_state_delta_stale_delete_after', 11, 1000, 'replies'), 'Default 50. Applies only to stale auto-archives.')}`;
+        ${settingRow('npc_codex_auto_prune_stale', 'Auto-manage stale NPCs', '<input id="npc_codex_auto_prune_stale" type="checkbox">', 'Long-absent NPCs auto-archive, then stale auto-archives are deleted later. Manual, death and protected records are kept; deleted names can be rediscovered.')}
+        ${settingRow('npc_codex_stale_archive_after', 'Auto-archive after', numberControl('npc_codex_stale_archive_after', 10, 999, 'replies'), 'Default 30. Replies since the NPC was last present or active off-screen.')}
+        ${settingRow('npc_codex_stale_delete_after', 'Auto-delete after', numberControl('npc_codex_stale_delete_after', 11, 1000, 'replies'), 'Default 50. Applies only to stale auto-archives.')}`;
     const portrait = `
         <p class="npc-state-delta-muted">Builds positive and negative prompts from the dossier for the native SillyTavern Image Generation handoff. The configured image backend (including ComfyUI) stays host-owned.</p>
-        ${settingRow('npc_state_delta_portrait_generation_enabled', 'Enable Generate Portrait', '<input id="npc_state_delta_portrait_generation_enabled" type="checkbox">', 'Enables Generate Portrait in the dossier Portrait tool. Fails safely without changing the dossier if Image Generation is unavailable.')}
-        <label class="npc-state-delta-rubric-label" for="npc_state_delta_portrait_theme_preset"><b>Theme preset</b><small>Built-ins are fixed starting points. Custom Library uses one of your saved presets.</small></label>
-        <select id="npc_state_delta_portrait_theme_preset" class="text_pole">${Object.entries(PORTRAIT_THEME_PRESETS).map(([key, item]) => `<option value="${key}">${escapeHtml(item.label)}</option>`).join('')}</select>
+        ${settingRow('npc_codex_portrait_generation_enabled', 'Enable Generate Portrait', '<input id="npc_codex_portrait_generation_enabled" type="checkbox">', 'Enables Generate Portrait in the dossier Portrait tool. Fails safely without changing the dossier if Image Generation is unavailable.')}
+        <label class="npc-state-delta-rubric-label" for="npc_codex_portrait_theme_preset"><b>Theme preset</b><small>Built-ins are fixed starting points. Custom Library uses one of your saved presets.</small></label>
+        <select id="npc_codex_portrait_theme_preset" class="text_pole">${Object.entries(PORTRAIT_THEME_PRESETS).map(([key, item]) => `<option value="${key}">${escapeHtml(item.label)}</option>`).join('')}</select>
         <div class="npc-state-delta-custom-preset-library">
-          <label class="npc-state-delta-rubric-label" for="npc_state_delta_portrait_custom_preset"><b>Custom preset</b><small id="npc_state_delta_portrait_custom_preset_count"></small></label>
-          <select id="npc_state_delta_portrait_custom_preset" class="text_pole"></select>
+          <label class="npc-state-delta-rubric-label" for="npc_codex_portrait_custom_preset"><b>Custom preset</b><small id="npc_codex_portrait_custom_preset_count"></small></label>
+          <select id="npc_codex_portrait_custom_preset" class="text_pole"></select>
           <div class="npc-state-delta-custom-preset-actions">
-            <div id="npc_state_delta_portrait_custom_add" class="menu_button"><i class="fa-solid fa-plus"></i> Add</div>
-            <div id="npc_state_delta_portrait_custom_duplicate" class="menu_button"><i class="fa-solid fa-copy"></i> Duplicate</div>
-            <div id="npc_state_delta_portrait_custom_rename" class="menu_button"><i class="fa-solid fa-pen"></i> Rename</div>
-            <div id="npc_state_delta_portrait_custom_delete" class="menu_button redWarningBG"><i class="fa-solid fa-trash"></i> Delete</div>
+            <div id="npc_codex_portrait_custom_add" class="menu_button"><i class="fa-solid fa-plus"></i> Add</div>
+            <div id="npc_codex_portrait_custom_duplicate" class="menu_button"><i class="fa-solid fa-copy"></i> Duplicate</div>
+            <div id="npc_codex_portrait_custom_rename" class="menu_button"><i class="fa-solid fa-pen"></i> Rename</div>
+            <div id="npc_codex_portrait_custom_delete" class="menu_button redWarningBG"><i class="fa-solid fa-trash"></i> Delete</div>
           </div>
           <small class="npc-state-delta-muted">Each custom preset stores positive, negative, composition, prompt format, mood and location. Gallery saving stays global.</small>
         </div>
-        <label class="npc-state-delta-rubric-label" for="npc_state_delta_portrait_style_positive"><b>Positive style / theme</b><small>House style keywords, e.g. anime key visual, painterly fantasy or model-specific tags.</small></label>
-        <textarea id="npc_state_delta_portrait_style_positive" class="text_pole npc-state-delta-rubric-textarea" rows="3" maxlength="${PORTRAIT_STYLE_PROMPT_LIMIT}"></textarea>
-        <label class="npc-state-delta-rubric-label" for="npc_state_delta_portrait_style_negative"><b>Negative prompt</b><small>Quality, anatomy, composition or style exclusions for every portrait.</small></label>
-        <textarea id="npc_state_delta_portrait_style_negative" class="text_pole npc-state-delta-rubric-textarea" rows="3" maxlength="${PORTRAIT_STYLE_PROMPT_LIMIT}"></textarea>
-        <label class="npc-state-delta-rubric-label" for="npc_state_delta_portrait_composition"><b>Portrait composition</b><small>Framing, kept separate from appearance so dossiers never need rewriting.</small></label>
-        <textarea id="npc_state_delta_portrait_composition" class="text_pole npc-state-delta-rubric-textarea" rows="2" maxlength="${PORTRAIT_COMPOSITION_PROMPT_LIMIT}"></textarea>
-        ${settingRow('npc_state_delta_portrait_prompt_format', 'Prompt format', '<select id="npc_state_delta_portrait_prompt_format" class="text_pole"><option value="hybrid">Structured hybrid</option><option value="tags">Comma tags</option><option value="natural">Natural language</option></select>', 'Hybrid groups dossier facts with theme tags; Tags suits SD/anime checkpoints; Natural suits instruction-following image models.')}
-        ${settingRow('npc_state_delta_portrait_use_mood', 'Use current mood', '<input id="npc_state_delta_portrait_use_mood" type="checkbox">', 'Adds current mood as expression. Personality and Background never enter the image prompt.')}
-        ${settingRow('npc_state_delta_portrait_use_location', 'Use current location', '<input id="npc_state_delta_portrait_use_location" type="checkbox">', 'Off by default so portraits stay character-focused.')}
-        ${settingRow('npc_state_delta_portrait_save_gallery', 'Also save to ST character gallery', '<input id="npc_state_delta_portrait_save_gallery" type="checkbox">', 'Off by default. Only the result you choose becomes the dossier portrait either way.')}
+        <label class="npc-state-delta-rubric-label" for="npc_codex_portrait_style_positive"><b>Positive style / theme</b><small>House style keywords, e.g. anime key visual, painterly fantasy or model-specific tags.</small></label>
+        <textarea id="npc_codex_portrait_style_positive" class="text_pole npc-state-delta-rubric-textarea" rows="3" maxlength="${PORTRAIT_STYLE_PROMPT_LIMIT}"></textarea>
+        <label class="npc-state-delta-rubric-label" for="npc_codex_portrait_style_negative"><b>Negative prompt</b><small>Quality, anatomy, composition or style exclusions for every portrait.</small></label>
+        <textarea id="npc_codex_portrait_style_negative" class="text_pole npc-state-delta-rubric-textarea" rows="3" maxlength="${PORTRAIT_STYLE_PROMPT_LIMIT}"></textarea>
+        <label class="npc-state-delta-rubric-label" for="npc_codex_portrait_composition"><b>Portrait composition</b><small>Framing, kept separate from appearance so dossiers never need rewriting.</small></label>
+        <textarea id="npc_codex_portrait_composition" class="text_pole npc-state-delta-rubric-textarea" rows="2" maxlength="${PORTRAIT_COMPOSITION_PROMPT_LIMIT}"></textarea>
+        ${settingRow('npc_codex_portrait_prompt_format', 'Prompt format', '<select id="npc_codex_portrait_prompt_format" class="text_pole"><option value="hybrid">Structured hybrid</option><option value="tags">Comma tags</option><option value="natural">Natural language</option></select>', 'Hybrid groups dossier facts with theme tags; Tags suits SD/anime checkpoints; Natural suits instruction-following image models.')}
+        ${settingRow('npc_codex_portrait_use_mood', 'Use current mood', '<input id="npc_codex_portrait_use_mood" type="checkbox">', 'Adds current mood as expression. Personality and Background never enter the image prompt.')}
+        ${settingRow('npc_codex_portrait_use_location', 'Use current location', '<input id="npc_codex_portrait_use_location" type="checkbox">', 'Off by default so portraits stay character-focused.')}
+        ${settingRow('npc_codex_portrait_save_gallery', 'Also save to ST character gallery', '<input id="npc_codex_portrait_save_gallery" type="checkbox">', 'Off by default. Only the result you choose becomes the dossier portrait either way.')}
         <div class="npc-state-delta-actions npc-state-delta-tuning-actions">
-          <div id="npc_state_delta_reset_portrait_theme" class="menu_button"><i class="fa-solid fa-rotate-left"></i> Reset Fantasy Anime style</div>
-          <div id="npc_state_delta_save_portrait_settings" class="menu_button"><i class="fa-solid fa-floppy-disk"></i> Save prompt settings</div>
-          <small id="npc_state_delta_portrait_settings_status" class="npc-state-delta-muted">Saved</small>
+          <div id="npc_codex_reset_portrait_theme" class="menu_button"><i class="fa-solid fa-rotate-left"></i> Reset Fantasy Anime style</div>
+          <div id="npc_codex_save_portrait_settings" class="menu_button"><i class="fa-solid fa-floppy-disk"></i> Save prompt settings</div>
+          <small id="npc_codex_portrait_settings_status" class="npc-state-delta-muted">Saved</small>
         </div>`;
     const rules = `
         <section class="delta-settings-subsection npc-state-delta-relationship-rules">
@@ -4490,37 +4491,37 @@ function buildSettingsHtml() {
           <p class="npc-state-delta-muted">The scanner proposes deltas; code applies them and clamps each stat to its impact-tier cap. Stats run from -100 to +100 around neutral 0. Starting values affect new NPCs only.</p>
           <div class="npc-state-delta-tuning-grid">
             <div class="npc-state-delta-tuning-group"><b>New NPC starting values</b>
-              <label>Trust <input id="npc_state_delta_base_trust" type="number" min="-100" max="100" class="text_pole npc-state-delta-number"></label>
-              <label>Affection <input id="npc_state_delta_base_affection" type="number" min="-100" max="100" class="text_pole npc-state-delta-number"></label>
-              <label>Desire <input id="npc_state_delta_base_desire" type="number" min="-100" max="100" class="text_pole npc-state-delta-number"></label>
-              <label>Tension <input id="npc_state_delta_base_tension" type="number" min="-100" max="100" class="text_pole npc-state-delta-number"></label>
+              <label>Trust <input id="npc_codex_base_trust" type="number" min="-100" max="100" class="text_pole npc-state-delta-number"></label>
+              <label>Affection <input id="npc_codex_base_affection" type="number" min="-100" max="100" class="text_pole npc-state-delta-number"></label>
+              <label>Desire <input id="npc_codex_base_desire" type="number" min="-100" max="100" class="text_pole npc-state-delta-number"></label>
+              <label>Tension <input id="npc_codex_base_tension" type="number" min="-100" max="100" class="text_pole npc-state-delta-number"></label>
             </div>
             <div class="npc-state-delta-tuning-group"><b>Maximum ± change per scan</b>
-              <label>Ordinary <input id="npc_state_delta_cap_ordinary" type="number" min="0" max="25" class="text_pole npc-state-delta-number"></label>
-              <label>Meaningful <input id="npc_state_delta_cap_meaningful" type="number" min="0" max="35" class="text_pole npc-state-delta-number"></label>
-              <label>Major <input id="npc_state_delta_cap_major" type="number" min="0" max="50" class="text_pole npc-state-delta-number"></label>
-              <label>Extreme <input id="npc_state_delta_cap_extreme" type="number" min="0" max="100" class="text_pole npc-state-delta-number"></label>
+              <label>Ordinary <input id="npc_codex_cap_ordinary" type="number" min="0" max="25" class="text_pole npc-state-delta-number"></label>
+              <label>Meaningful <input id="npc_codex_cap_meaningful" type="number" min="0" max="35" class="text_pole npc-state-delta-number"></label>
+              <label>Major <input id="npc_codex_cap_major" type="number" min="0" max="50" class="text_pole npc-state-delta-number"></label>
+              <label>Extreme <input id="npc_codex_cap_extreme" type="number" min="0" max="100" class="text_pole npc-state-delta-number"></label>
             </div>
           </div>
-          <label class="npc-state-delta-rubric-label" for="npc_state_delta_relationship_criteria"><b>Relationship stat criteria</b><small>Sent to the private dossier scanner. Adjust the definitions and evidence rules for your RP.</small></label>
-          <textarea id="npc_state_delta_relationship_criteria" class="text_pole npc-state-delta-rubric-textarea" rows="7"></textarea>
-          <label class="npc-state-delta-rubric-label" for="npc_state_delta_impact_criteria"><b>Impact-tier criteria</b><small>What counts as ordinary, meaningful, major or extreme. Code caps apply even if the model proposes more.</small></label>
-          <textarea id="npc_state_delta_impact_criteria" class="text_pole npc-state-delta-rubric-textarea" rows="6"></textarea>
-          <div class="npc-state-delta-actions npc-state-delta-tuning-actions"><div id="npc_state_delta_reset_relationship_rules" class="menu_button"><i class="fa-solid fa-rotate-left"></i> Reset relationship rules</div></div>
+          <label class="npc-state-delta-rubric-label" for="npc_codex_relationship_criteria"><b>Relationship stat criteria</b><small>Sent to the private dossier scanner. Adjust the definitions and evidence rules for your RP.</small></label>
+          <textarea id="npc_codex_relationship_criteria" class="text_pole npc-state-delta-rubric-textarea" rows="7"></textarea>
+          <label class="npc-state-delta-rubric-label" for="npc_codex_impact_criteria"><b>Impact-tier criteria</b><small>What counts as ordinary, meaningful, major or extreme. Code caps apply even if the model proposes more.</small></label>
+          <textarea id="npc_codex_impact_criteria" class="text_pole npc-state-delta-rubric-textarea" rows="6"></textarea>
+          <div class="npc-state-delta-actions npc-state-delta-tuning-actions"><div id="npc_codex_reset_relationship_rules" class="menu_button"><i class="fa-solid fa-rotate-left"></i> Reset relationship rules</div></div>
         </section>
         <section class="delta-settings-subsection npc-state-delta-memory-rules">
           <h4>Important memories</h4>
           <p class="npc-state-delta-muted">Decides which established events become persistent Important memories during scans and backfills. Existing memories are shown to the scanner to avoid duplicates.</p>
-          <label class="npc-state-delta-rubric-label" for="npc_state_delta_memory_criteria"><b>Important memory criteria</b><small>Keep routine dialogue, transient feelings and moment-to-moment Inner Chatter out unless you intend otherwise.</small></label>
-          <textarea id="npc_state_delta_memory_criteria" class="text_pole npc-state-delta-rubric-textarea" rows="7"></textarea>
-          <div class="npc-state-delta-actions npc-state-delta-tuning-actions"><div id="npc_state_delta_reset_memory_rules" class="menu_button"><i class="fa-solid fa-rotate-left"></i> Reset memory criteria</div></div>
+          <label class="npc-state-delta-rubric-label" for="npc_codex_memory_criteria"><b>Important memory criteria</b><small>Keep routine dialogue, transient feelings and moment-to-moment Inner Chatter out unless you intend otherwise.</small></label>
+          <textarea id="npc_codex_memory_criteria" class="text_pole npc-state-delta-rubric-textarea" rows="7"></textarea>
+          <div class="npc-state-delta-actions npc-state-delta-tuning-actions"><div id="npc_codex_reset_memory_rules" class="menu_button"><i class="fa-solid fa-rotate-left"></i> Reset memory criteria</div></div>
         </section>
         <section class="delta-settings-subsection npc-state-delta-behavior-rules">
           <h4>Behavior expression</h4>
           <p class="npc-state-delta-muted">Injected only with present NPCs. Personality, Behavioral profile, Speech and Mannerisms stay authoritative; relationship stats only tint player-specific expression and never imply obedience or a romance archetype.</p>
-          <label class="npc-state-delta-rubric-label" for="npc_state_delta_behavior_criteria"><b>Relationship-to-behavior rubric</b><small>Edit if your RP uses different behavioral assumptions.</small></label>
-          <textarea id="npc_state_delta_behavior_criteria" class="text_pole npc-state-delta-rubric-textarea" rows="8"></textarea>
-          <div class="npc-state-delta-actions npc-state-delta-tuning-actions"><div id="npc_state_delta_reset_behavior_rules" class="menu_button"><i class="fa-solid fa-rotate-left"></i> Reset behavior rubric</div></div>
+          <label class="npc-state-delta-rubric-label" for="npc_codex_behavior_criteria"><b>Relationship-to-behavior rubric</b><small>Edit if your RP uses different behavioral assumptions.</small></label>
+          <textarea id="npc_codex_behavior_criteria" class="text_pole npc-state-delta-rubric-textarea" rows="8"></textarea>
+          <div class="npc-state-delta-actions npc-state-delta-tuning-actions"><div id="npc_codex_reset_behavior_rules" class="menu_button"><i class="fa-solid fa-rotate-left"></i> Reset behavior rubric</div></div>
         </section>`;
     const maintenance = `
         <div class="npc-state-delta-actions delta-settings-maintenance-actions">
@@ -4530,11 +4531,11 @@ function buildSettingsHtml() {
         </div>
         <details class="delta-settings-current-roster">
           <summary><b>Current chat roster</b><small>Edit, scan, archive or remove individual records</small></summary>
-          <div id="npc_state_delta_roster_summary" class="npc-state-delta-roster-summary"></div>
+          <div id="npc_codex_roster_summary" class="npc-state-delta-roster-summary"></div>
         </details>
         <div class="delta-settings-danger">
           <span><b>Clear chat dossier</b><small>Removes every NPC record for this chat only.</small></span>
-          <div id="npc_state_delta_clear_chat" class="menu_button redWarningBG"><i class="fa-solid fa-trash"></i> Clear</div>
+          <div id="npc_codex_clear_chat" class="menu_button redWarningBG"><i class="fa-solid fa-trash"></i> Clear</div>
         </div>`;
     return `
     <div id="${UI_ID}" class="extension_container npc-state-delta-extension">
@@ -4546,14 +4547,14 @@ function buildSettingsHtml() {
         <div class="inline-drawer-content npc-state-delta-drawer">
           <div class="delta-settings-quickbar">
             <div class="delta-settings-quick-toggles">
-              ${settingRow('npc_state_delta_enabled', 'Enable NPC Codex', '<input id="npc_state_delta_enabled" type="checkbox">')}
-              ${settingRow('npc_state_delta_auto', 'Auto scan', '<input id="npc_state_delta_auto" type="checkbox">', 'Runs after assistant replies.')}
+              ${settingRow('npc_codex_enabled', 'Enable NPC Codex', '<input id="npc_codex_enabled" type="checkbox">')}
+              ${settingRow('npc_codex_auto', 'Auto scan', '<input id="npc_codex_auto" type="checkbox">', 'Runs after assistant replies.')}
             </div>
             <div class="npc-state-delta-actions delta-settings-quick-actions">
               <button type="button" class="menu_button" data-delta-settings-open-dossiers><i class="fa-solid fa-address-book"></i> Open dossiers</button>
-              <div id="npc_state_delta_scan_now" class="menu_button"><i class="fa-solid fa-wand-magic-sparkles"></i> Scan dossier now</div>
+              <div id="npc_codex_scan_now" class="menu_button"><i class="fa-solid fa-wand-magic-sparkles"></i> Scan dossier now</div>
               ${settingsSlot('full-cast-action')}
-              <div id="npc_state_delta_add_manual" class="menu_button"><i class="fa-solid fa-user-plus"></i> Add NPC</div>
+              <div id="npc_codex_add_manual" class="menu_button"><i class="fa-solid fa-user-plus"></i> Add NPC</div>
             </div>
           </div>
           <div class="delta-settings-experience">
@@ -4563,7 +4564,7 @@ function buildSettingsHtml() {
             ${settingsGroup('portrait', 'Portrait generation', 'Image Generation prompts and style', portrait)}
             ${settingsGroup('rules', 'Scanner rules', 'Advanced relationship, memory and behavior rubrics', rules)}
             ${settingsGroup('advanced', 'Advanced', 'Context, output and injection limits, branch handling', advanced)}
-            ${settingsGroup('sent', "What's sent", 'Current actor prompt handed to SillyTavern', `<div data-delta-whats-sent></div><button type="button" id="npc_state_delta_sent_refresh" class="menu_button">Refresh preview</button>`)}
+            ${settingsGroup('sent', "What's sent", 'Current actor prompt handed to SillyTavern', `<div data-delta-whats-sent></div><button type="button" id="npc_codex_sent_refresh" class="menu_button">Refresh preview</button>`)}
             ${settingsGroup('maintenance', 'Data & maintenance', 'Backup, diagnostics and this chat', maintenance)}
           </div>
         </div>
@@ -4571,7 +4572,7 @@ function buildSettingsHtml() {
     </div>`;
 }
 
-const SETTINGS_OPEN_GROUPS_KEY = 'npc_state_delta_settings_open_groups';
+const SETTINGS_OPEN_GROUPS_KEY = 'npc_codex_settings_open_groups';
 const DEFAULT_OPEN_SETTINGS_GROUPS = ['scanning'];
 
 function readOpenSettingsGroups() {
@@ -4627,7 +4628,7 @@ function bindSettingsGroupMemory(root) {
     root?.addEventListener?.('click', toggleSettingHint, true);
     root?.addEventListener?.('keydown', toggleSettingHint, true);
     root?.addEventListener?.('click', event => {
-        if (event.target?.closest?.('#npc_state_delta_sent_refresh')) renderWhatsSent();
+        if (event.target?.closest?.('#npc_codex_sent_refresh')) renderWhatsSent();
     });
     root?.addEventListener?.('toggle', event => {
         if (!event.target?.matches?.('[data-delta-settings-group]')) return;
@@ -4639,7 +4640,7 @@ function bindSettingsGroupMemory(root) {
 }
 
 function syncScannerProfileControl() {
-    const control = $('#npc_state_delta_scanner_connection_profile');
+    const control = $('#npc_codex_scanner_connection_profile');
     if (!control.length) return;
     const selected = getSettings().scannerConnectionProfile;
     const html = scannerProfileOptions(getContext(), selected)
@@ -4650,44 +4651,44 @@ function syncScannerProfileControl() {
 
 function syncSettingsControls() {
     const s = getSettings();
-    $('#npc_state_delta_enabled').prop('checked', !!s.enabled);
-    $('#npc_state_delta_auto').prop('checked', !!s.autoScan);
+    $('#npc_codex_enabled').prop('checked', !!s.enabled);
+    $('#npc_codex_auto').prop('checked', !!s.autoScan);
     syncScannerProfileControl();
-    $('#npc_state_delta_full_scan_every_turn').prop('checked', !!s.fullScanEveryTurn);
-    $('#npc_state_delta_scan_every').val(s.scanEvery);
-    $('#npc_state_delta_scan_depth').val(s.scanDepth);
-    $('#npc_state_delta_admission_mode').val(s.admissionMode);
-    $('#npc_state_delta_max').val(s.maxNpcs);
-    $('#npc_state_delta_auto_prune_stale').prop('checked', s.autoPruneStale !== false);
-    $('#npc_state_delta_stale_archive_after').val(s.staleArchiveAfter);
-    $('#npc_state_delta_stale_delete_after').val(s.staleDeleteAfter);
-    $('#npc_state_delta_inject').prop('checked', !!s.inject);
-    $('#npc_state_delta_recall_enabled').prop('checked', !!s.recallEnabled);
-    $('#npc_state_delta_generate_birthdays').prop('checked', !!s.generateBirthdays);
-    $('#npc_state_delta_derive_stats').prop('checked', s.deriveStats !== false);
-    $('#npc_state_delta_recall_model').val(s.recallModel || '');
-    $('#npc_state_delta_recall_api').val(s.recallApiUrl || '');
-    $('#npc_state_delta_recall_qdrant').val(s.recallQdrantUrl || '');
-    $('#npc_state_delta_inject_budget').val(s.injectBudgetTokens);
-    $('#npc_state_delta_archive_deaths').prop('checked', s.autoArchiveDeaths !== false);
-    $('#npc_state_delta_reactivate_archived').prop('checked', s.autoReactivateArchived !== false);
-    $('#npc_state_delta_branch_rescan').prop('checked', s.branchRescan !== false);
-    $('#npc_state_delta_mid_delete_rewind').prop('checked', s.midDeleteRewind === true);
-    $('#npc_state_delta_present_cast_display').val(presentCastDisplayMode());
+    $('#npc_codex_full_scan_every_turn').prop('checked', !!s.fullScanEveryTurn);
+    $('#npc_codex_scan_every').val(s.scanEvery);
+    $('#npc_codex_scan_depth').val(s.scanDepth);
+    $('#npc_codex_admission_mode').val(s.admissionMode);
+    $('#npc_codex_max').val(s.maxNpcs);
+    $('#npc_codex_auto_prune_stale').prop('checked', s.autoPruneStale !== false);
+    $('#npc_codex_stale_archive_after').val(s.staleArchiveAfter);
+    $('#npc_codex_stale_delete_after').val(s.staleDeleteAfter);
+    $('#npc_codex_inject').prop('checked', !!s.inject);
+    $('#npc_codex_recall_enabled').prop('checked', !!s.recallEnabled);
+    $('#npc_codex_generate_birthdays').prop('checked', !!s.generateBirthdays);
+    $('#npc_codex_derive_stats').prop('checked', s.deriveStats !== false);
+    $('#npc_codex_recall_model').val(s.recallModel || '');
+    $('#npc_codex_recall_api').val(s.recallApiUrl || '');
+    $('#npc_codex_recall_qdrant').val(s.recallQdrantUrl || '');
+    $('#npc_codex_inject_budget').val(s.injectBudgetTokens);
+    $('#npc_codex_archive_deaths').prop('checked', s.autoArchiveDeaths !== false);
+    $('#npc_codex_reactivate_archived').prop('checked', s.autoReactivateArchived !== false);
+    $('#npc_codex_branch_rescan').prop('checked', s.branchRescan !== false);
+    $('#npc_codex_mid_delete_rewind').prop('checked', s.midDeleteRewind === true);
+    $('#npc_codex_present_cast_display').val(presentCastDisplayMode());
     if (!portraitSettingsDirty) writePortraitSettingsDraftToUi(portraitSettingsSnapshot(s));
     updatePortraitSettingsSaveUi();
-    $('#npc_state_delta_base_trust').val(s.relationshipBaseline.trust);
-    $('#npc_state_delta_base_affection').val(s.relationshipBaseline.affection);
-    $('#npc_state_delta_base_desire').val(s.relationshipBaseline.desire);
-    $('#npc_state_delta_base_tension').val(s.relationshipBaseline.tension);
-    $('#npc_state_delta_cap_ordinary').val(s.relationshipCaps.ordinary);
-    $('#npc_state_delta_cap_meaningful').val(s.relationshipCaps.meaningful);
-    $('#npc_state_delta_cap_major').val(s.relationshipCaps.major);
-    $('#npc_state_delta_cap_extreme').val(s.relationshipCaps.extreme);
-    $('#npc_state_delta_relationship_criteria').val(s.relationshipCriteria);
-    $('#npc_state_delta_impact_criteria').val(s.relationshipImpactCriteria);
-    $('#npc_state_delta_memory_criteria').val(s.memoryCriteria);
-    $('#npc_state_delta_behavior_criteria').val(s.behaviorCriteria);
+    $('#npc_codex_base_trust').val(s.relationshipBaseline.trust);
+    $('#npc_codex_base_affection').val(s.relationshipBaseline.affection);
+    $('#npc_codex_base_desire').val(s.relationshipBaseline.desire);
+    $('#npc_codex_base_tension').val(s.relationshipBaseline.tension);
+    $('#npc_codex_cap_ordinary').val(s.relationshipCaps.ordinary);
+    $('#npc_codex_cap_meaningful').val(s.relationshipCaps.meaningful);
+    $('#npc_codex_cap_major').val(s.relationshipCaps.major);
+    $('#npc_codex_cap_extreme').val(s.relationshipCaps.extreme);
+    $('#npc_codex_relationship_criteria').val(s.relationshipCriteria);
+    $('#npc_codex_impact_criteria').val(s.relationshipImpactCriteria);
+    $('#npc_codex_memory_criteria').val(s.memoryCriteria);
+    $('#npc_codex_behavior_criteria').val(s.behaviorCriteria);
 }
 
 function relationshipNumber(value) {
@@ -5301,7 +5302,7 @@ function activatePresentCardFromEvent(event) {
 
 function handlePortraitGeneratorEscape(event) {
     if (event?.key !== 'Escape' || event.defaultPrevented
-        || document.getElementById?.('npc_state_delta_tools_overlay')) return false;
+        || document.getElementById?.('npc_codex_tools_overlay')) return false;
     if (!activePortraitGeneratorOverlay) return false;
     event.preventDefault?.();
     event.stopPropagation?.();
@@ -5365,17 +5366,11 @@ function installUiCaptureBridge() {
     document.addEventListener('pointerup', activateNpcEditorFromEvent, true);
     document.addEventListener('click', activateNpcEditorFromEvent, true);
     document.addEventListener('keydown', activateNpcEditorFromEvent, true);
-    try {
-        document.addEventListener('touchend', activatePresentCardFromEvent, { capture: true, passive: false });
-        document.addEventListener('touchend', activateNpcEditorFromEvent, { capture: true, passive: false });
-    } catch {
-        document.addEventListener('touchend', activatePresentCardFromEvent, true);
-        document.addEventListener('touchend', activateNpcEditorFromEvent, true);
-    }
+
 }
 
 function wireSettingsRosterEditor() {
-    const holder = document.querySelector?.('#npc_state_delta_roster_summary');
+    const holder = document.querySelector?.('#npc_codex_roster_summary');
     if (!holder?.querySelectorAll) return;
     holder.querySelectorAll('.npc-state-delta-roster-edit').forEach(control => {
         if (control.dataset?.npcStateDeltaEditorBound === '1') return;
@@ -5387,7 +5382,7 @@ function wireSettingsRosterEditor() {
 }
 
 function renderSettingsRoster() {
-    const holder = $('#npc_state_delta_roster_summary');
+    const holder = $('#npc_codex_roster_summary');
     if (!holder.length) return;
     const key = getChatKey();
     const hydration = chatHydrationStatus(key);
@@ -5471,39 +5466,39 @@ function openNpcEditor(npcId) {
     const rel = npc.relationship || DEFAULT_RELATIONSHIP;
     const locked = new Set(npc.manualProfileFields || []);
     const content = document.createElement('div');
-    content.id = 'npc_state_delta_editor_content';
+    content.id = 'npc_codex_editor_content';
     content.className = 'npc-state-delta-editor-native';
     // Editor add-ons (appearance forms, life state, sections) identify their NPC from this.
     content.dataset.npcId = npc.id;
     content.innerHTML = `
-      <div class="npc-state-delta-editor-head"><div><span class="npc-state-delta-kicker">LIVE DOSSIER</span><h3 id="npc_state_delta_editor_title">Edit ${editorValue(npc.name)}</h3></div></div>
+      <div class="npc-state-delta-editor-head"><div><span class="npc-state-delta-kicker">LIVE DOSSIER</span><h3 id="npc_codex_editor_title">Edit ${editorValue(npc.name)}</h3></div></div>
       <p class="npc-state-delta-muted">Edits save to NPC Codex's extension-owned JSON data. Relationship numbers are authoritative current values on a -100 to +100 scale where 0 is neutral; future story deltas continue from them.</p>
       <div class="npc-state-delta-editor-lifecycle"><b>Lifecycle</b><span>${isTerminalNpcDeath(npc) ? 'Confirmed deceased' : (npc.archived ? 'Archived' : (npc.present ? 'Active · Present' : (npc.worldActive ? 'Active · Off-screen' : 'Active')))}${npc.archiveReason === 'deceased' ? ' · Deceased' : (npc.archiveReason === 'stale' ? ' · Stale auto-archive' : '')}</span>${npc.lifeStateReason ? `<small>${editorValue(npc.lifeStateReason)}</small>` : ''}</div>
       <div class="npc-state-delta-editor-grid npc-state-delta-editor-profile">
-        <label>Name<input id="npc_state_delta_edit_name" class="text_pole" value="${editorValue(npc.name)}"></label>
-        <label>Species / Race<input id="npc_state_delta_edit_species" class="text_pole" maxlength="160" placeholder="Half-elf, dwarf, dwelf, human, custom species..." value="${editorValue(npc.species)}"></label>
-        <label>Gender<select id="npc_state_delta_edit_gender" class="text_pole"><option value="" ${!npc.gender ? 'selected' : ''}>Unknown / not established</option><option value="male" ${npc.gender === 'male' ? 'selected' : ''}>Male</option><option value="female" ${npc.gender === 'female' ? 'selected' : ''}>Female</option></select></label>
-        <label>Aliases<textarea id="npc_state_delta_edit_aliases" class="text_pole" rows="3">${editorValue((npc.aliases || []).join("\n"))}</textarea></label>
+        <label>Name<input id="npc_codex_edit_name" class="text_pole" value="${editorValue(npc.name)}"></label>
+        <label>Species / Race<input id="npc_codex_edit_species" class="text_pole" maxlength="160" placeholder="Half-elf, dwarf, dwelf, human, custom species..." value="${editorValue(npc.species)}"></label>
+        <label>Gender<select id="npc_codex_edit_gender" class="text_pole"><option value="" ${!npc.gender ? 'selected' : ''}>Unknown / not established</option><option value="male" ${npc.gender === 'male' ? 'selected' : ''}>Male</option><option value="female" ${npc.gender === 'female' ? 'selected' : ''}>Female</option></select></label>
+        <label>Aliases<textarea id="npc_codex_edit_aliases" class="text_pole" rows="3">${editorValue((npc.aliases || []).join("\n"))}</textarea></label>
         <label>Custom fields (JSON)<textarea id="npc_codex_custom_fields" class="text_pole" rows="3">${editorValue(JSON.stringify(npc.customFields || {}))}</textarea></label>
-        <label>Role<input id="npc_state_delta_edit_role" class="text_pole" value="${editorValue(npc.role)}"></label>
-        <label>Home Base / Usual Location<input id="npc_state_delta_edit_home_base" class="text_pole" maxlength="300" placeholder="Home, workplace, headquarters, or regular haunt" value="${editorValue(npc.homeBase)}"></label>
-        <label>Chronological age<input id="npc_state_delta_edit_age" class="text_pole" maxlength="80" placeholder="Actual stated age; leave blank if unknown" value="${editorValue(npc.age)}"></label>
-        <label>Birthday <small>${npc.birthDateSource === 'generated' ? 'Generated fallback; editing establishes a manual correction' : (npc.birthDateSource === 'established' ? 'Established date; editing records a manual correction' : 'Uses the active calendar')}</small><input id="npc_state_delta_edit_birthday" class="text_pole" maxlength="180" placeholder="MM-DD / YYYY-MM-DD or configured calendar date" value="${editorValue(npc.birthDateDisplay)}"></label>
-        <label>Apparent age<input id="npc_state_delta_edit_apparent_age" class="text_pole" maxlength="80" placeholder="~25, young, middle-aged..." value="${editorValue(npc.apparentAge)}"></label>
-        <label>Personality<textarea id="npc_state_delta_edit_personality" class="text_pole" rows="3">${editorValue(npc.personality)}</textarea></label>
-        <label class="npc-state-delta-editor-wide">Behavioral Levers <small>Max ${BEHAVIOR_PROFILE_LIMIT} compact target-general response/decision rules, one per line</small><textarea id="npc_state_delta_edit_behavior_profile" class="text_pole" rows="6" placeholder="Disposition: kind - broadly considerate; avoids needless harm&#10;Expressiveness: low - strong feelings show subtly&#10;Independence: high - keeps own goals and boundaries&#10;Care: practical - helps through actions before reassurance&#10;Conflict: controlled - concise, firm, not gratuitously cruel">${editorValue((npc.behaviorProfile || []).join('\n'))}</textarea></label>
-        <label>Speech<textarea id="npc_state_delta_edit_speech" class="text_pole" rows="3">${editorValue(npc.speech)}</textarea></label>
-        <label>Background<textarea id="npc_state_delta_edit_background" class="text_pole" rows="3">${editorValue(npc.background)}</textarea></label>
-        <label class="npc-state-delta-editor-wide">Established mannerisms <small>One per line</small><textarea id="npc_state_delta_edit_mannerisms" class="text_pole" rows="4">${editorValue((npc.mannerisms || []).join('\n'))}</textarea></label>
-        <label class="npc-state-delta-editor-wide">Key relationships <small>Max ${KEY_RELATIONSHIP_LIMIT} · family, friends, rivals, mentors, partners · one per line</small><textarea id="npc_state_delta_edit_key_relationships" class="text_pole" rows="5" placeholder="Yunyun — friend / rival | competitive but loyal">${editorValue((npc.keyRelationships || []).join('\n'))}</textarea></label>
+        <label>Role<input id="npc_codex_edit_role" class="text_pole" value="${editorValue(npc.role)}"></label>
+        <label>Home Base / Usual Location<input id="npc_codex_edit_home_base" class="text_pole" maxlength="300" placeholder="Home, workplace, headquarters, or regular haunt" value="${editorValue(npc.homeBase)}"></label>
+        <label>Chronological age<input id="npc_codex_edit_age" class="text_pole" maxlength="80" placeholder="Actual stated age; leave blank if unknown" value="${editorValue(npc.age)}"></label>
+        <label>Birthday <small>${npc.birthDateSource === 'generated' ? 'Generated fallback; editing establishes a manual correction' : (npc.birthDateSource === 'established' ? 'Established date; editing records a manual correction' : 'Uses the active calendar')}</small><input id="npc_codex_edit_birthday" class="text_pole" maxlength="180" placeholder="MM-DD / YYYY-MM-DD or configured calendar date" value="${editorValue(npc.birthDateDisplay)}"></label>
+        <label>Apparent age<input id="npc_codex_edit_apparent_age" class="text_pole" maxlength="80" placeholder="~25, young, middle-aged..." value="${editorValue(npc.apparentAge)}"></label>
+        <label>Personality<textarea id="npc_codex_edit_personality" class="text_pole" rows="3">${editorValue(npc.personality)}</textarea></label>
+        <label class="npc-state-delta-editor-wide">Behavioral Levers <small>Max ${BEHAVIOR_PROFILE_LIMIT} compact target-general response/decision rules, one per line</small><textarea id="npc_codex_edit_behavior_profile" class="text_pole" rows="6" placeholder="Disposition: kind - broadly considerate; avoids needless harm&#10;Expressiveness: low - strong feelings show subtly&#10;Independence: high - keeps own goals and boundaries&#10;Care: practical - helps through actions before reassurance&#10;Conflict: controlled - concise, firm, not gratuitously cruel">${editorValue((npc.behaviorProfile || []).join('\n'))}</textarea></label>
+        <label>Speech<textarea id="npc_codex_edit_speech" class="text_pole" rows="3">${editorValue(npc.speech)}</textarea></label>
+        <label>Background<textarea id="npc_codex_edit_background" class="text_pole" rows="3">${editorValue(npc.background)}</textarea></label>
+        <label class="npc-state-delta-editor-wide">Established mannerisms <small>One per line</small><textarea id="npc_codex_edit_mannerisms" class="text_pole" rows="4">${editorValue((npc.mannerisms || []).join('\n'))}</textarea></label>
+        <label class="npc-state-delta-editor-wide">Key relationships <small>Max ${KEY_RELATIONSHIP_LIMIT} · family, friends, rivals, mentors, partners · one per line</small><textarea id="npc_codex_edit_key_relationships" class="text_pole" rows="5" placeholder="Yunyun — friend / rival | competitive but loyal">${editorValue((npc.keyRelationships || []).join('\n'))}</textarea></label>
       </div>
       <details class="npc-state-delta-editor-portrait-overrides">
         <summary><b>Portrait prompt overrides</b> <small>Optional per-NPC additions</small></summary>
         <div class="npc-state-delta-editor-portrait-overrides-body">
           <p class="npc-state-delta-muted">These are appended only when building image prompts. They are never injected into roleplay generation and never rewritten by the NPC scanner.</p>
-          <label>Additional positive prompt<textarea id="npc_state_delta_edit_portrait_positive" class="text_pole" rows="4" maxlength="${PORTRAIT_NPC_PROMPT_LIMIT}" placeholder="black ceremonial ribbon, winter uniform, gold ear cuff...">${editorValue(npc.portraitPromptPositive)}</textarea></label>
-          <label>Additional negative prompt<textarea id="npc_state_delta_edit_portrait_negative" class="text_pole" rows="4" maxlength="${PORTRAIT_NPC_PROMPT_LIMIT}" placeholder="helmet, hood, short hair...">${editorValue(npc.portraitPromptNegative)}</textarea></label>
-      <label class="npc-state-delta-editor-lock"><input id="npc_state_delta_edit_portrait_replace" type="checkbox" ${npc.portraitPromptReplace ? 'checked' : ''}> Replace the automatic positive prompt entirely <small>Use only when this NPC needs a hand-authored model-specific prompt. The global negative prompt still applies.</small></label>
+          <label>Additional positive prompt<textarea id="npc_codex_edit_portrait_positive" class="text_pole" rows="4" maxlength="${PORTRAIT_NPC_PROMPT_LIMIT}" placeholder="black ceremonial ribbon, winter uniform, gold ear cuff...">${editorValue(npc.portraitPromptPositive)}</textarea></label>
+          <label>Additional negative prompt<textarea id="npc_codex_edit_portrait_negative" class="text_pole" rows="4" maxlength="${PORTRAIT_NPC_PROMPT_LIMIT}" placeholder="helmet, hood, short hair...">${editorValue(npc.portraitPromptNegative)}</textarea></label>
+      <label class="npc-state-delta-editor-lock"><input id="npc_codex_edit_portrait_replace" type="checkbox" ${npc.portraitPromptReplace ? 'checked' : ''}> Replace the automatic positive prompt entirely <small>Use only when this NPC needs a hand-authored model-specific prompt. The global negative prompt still applies.</small></label>
         </div>
       </details>
           <details><summary>BunnyMo portrayal (reference only)</summary>
@@ -5512,25 +5507,25 @@ function openNpcEditor(npcId) {
       <details><summary>Preview references and provenance</summary>${PORTRAYAL_REFERENCES.entries.map(e => `<details><summary>${editorValue(e.title)}</summary><pre>${editorValue(e.text)}</pre></details>`).join('')}<p>${editorValue(PORTRAYAL_REFERENCES.source)} · ${editorValue(PORTRAYAL_REFERENCES.revision)}</p></details>
       <label>Explicitly approved portrayal guide (600 characters)<textarea id="npc_codex_portrayal_text" class="text_pole" maxlength="600">${editorValue(npc.portrayal?.text || '')}</textarea></label>
       <p>${npc.portrayal && !renderPortrayal(npc) ? 'Guide is stale or already expressed by accepted Speech/Mannerisms; only valid, additional guidance is injected.' : 'Saving approves this guidance. Leave empty to disable.'}</p></details>
-      <label class="npc-state-delta-editor-lock"><input id="npc_state_delta_edit_lock_profile" type="checkbox" ${locked.length ? 'checked' : ''}> Protect edited stable profile fields from future scanner rewrites <small>Leave off to use manual edits as an organic baseline. Existing locks stay protected until you uncheck and save.</small></label>
+      <label class="npc-state-delta-editor-lock"><input id="npc_codex_edit_lock_profile" type="checkbox" ${locked.length ? 'checked' : ''}> Protect edited stable profile fields from future scanner rewrites <small>Leave off to use manual edits as an organic baseline. Existing locks stay protected until you uncheck and save.</small></label>
       ${locked.length ? `<p class="npc-state-delta-muted">Currently protected: ${editorValue([...locked].join(', '))}</p>` : ''}
-      <label class="npc-state-delta-editor-lock"><input id="npc_state_delta_edit_retention_protected" type="checkbox" ${npc.retentionProtected ? 'checked' : ''}> Keep this NPC from automatic stale cleanup <small>Use for recurring or major NPCs who may disappear for long arcs. This does not lock their profile fields.</small></label>
-      <label class="npc-state-delta-editor-lock"><input id="npc_state_delta_edit_minor" type="checkbox" ${npc.minor ? 'checked' : ''}> Hide present-NPC card <small>The dossier still scans, updates, stores memories/relationships, and injects when present; only the present cast card is hidden.</small></label>
+      <label class="npc-state-delta-editor-lock"><input id="npc_codex_edit_retention_protected" type="checkbox" ${npc.retentionProtected ? 'checked' : ''}> Keep this NPC from automatic stale cleanup <small>Use for recurring or major NPCs who may disappear for long arcs. This does not lock their profile fields.</small></label>
+      <label class="npc-state-delta-editor-lock"><input id="npc_codex_edit_minor" type="checkbox" ${npc.minor ? 'checked' : ''}> Hide present-NPC card <small>The dossier still scans, updates, stores memories/relationships, and injects when present; only the present cast card is hidden.</small></label>
       <div class="npc-state-delta-editor-grid">
-        <label>Player Dynamic<textarea id="npc_state_delta_edit_relationship_summary" class="text_pole" rows="3">${editorValue(npc.relationshipSummary)}</textarea></label>
-        <label>Mood<input id="npc_state_delta_edit_mood" class="text_pole" value="${editorValue(npc.mood)}"></label>
-        <label>Location<input id="npc_state_delta_edit_location" class="text_pole" value="${editorValue(npc.location)}"></label>
-        <label>Goal<input id="npc_state_delta_edit_goal" class="text_pole" value="${editorValue(npc.goal)}"></label>
-        <label>Condition / Activity<input id="npc_state_delta_edit_status" class="text_pole" value="${editorValue(npc.status)}"></label>
-        <label class="npc-state-delta-editor-wide">Lived memories <small>One per line · level: event =&gt; effect · levels defining / significant / minor · start with * to pin</small><textarea id="npc_state_delta_edit_memories" class="text_pole" rows="6">${editorValue(episodesToEditorText(npc))}</textarea></label><label class="npc-state-delta-editor-wide">Intentions <small>Open plans, promises, unresolved problems · one per line · what | due</small><textarea id="npc_state_delta_edit_intentions" class="text_pole" rows="3">${editorValue(intentionsToEditorText(npc))}</textarea></label><label class="npc-state-delta-editor-wide">Beliefs <small>Distilled from memories · one per line · about: belief</small><textarea id="npc_state_delta_edit_beliefs" class="text_pole" rows="3">${editorValue(beliefsToEditorText(npc))}</textarea></label><label>Likes <small>separated by ;</small><input id="npc_state_delta_edit_likes" class="text_pole" value="${editorValue(normalizePreferences(npc.likes).join('; '))}"></label><label>Dislikes <small>separated by ;</small><input id="npc_state_delta_edit_dislikes" class="text_pole" value="${editorValue(normalizePreferences(npc.dislikes).join('; '))}"></label>
-        <label class="npc-state-delta-editor-wide">Knowledge <small>One per line · knows: learned on-page · secret: knows and conceals · unaware: must not know</small><textarea id="npc_state_delta_edit_knowledge" class="text_pole" rows="5">${editorValue(knowledgeToEditorText(npc.knowledge))}</textarea></label>
-        ${(() => { const sheetFields = sheetToEditor(npc.sheet); return `<h4 class="npc-state-delta-editor-wide">Stat sheet <small>Shown on the Stat tab. One entry per line.</small></h4><label>Class / archetype<input id="npc_state_delta_edit_sheet_archetype" class="text_pole" value="${editorValue(sheetFields.archetype)}"></label><label>Rank / level<input id="npc_state_delta_edit_sheet_rank" class="text_pole" value="${editorValue(sheetFields.rank)}"></label>${SHEET_EDITOR_FIELDS.map(field => `<label class="npc-state-delta-editor-wide">${field.label} <small>${field.hint}</small><textarea id="npc_state_delta_edit_sheet_${field.key}" class="text_pole" rows="3">${editorValue(sheetFields[field.key])}</textarea></label>`).join('')}`; })()}
+        <label>Player Dynamic<textarea id="npc_codex_edit_relationship_summary" class="text_pole" rows="3">${editorValue(npc.relationshipSummary)}</textarea></label>
+        <label>Mood<input id="npc_codex_edit_mood" class="text_pole" value="${editorValue(npc.mood)}"></label>
+        <label>Location<input id="npc_codex_edit_location" class="text_pole" value="${editorValue(npc.location)}"></label>
+        <label>Goal<input id="npc_codex_edit_goal" class="text_pole" value="${editorValue(npc.goal)}"></label>
+        <label>Condition / Activity<input id="npc_codex_edit_status" class="text_pole" value="${editorValue(npc.status)}"></label>
+        <label class="npc-state-delta-editor-wide">Lived memories <small>One per line · level: event =&gt; effect · levels defining / significant / minor · start with * to pin</small><textarea id="npc_codex_edit_memories" class="text_pole" rows="6">${editorValue(episodesToEditorText(npc))}</textarea></label><label class="npc-state-delta-editor-wide">Intentions <small>Open plans, promises, unresolved problems · one per line · what | due</small><textarea id="npc_codex_edit_intentions" class="text_pole" rows="3">${editorValue(intentionsToEditorText(npc))}</textarea></label><label class="npc-state-delta-editor-wide">Beliefs <small>Distilled from memories · one per line · about: belief</small><textarea id="npc_codex_edit_beliefs" class="text_pole" rows="3">${editorValue(beliefsToEditorText(npc))}</textarea></label><label>Likes <small>separated by ;</small><input id="npc_codex_edit_likes" class="text_pole" value="${editorValue(normalizePreferences(npc.likes).join('; '))}"></label><label>Dislikes <small>separated by ;</small><input id="npc_codex_edit_dislikes" class="text_pole" value="${editorValue(normalizePreferences(npc.dislikes).join('; '))}"></label>
+        <label class="npc-state-delta-editor-wide">Knowledge <small>One per line · knows: learned on-page · secret: knows and conceals · unaware: must not know</small><textarea id="npc_codex_edit_knowledge" class="text_pole" rows="5">${editorValue(knowledgeToEditorText(npc.knowledge))}</textarea></label>
+        ${(() => { const sheetFields = sheetToEditor(npc.sheet); return `<h4 class="npc-state-delta-editor-wide">Stat sheet <small>Shown on the Stat tab. One entry per line.</small></h4><label>Class / archetype<input id="npc_codex_edit_sheet_archetype" class="text_pole" value="${editorValue(sheetFields.archetype)}"></label><label>Rank / level<input id="npc_codex_edit_sheet_rank" class="text_pole" value="${editorValue(sheetFields.rank)}"></label>${SHEET_EDITOR_FIELDS.map(field => `<label class="npc-state-delta-editor-wide">${field.label} <small>${field.hint}</small><textarea id="npc_codex_edit_sheet_${field.key}" class="text_pole" rows="3">${editorValue(sheetFields[field.key])}</textarea></label>`).join('')}`; })()}
       </div>
       <div class="npc-state-delta-editor-stats">
-        <label>Trust<input id="npc_state_delta_edit_trust" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.trust)}"></label>
-        <label>Affection<input id="npc_state_delta_edit_affection" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.affection)}"></label>
-        <label>Desire<input id="npc_state_delta_edit_desire" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.desire)}"></label>
-        <label>Tension<input id="npc_state_delta_edit_tension" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.tension)}"></label>
+        <label>Trust<input id="npc_codex_edit_trust" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.trust)}"></label>
+        <label>Affection<input id="npc_codex_edit_affection" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.affection)}"></label>
+        <label>Desire<input id="npc_codex_edit_desire" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.desire)}"></label>
+        <label>Tension<input id="npc_codex_edit_tension" class="text_pole" type="number" min="-100" max="100" value="${relationshipNumber(rel.tension)}"></label>
       </div>`;
 
     let popup;
@@ -5609,7 +5604,7 @@ async function executeNativePortraitGeneration(positive, negative, seed = null) 
         result = await execute(command, {
             handleParserErrors: false,
             handleExecutionErrors: false,
-            source: 'npc_state_delta_portrait',
+            source: 'npc_codex_portrait',
         });
     } catch (error) {
         const message = String(error?.message || error || 'Unknown image generation error');
@@ -5626,9 +5621,9 @@ async function executeNativePortraitGeneration(positive, negative, seed = null) 
 function portraitGeneratorHtml(npc, prompts) {
     const theme = portraitThemeLabel(getSettings());
     return `
-      <div class="npc-state-delta-portrait-generator-dialog" role="dialog" aria-modal="true" aria-labelledby="npc_state_delta_portrait_generator_title">
+      <div class="npc-state-delta-portrait-generator-dialog" role="dialog" aria-modal="true" aria-labelledby="npc_codex_portrait_generator_title">
         <header class="npc-state-delta-portrait-generator-header">
-          <div><span class="npc-state-delta-kicker">PORTRAIT GENERATOR</span><h2 id="npc_state_delta_portrait_generator_title">${escapeHtml(npc.name)}</h2><small>${escapeHtml(theme)} · SillyTavern Image Generation</small></div>
+          <div><span class="npc-state-delta-kicker">PORTRAIT GENERATOR</span><h2 id="npc_codex_portrait_generator_title">${escapeHtml(npc.name)}</h2><small>${escapeHtml(theme)} · SillyTavern Image Generation</small></div>
           <button type="button" class="npc-state-delta-portrait-generator-close" aria-label="Close portrait generator"><i class="fa-solid fa-xmark"></i></button>
         </header>
         <div class="npc-state-delta-portrait-generator-body">
@@ -5638,8 +5633,8 @@ function portraitGeneratorHtml(npc, prompts) {
             <div class="npc-state-delta-portrait-generator-status" hidden></div>
           </section>
           <section class="npc-state-delta-portrait-generator-prompts">
-            <label><b>Positive prompt</b><small>Built from the current dossier + selected portrait theme/preset. Edit freely for this generation.</small><textarea id="npc_state_delta_portrait_positive" class="text_pole" rows="9">${escapeHtml(prompts.positive)}</textarea></label>
-            <label><b>Negative prompt</b><small>Selected preset exclusions + this NPC's optional negative override.</small><textarea id="npc_state_delta_portrait_negative" class="text_pole" rows="7">${escapeHtml(prompts.negative)}</textarea></label>
+            <label><b>Positive prompt</b><small>Built from the current dossier + selected portrait theme/preset. Edit freely for this generation.</small><textarea id="npc_codex_portrait_positive" class="text_pole" rows="9">${escapeHtml(prompts.positive)}</textarea></label>
+            <label><b>Negative prompt</b><small>Selected preset exclusions + this NPC's optional negative override.</small><textarea id="npc_codex_portrait_negative" class="text_pole" rows="7">${escapeHtml(prompts.negative)}</textarea></label>
           </section>
         </div>
         <footer class="npc-state-delta-portrait-generator-actions">
@@ -5679,9 +5674,9 @@ function openPortraitGenerator(npcId) {
     }
     closePortraitGenerator();
     const overlay = document.createElement('div');
-    overlay.id = 'npc_state_delta_portrait_generator_overlay';
+    overlay.id = 'npc_codex_portrait_generator_overlay';
     overlay.className = 'npc-state-delta-portrait-generator-overlay';
-    // Keep the generator above the already-open full-screen dossier on tablet/mobile.
+    // Keep the generator above the already-open full-screen dossier.
     overlay.style.zIndex = '2147483600';
     overlay.dataset.npcId = id;
     overlay.innerHTML = portraitGeneratorHtml(npc, prompts);
@@ -5700,7 +5695,7 @@ function openPortraitGenerator(npcId) {
     activePortraitGeneratorChatKey = originChatKey;
     activePortraitGeneratorNpcId = id;
     activePortraitGenerationUrl = '';
-    globalThis.requestAnimationFrame?.(() => overlay.querySelector?.('#npc_state_delta_portrait_positive')?.focus?.());
+    globalThis.requestAnimationFrame?.(() => overlay.querySelector?.('#npc_codex_portrait_positive')?.focus?.());
     return true;
 }
 
@@ -5730,8 +5725,8 @@ function resetPortraitGeneratorFromDossier() {
     const npc = currentNpcById(activePortraitGeneratorNpcId);
     if (!npc) return false;
     const prompts = npcImagePromptPair(npc);
-    const positive = activePortraitGeneratorOverlay.querySelector?.('#npc_state_delta_portrait_positive');
-    const negative = activePortraitGeneratorOverlay.querySelector?.('#npc_state_delta_portrait_negative');
+    const positive = activePortraitGeneratorOverlay.querySelector?.('#npc_codex_portrait_positive');
+    const negative = activePortraitGeneratorOverlay.querySelector?.('#npc_codex_portrait_negative');
     if (positive) positive.value = prompts.positive;
     if (negative) negative.value = prompts.negative;
     return true;
@@ -5743,8 +5738,8 @@ async function generatePortraitFromDialog() {
     if (!originChatKey || getChatKey() !== originChatKey || !requireReadyChatMutation('generate a portrait', originChatKey)) return false;
     const npc = currentNpcById(activePortraitGeneratorNpcId);
     if (!overlay || !npc || portraitGenerationBusy) return false;
-    const positive = String(overlay.querySelector?.('#npc_state_delta_portrait_positive')?.value || '').trim();
-    const negative = String(overlay.querySelector?.('#npc_state_delta_portrait_negative')?.value || '').trim();
+    const positive = String(overlay.querySelector?.('#npc_codex_portrait_positive')?.value || '').trim();
+    const negative = String(overlay.querySelector?.('#npc_codex_portrait_negative')?.value || '').trim();
     if (!positive) {
         globalThis.toastr?.warning?.('NPC Codex: positive portrait prompt is empty.');
         return false;
@@ -5872,20 +5867,20 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     const next = structuredClone(current);
     const oldRelationship = { ...(current.relationship || DEFAULT_RELATIONSHIP) };
     const stableInputs = {
-        aliases: cleanEditorList(editorField('npc_state_delta_edit_aliases'), 8),
-        name: String(editorField('npc_state_delta_edit_name')).trim().slice(0, 120) || current.name,
-        role: String(editorField('npc_state_delta_edit_role')).trim().slice(0, 240),
-        species: String(editorField('npc_state_delta_edit_species')).trim().slice(0, 160),
-        gender: normalizeGender(editorField('npc_state_delta_edit_gender')),
-        homeBase: String(editorField('npc_state_delta_edit_home_base')).trim().slice(0, 300),
-        age: String(editorField('npc_state_delta_edit_age')).trim().slice(0, 80),
-        apparentAge: String(editorField('npc_state_delta_edit_apparent_age')).trim().slice(0, 80),
-        personality: String(editorField('npc_state_delta_edit_personality')).trim().slice(0, 900),
-        speech: String(editorField('npc_state_delta_edit_speech')).trim().slice(0, 600),
-        behaviorProfile: cleanEditorList(editorField('npc_state_delta_edit_behavior_profile'), BEHAVIOR_PROFILE_LIMIT),
-        background: String(editorField('npc_state_delta_edit_background')).trim().slice(0, 1200),
-        mannerisms: cleanEditorList(editorField('npc_state_delta_edit_mannerisms'), 8),
-        keyRelationships: cleanEditorList(editorField('npc_state_delta_edit_key_relationships'), KEY_RELATIONSHIP_LIMIT),
+        aliases: cleanEditorList(editorField('npc_codex_edit_aliases'), 8),
+        name: String(editorField('npc_codex_edit_name')).trim().slice(0, 120) || current.name,
+        role: String(editorField('npc_codex_edit_role')).trim().slice(0, 240),
+        species: String(editorField('npc_codex_edit_species')).trim().slice(0, 160),
+        gender: normalizeGender(editorField('npc_codex_edit_gender')),
+        homeBase: String(editorField('npc_codex_edit_home_base')).trim().slice(0, 300),
+        age: String(editorField('npc_codex_edit_age')).trim().slice(0, 80),
+        apparentAge: String(editorField('npc_codex_edit_apparent_age')).trim().slice(0, 80),
+        personality: String(editorField('npc_codex_edit_personality')).trim().slice(0, 900),
+        speech: String(editorField('npc_codex_edit_speech')).trim().slice(0, 600),
+        behaviorProfile: cleanEditorList(editorField('npc_codex_edit_behavior_profile'), BEHAVIOR_PROFILE_LIMIT),
+        background: String(editorField('npc_codex_edit_background')).trim().slice(0, 1200),
+        mannerisms: cleanEditorList(editorField('npc_codex_edit_mannerisms'), 8),
+        keyRelationships: cleanEditorList(editorField('npc_codex_edit_key_relationships'), KEY_RELATIONSHIP_LIMIT),
     };
     const nameCollision = state.npcs.some((item, i) => i !== index && npcMatchesLabel(item, stableInputs.name));
     if (nameCollision) {
@@ -5898,7 +5893,7 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     try { next.customFields = normalizeCustomFields(JSON.parse(String(editorField('npc_codex_custom_fields') || '{}'))); }
     catch { globalThis.toastr?.warning?.('Custom fields must be a JSON object.'); return false; }
     Object.assign(next, stableInputs);
-    const birthdayInput = String(editorField('npc_state_delta_edit_birthday')).trim().slice(0, 180);
+    const birthdayInput = String(editorField('npc_codex_edit_birthday')).trim().slice(0, 180);
     const currentBirthdayDisplay = String(current.birthDateDisplay || '').trim();
     if (birthdayInput !== currentBirthdayDisplay) {
         if (!birthdayInput) {
@@ -5918,34 +5913,34 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
         correctedBirthday.birthDateSourceMessageId = null;
         Object.assign(next, correctedBirthday);
     }
-    next.portraitPromptPositive = String(editorField('npc_state_delta_edit_portrait_positive')).trim().slice(0, PORTRAIT_NPC_PROMPT_LIMIT);
-    next.portraitPromptNegative = String(editorField('npc_state_delta_edit_portrait_negative')).trim().slice(0, PORTRAIT_NPC_PROMPT_LIMIT);
-    next.portraitPromptReplace = Boolean(document.getElementById('npc_state_delta_edit_portrait_replace')?.checked);
+    next.portraitPromptPositive = String(editorField('npc_codex_edit_portrait_positive')).trim().slice(0, PORTRAIT_NPC_PROMPT_LIMIT);
+    next.portraitPromptNegative = String(editorField('npc_codex_edit_portrait_negative')).trim().slice(0, PORTRAIT_NPC_PROMPT_LIMIT);
+    next.portraitPromptReplace = Boolean(document.getElementById('npc_codex_edit_portrait_replace')?.checked);
     next.identityKind = inferNpcIdentityKind(stableInputs.name);
-    next.relationshipSummary = String(editorField('npc_state_delta_edit_relationship_summary')).trim().slice(0, 900);
-    next.mood = String(editorField('npc_state_delta_edit_mood')).trim().slice(0, 240);
-    next.location = String(editorField('npc_state_delta_edit_location')).trim().slice(0, 300);
-    next.goal = String(editorField('npc_state_delta_edit_goal')).trim().slice(0, 500);
-    next.status = String(editorField('npc_state_delta_edit_status')).trim().slice(0, 300);
-    next.episodes = episodesFromEditorText(editorField('npc_state_delta_edit_memories'), current.episodes);
-    next.intentions = intentionsFromEditorText(editorField('npc_state_delta_edit_intentions'), current.intentions);
-    next.beliefs = beliefsFromEditorText(editorField('npc_state_delta_edit_beliefs'), current.beliefs);
-    next.likes = normalizePreferences(editorField('npc_state_delta_edit_likes'));
-    next.dislikes = normalizePreferences(editorField('npc_state_delta_edit_dislikes'));
+    next.relationshipSummary = String(editorField('npc_codex_edit_relationship_summary')).trim().slice(0, 900);
+    next.mood = String(editorField('npc_codex_edit_mood')).trim().slice(0, 240);
+    next.location = String(editorField('npc_codex_edit_location')).trim().slice(0, 300);
+    next.goal = String(editorField('npc_codex_edit_goal')).trim().slice(0, 500);
+    next.status = String(editorField('npc_codex_edit_status')).trim().slice(0, 300);
+    next.episodes = episodesFromEditorText(editorField('npc_codex_edit_memories'), current.episodes);
+    next.intentions = intentionsFromEditorText(editorField('npc_codex_edit_intentions'), current.intentions);
+    next.beliefs = beliefsFromEditorText(editorField('npc_codex_edit_beliefs'), current.beliefs);
+    next.likes = normalizePreferences(editorField('npc_codex_edit_likes'));
+    next.dislikes = normalizePreferences(editorField('npc_codex_edit_dislikes'));
     next.memories = next.episodes.map(item => item.event).slice(-IMPORTANT_MEMORY_LIMIT);
-    next.knowledge = knowledgeFromEditorText(editorField('npc_state_delta_edit_knowledge'), current.knowledge);
+    next.knowledge = knowledgeFromEditorText(editorField('npc_codex_edit_knowledge'), current.knowledge);
     next.sheet = sheetFromEditor({
-        archetype: editorField('npc_state_delta_edit_sheet_archetype'),
-        rank: editorField('npc_state_delta_edit_sheet_rank'),
-        ...Object.fromEntries(SHEET_EDITOR_FIELDS.map(field => [field.key, editorField(`npc_state_delta_edit_sheet_${field.key}`)])),
+        archetype: editorField('npc_codex_edit_sheet_archetype'),
+        rank: editorField('npc_codex_edit_sheet_rank'),
+        ...Object.fromEntries(SHEET_EDITOR_FIELDS.map(field => [field.key, editorField(`npc_codex_edit_sheet_${field.key}`)])),
     }, current.sheet);
     // A manual edit takes a canon-locked field over: the player's own lock decides from then on.
     next.canonLocked = (Array.isArray(current.canonLocked) ? current.canonLocked : []).filter(key => JSON.stringify(current[key] ?? '') === JSON.stringify(next[key] ?? ''));
     next.relationship = {
-        trust: clampEditorRelationshipStat('npc_state_delta_edit_trust'),
-        affection: clampEditorRelationshipStat('npc_state_delta_edit_affection'),
-        desire: clampEditorRelationshipStat('npc_state_delta_edit_desire'),
-        tension: clampEditorRelationshipStat('npc_state_delta_edit_tension'),
+        trust: clampEditorRelationshipStat('npc_codex_edit_trust'),
+        affection: clampEditorRelationshipStat('npc_codex_edit_affection'),
+        desire: clampEditorRelationshipStat('npc_codex_edit_desire'),
+        tension: clampEditorRelationshipStat('npc_codex_edit_tension'),
     };
     const relationshipDelta = Object.fromEntries(['trust', 'affection', 'desire', 'tension'].map(key => [key, next.relationship[key] - Number(oldRelationship[key] || 0)]));
     if (Object.values(relationshipDelta).some(value => value !== 0)) {
@@ -5969,7 +5964,7 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
         };
     }
     const stableKeys = ['name', 'role', 'species', 'gender', 'homeBase', 'age', 'apparentAge', 'personality', 'speech', 'behaviorProfile', 'background', 'mannerisms', 'keyRelationships', 'knowledge', 'sheet', 'episodes', 'intentions', 'beliefs', 'likes', 'dislikes', 'aliases', 'customFields'];
-    if (document.getElementById('npc_state_delta_edit_lock_profile')?.checked) {
+    if (document.getElementById('npc_codex_edit_lock_profile')?.checked) {
         const locks = new Set(current.manualProfileFields || []);
         for (const key of stableKeys) {
             const listField = key === 'mannerisms' || key === 'behaviorProfile' || key === 'keyRelationships' || key === 'knowledge' || key === 'sheet' || key === 'episodes' || key === 'intentions' || key === 'beliefs' || key === 'likes' || key === 'dislikes' || key === 'aliases' || key === 'customFields';
@@ -5981,8 +5976,8 @@ async function saveNpcEditor(npcId, { close = true, silent = false, popup = null
     } else {
         next.manualProfileFields = [];
     }
-    next.retentionProtected = Boolean(document.getElementById('npc_state_delta_edit_retention_protected')?.checked);
-    next.minor = Boolean(document.getElementById('npc_state_delta_edit_minor')?.checked);
+    next.retentionProtected = Boolean(document.getElementById('npc_codex_edit_retention_protected')?.checked);
+    next.minor = Boolean(document.getElementById('npc_codex_edit_minor')?.checked);
     next.updatedAt = Date.now();
     try {
         const text = String(editorField('npc_codex_portrayal_text') || '').trim();
@@ -6333,7 +6328,7 @@ async function compressPortrait(file) {
         img.src = source;
     });
     if (!Number.isFinite(image.width) || !Number.isFinite(image.height) || image.width <= 0 || image.height <= 0) throw new Error('Could not decode image dimensions.');
-    // Keep enough source resolution for the full-screen dossier viewer and high-DPI mobile/tablet displays.
+    // Keep enough source resolution for the full-screen dossier viewer and high-DPI displays.
     // The old 512 px cap looked acceptable in roster thumbnails but became visibly pixelated when expanded.
     const maxSide = 1536;
     const maxDataUrlLength = 1_600_000;
@@ -6508,42 +6503,42 @@ function normalizePortraitSettingsDraft(raw = {}) {
 function portraitSettingsDraftFromUi() {
     const settings = getSettings();
     return normalizePortraitSettingsDraft({
-        portraitGenerationEnabled: $('#npc_state_delta_portrait_generation_enabled').prop('checked'),
-        portraitThemePreset: String($('#npc_state_delta_portrait_theme_preset').val() || 'custom'),
-        portraitCustomPresetId: String($('#npc_state_delta_portrait_custom_preset').val() || settings.portraitCustomPresetId || ''),
+        portraitGenerationEnabled: $('#npc_codex_portrait_generation_enabled').prop('checked'),
+        portraitThemePreset: String($('#npc_codex_portrait_theme_preset').val() || 'custom'),
+        portraitCustomPresetId: String($('#npc_codex_portrait_custom_preset').val() || settings.portraitCustomPresetId || ''),
         portraitCustomPresets: settings.portraitCustomPresets,
-        portraitStylePositive: String($('#npc_state_delta_portrait_style_positive').val() || ''),
-        portraitStyleNegative: String($('#npc_state_delta_portrait_style_negative').val() || ''),
-        portraitComposition: String($('#npc_state_delta_portrait_composition').val() || ''),
-        portraitPromptFormat: String($('#npc_state_delta_portrait_prompt_format').val() || 'hybrid'),
-        portraitUseMood: $('#npc_state_delta_portrait_use_mood').prop('checked'),
-        portraitUseLocation: $('#npc_state_delta_portrait_use_location').prop('checked'),
-        portraitSaveToGallery: $('#npc_state_delta_portrait_save_gallery').prop('checked'),
+        portraitStylePositive: String($('#npc_codex_portrait_style_positive').val() || ''),
+        portraitStyleNegative: String($('#npc_codex_portrait_style_negative').val() || ''),
+        portraitComposition: String($('#npc_codex_portrait_composition').val() || ''),
+        portraitPromptFormat: String($('#npc_codex_portrait_prompt_format').val() || 'hybrid'),
+        portraitUseMood: $('#npc_codex_portrait_use_mood').prop('checked'),
+        portraitUseLocation: $('#npc_codex_portrait_use_location').prop('checked'),
+        portraitSaveToGallery: $('#npc_codex_portrait_save_gallery').prop('checked'),
     });
 }
 
 function writePortraitCustomPresetOptions(snapshot) {
-    const control = $('#npc_state_delta_portrait_custom_preset');
+    const control = $('#npc_codex_portrait_custom_preset');
     if (!control.length) return;
     const html = snapshot.portraitCustomPresets
         .map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
     if (control.html() !== html) control.html(html);
     control.val(snapshot.portraitCustomPresetId);
-    $('#npc_state_delta_portrait_custom_preset_count').text(`${snapshot.portraitCustomPresets.length}/${PORTRAIT_CUSTOM_PRESET_LIMIT} saved`);
+    $('#npc_codex_portrait_custom_preset_count').text(`${snapshot.portraitCustomPresets.length}/${PORTRAIT_CUSTOM_PRESET_LIMIT} saved`);
 }
 
 function writePortraitSettingsDraftToUi(draft) {
     const next = normalizePortraitSettingsDraft(draft);
-    $('#npc_state_delta_portrait_generation_enabled').prop('checked', next.portraitGenerationEnabled);
-    $('#npc_state_delta_portrait_theme_preset').val(next.portraitThemePreset);
+    $('#npc_codex_portrait_generation_enabled').prop('checked', next.portraitGenerationEnabled);
+    $('#npc_codex_portrait_theme_preset').val(next.portraitThemePreset);
     writePortraitCustomPresetOptions(next);
-    $('#npc_state_delta_portrait_style_positive').val(next.portraitStylePositive);
-    $('#npc_state_delta_portrait_style_negative').val(next.portraitStyleNegative);
-    $('#npc_state_delta_portrait_composition').val(next.portraitComposition);
-    $('#npc_state_delta_portrait_prompt_format').val(next.portraitPromptFormat);
-    $('#npc_state_delta_portrait_use_mood').prop('checked', next.portraitUseMood);
-    $('#npc_state_delta_portrait_use_location').prop('checked', next.portraitUseLocation);
-    $('#npc_state_delta_portrait_save_gallery').prop('checked', next.portraitSaveToGallery);
+    $('#npc_codex_portrait_style_positive').val(next.portraitStylePositive);
+    $('#npc_codex_portrait_style_negative').val(next.portraitStyleNegative);
+    $('#npc_codex_portrait_composition').val(next.portraitComposition);
+    $('#npc_codex_portrait_prompt_format').val(next.portraitPromptFormat);
+    $('#npc_codex_portrait_use_mood').prop('checked', next.portraitUseMood);
+    $('#npc_codex_portrait_use_location').prop('checked', next.portraitUseLocation);
+    $('#npc_codex_portrait_save_gallery').prop('checked', next.portraitSaveToGallery);
     $('.npc-state-delta-custom-preset-library').toggleClass('delta-custom-active', next.portraitThemePreset === 'custom');
     return next;
 }
@@ -6554,8 +6549,8 @@ function confirmDiscardPortraitDraft() {
 }
 
 function updatePortraitSettingsSaveUi() {
-    const button = $('#npc_state_delta_save_portrait_settings');
-    const status = $('#npc_state_delta_portrait_settings_status');
+    const button = $('#npc_codex_save_portrait_settings');
+    const status = $('#npc_codex_portrait_settings_status');
     button.toggleClass?.('npc-state-delta-busy', portraitSettingsSaveBusy);
     button.prop?.('disabled', portraitSettingsSaveBusy);
     if (portraitSettingsSaveBusy) status.text?.('Saving…');
@@ -6676,29 +6671,29 @@ function bindSettingsText(selector, key, after = null) {
 
 function bindUi() {
     $(document).off('.npcStateDelta');
-    bindSettingsCheckbox('#npc_state_delta_enabled', 'enabled', () => { updateInjection(); renderDossier(); });
-    bindSettingsCheckbox('#npc_state_delta_auto', 'autoScan');
-    $(document).on('change.npcStateDelta', '#npc_state_delta_scanner_connection_profile', function () {
+    bindSettingsCheckbox('#npc_codex_enabled', 'enabled', () => { updateInjection(); renderDossier(); });
+    bindSettingsCheckbox('#npc_codex_auto', 'autoScan');
+    $(document).on('change.npcStateDelta', '#npc_codex_scanner_connection_profile', function () {
         getSettings().scannerConnectionProfile = String(this.value || '').trim();
         persistSettings();
     });
-    bindSettingsCheckbox('#npc_state_delta_full_scan_every_turn', 'fullScanEveryTurn');
+    bindSettingsCheckbox('#npc_codex_full_scan_every_turn', 'fullScanEveryTurn');
     $(document).on('change.npcStateDelta', '#npc_codex_custom_field_names', function () {
         getSettings().customFieldNames = normalizeCustomFieldNames(this.value); persistSettings(); updateInjection();
     });
-    bindSettingsCheckbox('#npc_state_delta_inject', 'inject', updateInjection);
-    bindSettingsCheckbox('#npc_state_delta_recall_enabled', 'recallEnabled', updateInjection);
-    bindSettingsCheckbox('#npc_state_delta_derive_stats', 'deriveStats');
-    bindSettingsCheckbox('#npc_state_delta_generate_birthdays', 'generateBirthdays', () => { setBirthdayFallback(getSettings().generateBirthdays === true); updateInjection(); });
-    bindSettingsText('#npc_state_delta_recall_model', 'recallModel', recallSettingsChanged);
-    bindSettingsText('#npc_state_delta_recall_api', 'recallApiUrl', recallSettingsChanged);
-    bindSettingsText('#npc_state_delta_recall_qdrant', 'recallQdrantUrl', recallSettingsChanged);
-    bindSettingsNumber('#npc_state_delta_inject_budget', 'injectBudgetTokens', 512, 6000, 4000, updateInjection);
-    bindSettingsCheckbox('#npc_state_delta_archive_deaths', 'autoArchiveDeaths');
-    bindSettingsCheckbox('#npc_state_delta_reactivate_archived', 'autoReactivateArchived');
-    bindSettingsCheckbox('#npc_state_delta_branch_rescan', 'branchRescan');
-    bindSettingsCheckbox('#npc_state_delta_mid_delete_rewind', 'midDeleteRewind');
-    $(document).on('change.npcStateDelta', '#npc_state_delta_portrait_theme_preset', function () {
+    bindSettingsCheckbox('#npc_codex_inject', 'inject', updateInjection);
+    bindSettingsCheckbox('#npc_codex_recall_enabled', 'recallEnabled', updateInjection);
+    bindSettingsCheckbox('#npc_codex_derive_stats', 'deriveStats');
+    bindSettingsCheckbox('#npc_codex_generate_birthdays', 'generateBirthdays', () => { setBirthdayFallback(getSettings().generateBirthdays === true); updateInjection(); });
+    bindSettingsText('#npc_codex_recall_model', 'recallModel', recallSettingsChanged);
+    bindSettingsText('#npc_codex_recall_api', 'recallApiUrl', recallSettingsChanged);
+    bindSettingsText('#npc_codex_recall_qdrant', 'recallQdrantUrl', recallSettingsChanged);
+    bindSettingsNumber('#npc_codex_inject_budget', 'injectBudgetTokens', 512, 6000, 4000, updateInjection);
+    bindSettingsCheckbox('#npc_codex_archive_deaths', 'autoArchiveDeaths');
+    bindSettingsCheckbox('#npc_codex_reactivate_archived', 'autoReactivateArchived');
+    bindSettingsCheckbox('#npc_codex_branch_rescan', 'branchRescan');
+    bindSettingsCheckbox('#npc_codex_mid_delete_rewind', 'midDeleteRewind');
+    $(document).on('change.npcStateDelta', '#npc_codex_portrait_theme_preset', function () {
         const settings = getSettings();
         const saved = portraitSettingsSnapshot(settings);
         const key = PORTRAIT_THEME_PRESETS[this.value] ? this.value : 'custom';
@@ -6731,7 +6726,7 @@ function bindUi() {
         }
         markPortraitSettingsDirty();
     });
-    $(document).on('change.npcStateDelta', '#npc_state_delta_portrait_custom_preset', function () {
+    $(document).on('change.npcStateDelta', '#npc_codex_portrait_custom_preset', function () {
         const settings = getSettings();
         const saved = portraitSettingsSnapshot(settings);
         const target = saved.portraitCustomPresets.find(item => item.id === String(this.value || ''));
@@ -6754,17 +6749,17 @@ function bindUi() {
         });
         markPortraitSettingsDirty();
     });
-    $(document).on('input.npcStateDelta', '#npc_state_delta_portrait_style_positive, #npc_state_delta_portrait_style_negative, #npc_state_delta_portrait_composition', function () {
-        if (this.id === 'npc_state_delta_portrait_style_positive' || this.id === 'npc_state_delta_portrait_style_negative') {
-            $('#npc_state_delta_portrait_theme_preset').val('custom');
+    $(document).on('input.npcStateDelta', '#npc_codex_portrait_style_positive, #npc_codex_portrait_style_negative, #npc_codex_portrait_composition', function () {
+        if (this.id === 'npc_codex_portrait_style_positive' || this.id === 'npc_codex_portrait_style_negative') {
+            $('#npc_codex_portrait_theme_preset').val('custom');
             $('.npc-state-delta-custom-preset-library').addClass('delta-custom-active');
         }
         markPortraitSettingsDirty();
     });
-    $(document).on('change.npcStateDelta', '#npc_state_delta_portrait_generation_enabled, #npc_state_delta_portrait_prompt_format, #npc_state_delta_portrait_use_mood, #npc_state_delta_portrait_use_location, #npc_state_delta_portrait_save_gallery', () => {
+    $(document).on('change.npcStateDelta', '#npc_codex_portrait_generation_enabled, #npc_codex_portrait_prompt_format, #npc_codex_portrait_use_mood, #npc_codex_portrait_use_location, #npc_codex_portrait_save_gallery', () => {
         markPortraitSettingsDirty();
     });
-    $(document).on('click.npcStateDelta', '#npc_state_delta_portrait_custom_add, #npc_state_delta_portrait_custom_duplicate', async function () {
+    $(document).on('click.npcStateDelta', '#npc_codex_portrait_custom_add, #npc_codex_portrait_custom_duplicate', async function () {
         if (portraitSettingsSaveBusy) return;
         const settings = getSettings();
         const snapshot = portraitSettingsDraftFromUi();
@@ -6774,7 +6769,7 @@ function bindUi() {
             return;
         }
         const duplicate = this.id.endsWith('_duplicate');
-        const selected = presets.find(item => item.id === String($('#npc_state_delta_portrait_custom_preset').val() || ''))
+        const selected = presets.find(item => item.id === String($('#npc_codex_portrait_custom_preset').val() || ''))
             || portraitCustomPresetFor(settings);
         const base = portraitCustomPreset({
             ...(duplicate ? selected : {}),
@@ -6800,11 +6795,11 @@ function bindUi() {
         });
         if (saved) globalThis.toastr?.success?.(`NPC Codex: saved custom portrait preset ${created.name}.`);
     });
-    $(document).on('click.npcStateDelta', '#npc_state_delta_portrait_custom_rename', async function () {
+    $(document).on('click.npcStateDelta', '#npc_codex_portrait_custom_rename', async function () {
         if (portraitSettingsSaveBusy) return;
         let settings = getSettings();
         let snapshot = portraitSettingsSnapshot(settings);
-        const id = String($('#npc_state_delta_portrait_custom_preset').val() || snapshot.portraitCustomPresetId);
+        const id = String($('#npc_codex_portrait_custom_preset').val() || snapshot.portraitCustomPresetId);
         let index = snapshot.portraitCustomPresets.findIndex(item => item.id === id);
         if (index < 0) return;
         let current = snapshot.portraitCustomPresets[index];
@@ -6825,7 +6820,7 @@ function bindUi() {
         const saved = await persistPortraitCustomPresetLibrary(settings, presets, id, { theme: snapshot.portraitThemePreset });
         if (saved) globalThis.toastr?.success?.(`NPC Codex: renamed portrait preset to ${name}.`);
     });
-    $(document).on('click.npcStateDelta', '#npc_state_delta_portrait_custom_delete', async function () {
+    $(document).on('click.npcStateDelta', '#npc_codex_portrait_custom_delete', async function () {
         if (portraitSettingsSaveBusy) return;
         const settings = getSettings();
         let snapshot = portraitSettingsSnapshot(settings);
@@ -6833,14 +6828,14 @@ function bindUi() {
             globalThis.toastr?.warning?.('NPC Codex: keep at least one custom portrait preset.');
             return;
         }
-        let id = String($('#npc_state_delta_portrait_custom_preset').val() || snapshot.portraitCustomPresetId);
+        let id = String($('#npc_codex_portrait_custom_preset').val() || snapshot.portraitCustomPresetId);
         let targetIndex = snapshot.portraitCustomPresets.findIndex(item => item.id === id);
         let target = snapshot.portraitCustomPresets[targetIndex];
         if (!target) return;
         if (globalThis.window?.confirm?.(`Delete custom portrait preset "${target.name}"?`) === false) return;
         if (portraitSettingsDirty && !(await savePortraitSettingsDraft())) return;
         snapshot = portraitSettingsSnapshot(getSettings());
-        id = String($('#npc_state_delta_portrait_custom_preset').val() || id);
+        id = String($('#npc_codex_portrait_custom_preset').val() || id);
         targetIndex = snapshot.portraitCustomPresets.findIndex(item => item.id === id);
         target = snapshot.portraitCustomPresets[targetIndex];
         if (!target || snapshot.portraitCustomPresets.length <= 1) return;
@@ -6852,7 +6847,7 @@ function bindUi() {
         });
         if (saved) globalThis.toastr?.success?.(`NPC Codex: deleted custom portrait preset ${target.name}.`);
     });
-    $(document).on('click.npcStateDelta', '#npc_state_delta_reset_portrait_theme', () => {
+    $(document).on('click.npcStateDelta', '#npc_codex_reset_portrait_theme', () => {
         writePortraitSettingsDraftToUi({
             ...portraitSettingsSnapshot(getSettings()),
             portraitGenerationEnabled: true,
@@ -6868,49 +6863,49 @@ function bindUi() {
         markPortraitSettingsDirty();
         globalThis.toastr?.info?.('NPC Codex: Fantasy Anime defaults loaded as an unsaved portrait-settings draft.');
     });
-    $(document).on('click.npcStateDelta', '#npc_state_delta_save_portrait_settings', () => { void savePortraitSettingsDraft(); });
-    bindSettingsNumber('#npc_state_delta_scan_every', 'scanEvery', 1, 20, 2);
-    bindSettingsNumber('#npc_state_delta_scan_depth', 'scanDepth', 2, 30, 6);
-    $(document).on('change.npcStateDelta', '#npc_state_delta_present_cast_display', function () {
+    $(document).on('click.npcStateDelta', '#npc_codex_save_portrait_settings', () => { void savePortraitSettingsDraft(); });
+    bindSettingsNumber('#npc_codex_scan_every', 'scanEvery', 1, 20, 2);
+    bindSettingsNumber('#npc_codex_scan_depth', 'scanDepth', 2, 30, 6);
+    $(document).on('change.npcStateDelta', '#npc_codex_present_cast_display', function () {
         getSettings().presentCastDisplay = normalizePresentCastDisplay(this.value); this.value = getSettings().presentCastDisplay; persistSettings();
         startInlineWatchdog();
         queueInlineRender(0);
     });
-    $(document).on('change.npcStateDelta', '#npc_state_delta_admission_mode', function () {
+    $(document).on('change.npcStateDelta', '#npc_codex_admission_mode', function () {
         getSettings().admissionMode = normalizeNpcAdmissionMode(this.value); this.value = getSettings().admissionMode; persistSettings();
     });
-    bindSettingsNumber('#npc_state_delta_max', 'maxNpcs', 1, 100, 40);
-    bindSettingsCheckbox('#npc_state_delta_auto_prune_stale', 'autoPruneStale');
-    $(document).on('change.npcStateDelta', '#npc_state_delta_stale_archive_after', function () {
+    bindSettingsNumber('#npc_codex_max', 'maxNpcs', 1, 100, 40);
+    bindSettingsCheckbox('#npc_codex_auto_prune_stale', 'autoPruneStale');
+    $(document).on('change.npcStateDelta', '#npc_codex_stale_archive_after', function () {
         const settings = getSettings();
         settings.staleArchiveAfter = Math.max(10, Math.min(999, Math.round(Number(this.value) || 30)));
         if (settings.staleDeleteAfter <= settings.staleArchiveAfter) settings.staleDeleteAfter = Math.min(1000, settings.staleArchiveAfter + 1);
         syncSettingsControls(); persistSettings();
     });
-    $(document).on('change.npcStateDelta', '#npc_state_delta_stale_delete_after', function () {
+    $(document).on('change.npcStateDelta', '#npc_codex_stale_delete_after', function () {
         const settings = getSettings();
         settings.staleDeleteAfter = Math.max(settings.staleArchiveAfter + 1, Math.min(1000, Math.round(Number(this.value) || 50)));
         syncSettingsControls(); persistSettings();
     });
-    $(document).on('change.npcStateDelta', '#npc_state_delta_base_trust, #npc_state_delta_base_affection, #npc_state_delta_base_desire, #npc_state_delta_base_tension', function () {
+    $(document).on('change.npcStateDelta', '#npc_codex_base_trust, #npc_codex_base_affection, #npc_codex_base_desire, #npc_codex_base_tension', function () {
         const settings = getSettings();
-        const key = this.id.replace('npc_state_delta_base_', '');
+        const key = this.id.replace('npc_codex_base_', '');
         settings.relationshipBaseline[key] = Math.max(-100, Math.min(100, Math.round(Number(this.value) || 0)));
         settings.relationshipBaseline = normalizeRelationshipBaseline(settings.relationshipBaseline);
         syncSettingsControls(); persistSettings();
     });
-    $(document).on('change.npcStateDelta', '#npc_state_delta_cap_ordinary, #npc_state_delta_cap_meaningful, #npc_state_delta_cap_major, #npc_state_delta_cap_extreme', function () {
+    $(document).on('change.npcStateDelta', '#npc_codex_cap_ordinary, #npc_codex_cap_meaningful, #npc_codex_cap_major, #npc_codex_cap_extreme', function () {
         const settings = getSettings();
-        const key = this.id.replace('npc_state_delta_cap_', '');
+        const key = this.id.replace('npc_codex_cap_', '');
         settings.relationshipCaps[key] = Math.max(0, Math.round(Number(this.value) || 0));
         settings.relationshipCaps = normalizeRelationshipCaps(settings.relationshipCaps);
         syncSettingsControls(); persistSettings();
     });
-    bindSettingsText('#npc_state_delta_relationship_criteria', 'relationshipCriteria');
-    bindSettingsText('#npc_state_delta_impact_criteria', 'relationshipImpactCriteria');
-    bindSettingsText('#npc_state_delta_memory_criteria', 'memoryCriteria');
-    bindSettingsText('#npc_state_delta_behavior_criteria', 'behaviorCriteria', updateInjection);
-    $(document).on('click.npcStateDelta', '#npc_state_delta_reset_relationship_rules', () => {
+    bindSettingsText('#npc_codex_relationship_criteria', 'relationshipCriteria');
+    bindSettingsText('#npc_codex_impact_criteria', 'relationshipImpactCriteria');
+    bindSettingsText('#npc_codex_memory_criteria', 'memoryCriteria');
+    bindSettingsText('#npc_codex_behavior_criteria', 'behaviorCriteria', updateInjection);
+    $(document).on('click.npcStateDelta', '#npc_codex_reset_relationship_rules', () => {
         const settings = getSettings();
         settings.relationshipBaseline = { ...DEFAULT_RELATIONSHIP };
         settings.relationshipCaps = { ...DEFAULT_RELATIONSHIP_CAPS };
@@ -6919,20 +6914,20 @@ function bindUi() {
         syncSettingsControls(); persistSettings();
         globalThis.toastr?.success?.('NPC Codex: relationship tuning reset to defaults.');
     });
-    $(document).on('click.npcStateDelta', '#npc_state_delta_reset_memory_rules', () => {
+    $(document).on('click.npcStateDelta', '#npc_codex_reset_memory_rules', () => {
         getSettings().memoryCriteria = DEFAULT_MEMORY_CRITERIA;
         syncSettingsControls(); persistSettings();
         globalThis.toastr?.success?.('NPC Codex: important memory criteria reset to default.');
     });
-    $(document).on('click.npcStateDelta', '#npc_state_delta_reset_behavior_rules', () => {
+    $(document).on('click.npcStateDelta', '#npc_codex_reset_behavior_rules', () => {
         getSettings().behaviorCriteria = DEFAULT_BEHAVIOR_CRITERIA;
         syncSettingsControls(); persistSettings(); updateInjection();
         globalThis.toastr?.success?.('NPC Codex: behavior rubric reset to default.');
     });
     $(document).on('click.npcStateDelta', '.npc-state-delta-retry-hydration', () => { void retryCurrentChatHydration(); });
     $(document).on('click.npcStateDelta', '.npc-state-delta-detach-sidecar', () => { void detachBrokenSidecar(); });
-    $(document).on('click.npcStateDelta', '#npc_state_delta_scan_now', () => scanNow({ manual: true, messageId: latestMessageId(true) }));
-    $(document).on('click.npcStateDelta', '#npc_state_delta_add_manual', async () => {
+    $(document).on('click.npcStateDelta', '#npc_codex_scan_now', () => scanNow({ manual: true, messageId: latestMessageId(true) }));
+    $(document).on('click.npcStateDelta', '#npc_codex_add_manual', async () => {
         if (!await ensureFreshMutationBoundary('add an NPC')) return;
         const settings = getSettings();
         const state = getChatState();
@@ -6983,7 +6978,7 @@ function bindUi() {
         if (!await ensureFreshMutationBoundary('delete a dossier', key)) return;
         deleteNpcById(this.dataset.npcId);
     });
-    $(document).on('click.npcStateDelta', '#npc_state_delta_clear_chat', async () => {
+    $(document).on('click.npcStateDelta', '#npc_codex_clear_chat', async () => {
         if (!await ensureFreshMutationBoundary('clear this chat dossier')) return;
         if (!window.confirm('Clear every NPC Codex dossier for this chat? Portraits and inline dossier cards will also be removed.')) return;
         closePortraitGenerator();
@@ -7490,7 +7485,7 @@ window.NPCCodex = Object.freeze({
         mountedInlineAnchors: document.querySelectorAll?.('.npc-state-delta-inline-anchor')?.length || 0,
         integratedMeguminBlocks: document.querySelectorAll?.('.npc-state-delta-megumin-pane')?.length || 0,
         settingsPanelMounted: Boolean(document.querySelector?.(`#${UI_ID}`)),
-        rosterMounted: Boolean(document.querySelector?.('#npc_state_delta_roster_summary')),
+        rosterMounted: Boolean(document.querySelector?.('#npc_codex_roster_summary')),
         editorMounted: editorIsMounted(),
         editorMode: activeEditorPopup ? 'sillytavern-popup' : 'closed',
         presentCastDisplay: presentCastDisplayMode(),

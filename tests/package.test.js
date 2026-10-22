@@ -19,7 +19,7 @@ test('install folder has SillyTavern-discoverable one-level layout', () => {
         .map(entry => entry.name)
         .sort();
     assert.deepEqual(configured, rootJs, 'active runtime inventory must match every root JS module exactly');
-    for (const name of configured) assert.ok(fs.existsSync(path.join(root, name)), `${name} must be directly inside npc_state_delta/`);
+    for (const name of configured) assert.ok(fs.existsSync(path.join(root, name)), `${name} must be directly inside npc_codex/`);
     for (const name of ['manifest.json', 'runtime-modules.json', 'style.css', 'README.md', 'CHANGELOG.md']) {
         assert.ok(fs.existsSync(path.join(root, name)), `${name} must exist in the Delta repository root`);
     }
@@ -29,7 +29,7 @@ test('install folder has SillyTavern-discoverable one-level layout', () => {
     assert.equal(fs.existsSync(path.join(root, 'branch-v0218.js')), false, 'version-labelled branch path must not remain active');
     assert.ok(fs.existsSync(path.join(root, 'core-mechanics.js')), 'canonical core mechanics owner must exist');
     assert.ok(fs.existsSync(path.join(root, 'branch-core.js')), 'canonical branch primitives owner must exist');
-    assert.equal(fs.existsSync(path.join(root, 'npc_state_delta', 'manifest.json')), false, 'must not contain a second nested npc_state_delta folder');
+    assert.equal(fs.existsSync(path.join(root, 'npc_codex', 'manifest.json')), false, 'must not contain a second nested npc_codex folder');
 
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
     assert.equal(manifest.display_name, 'NPC Codex');

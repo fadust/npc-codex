@@ -295,7 +295,7 @@ async function deepAuditRuntimeChecks(mockState, eventSource, manualAddNpc, slee
         payload.writerId = 'remote-other-session';
         mockState.files.set(pointer.path, JSON.stringify(payload));
     };
-    const settings = mockState.extensionSettings.npc_state_delta;
+    const settings = mockState.extensionSettings.npc_codex;
 
     // RB87-03: a new local turn on a stale chat does not certify the old history.
     await open('rb87-stale', ['Mira waits by the gate.', 'Mira watches the road.']);
@@ -343,13 +343,13 @@ async function deepAuditRuntimeChecks(mockState, eventSource, manualAddNpc, slee
     const popup = mockState.popupCalls.at(-1);
     const values = new Map();
     const editorHtml = String(popup.content?.innerHTML ?? popup.content ?? '');
-    for (const match of editorHtml.matchAll(/id="(npc_state_delta_edit_[a-z_]+)"([^>]*)>/g)) {
+    for (const match of editorHtml.matchAll(/id="(npc_codex_edit_[a-z_]+)"([^>]*)>/g)) {
         const attrs = match[2];
         values.set(match[1], { value: (attrs.match(/value="([^"]*)"/) || [])[1] ?? '', checked: /\bchecked\b/.test(attrs) });
     }
-    for (const match of editorHtml.matchAll(/id="(npc_state_delta_edit_[a-z_]+)"[^>]*>([^<]*)<\/textarea>/g)) values.set(match[1], { value: match[2], checked: false });
+    for (const match of editorHtml.matchAll(/id="(npc_codex_edit_[a-z_]+)"[^>]*>([^<]*)<\/textarea>/g)) values.set(match[1], { value: match[2], checked: false });
     if (values.size < 10) fail(`RB87-16: the editor inputs were not found (${values.size})`);
-    values.set('npc_state_delta_edit_role', { value: 'Canceled alchemist draft', checked: false });
+    values.set('npc_codex_edit_role', { value: 'Canceled alchemist draft', checked: false });
     document.getElementById = id => values.get(id) || null;
     let releaseRead;
     let markEntered;
@@ -369,11 +369,11 @@ async function deepAuditRuntimeChecks(mockState, eventSource, manualAddNpc, slee
     const saved = mockState.popupCalls.at(-1);
     const savedValues = new Map();
     const savedHtml = String(saved.content?.innerHTML ?? saved.content ?? '');
-    for (const match of savedHtml.matchAll(/id="(npc_state_delta_edit_[a-z_]+)"([^>]*)>/g)) {
+    for (const match of savedHtml.matchAll(/id="(npc_codex_edit_[a-z_]+)"([^>]*)>/g)) {
         savedValues.set(match[1], { value: (match[2].match(/value="([^"]*)"/) || [])[1] ?? '', checked: /\bchecked\b/.test(match[2]) });
     }
-    for (const match of savedHtml.matchAll(/id="(npc_state_delta_edit_[a-z_]+)"[^>]*>([^<]*)<\/textarea>/g)) savedValues.set(match[1], { value: match[2], checked: false });
-    savedValues.set('npc_state_delta_edit_role', { value: 'Kept herbalist draft', checked: false });
+    for (const match of savedHtml.matchAll(/id="(npc_codex_edit_[a-z_]+)"[^>]*>([^<]*)<\/textarea>/g)) savedValues.set(match[1], { value: match[2], checked: false });
+    savedValues.set('npc_codex_edit_role', { value: 'Kept herbalist draft', checked: false });
     document.getElementById = id => savedValues.get(id) || null;
     await saved.complete(1);
     await sleep(100);

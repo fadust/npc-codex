@@ -32,7 +32,7 @@ test('v1.2.15 the meters pass the last change and the latest reply; settings fol
     assert.match(ui, /relationshipAxis\(label, selected\.relationship\[axis\], axis, selected\.lastRelationshipChange, this\.projection\?\.turn\)/);
     const index = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8');
     const advanced = index.match(/const advanced = \[([\s\S]*?)\]\.join\(''\);/)?.[1] ?? '';
-    for (const id of ['npc_state_delta_scan_depth', 'npc_state_delta_inject_budget', 'npc_state_delta_mid_delete_rewind', 'npc_state_delta_branch_rescan']) {
+    for (const id of ['npc_codex_scan_depth', 'npc_codex_inject_budget', 'npc_codex_mid_delete_rewind', 'npc_codex_branch_rescan']) {
         assert.ok(advanced.includes(`'${id}'`), `${id} is under Advanced`);
         assert.equal(index.split(`settingRow('${id}'`).length - 1, 1, `${id} appears once`);
     }

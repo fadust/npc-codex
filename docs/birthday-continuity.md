@@ -108,7 +108,7 @@ The scanner never chooses generated birthdays and is instructed not to infer chr
 
 ## Settings ownership
 
-`calendar-settings.js` is a thin adapter over the existing `extension_settings.npc_state_delta` object. It stores only the `calendarConfig` slice and uses the host's normal debounced settings persistence. It does not create another settings database or persistence path. `calendar.js` owns pure calendar validation/arithmetic plus deterministic structured-World-State date extraction; `birthday.js` owns birthday continuity policy.
+`calendar-settings.js` is a thin adapter over the existing `extension_settings.npc_codex` object. It stores only the `calendarConfig` slice and uses the host's normal debounced settings persistence. It does not create another settings database or persistence path. `calendar.js` owns pure calendar validation/arithmetic plus deterministic structured-World-State date extraction; `birthday.js` owns birthday continuity policy.
 
 The manual current date is a fallback setting, not a second campaign-history database. Structured World State is read from the current scan source rather than copied into a separate persistent clock, which keeps normal Delta branch/recovery ownership unchanged.
 

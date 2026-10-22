@@ -15,7 +15,7 @@ function fixture(profileId = '') {
     const calls = { host: [], profile: [] };
     const profiles = [{ id: 'fast', name: 'Scanner Fast', supported: true, model: 'scanner-model' }];
     const ctx = {
-        extensionSettings: { npc_state_delta: { scannerConnectionProfile: profileId }, connectionManager: { profiles, selectedProfile: 'roleplay' }, disabledExtensions: [] },
+        extensionSettings: { npc_codex: { scannerConnectionProfile: profileId }, connectionManager: { profiles, selectedProfile: 'roleplay' }, disabledExtensions: [] },
         generateRaw(options) { calls.host.push(options); return Promise.resolve('{"npcs":[]}'); },
         ConnectionManagerRequestService: {
             getProfile(id) { const found = profiles.find(p => p.id === id); if (!found) throw new Error('missing'); return found; },
@@ -29,7 +29,7 @@ const code = expected => error => error?.code === expected;
 
 test('default uses unchanged generateRaw options exactly once and creates no settings', async () => {
     const { ctx, calls } = fixture();
-    delete ctx.extensionSettings.npc_state_delta;
+    delete ctx.extensionSettings.npc_codex;
     const before = structuredClone(ctx.extensionSettings);
     assert.equal(await dispatchScannerRequest(ctx, payload), '{"npcs":[]}');
     assert.equal(calls.host.length, 1);
@@ -61,7 +61,7 @@ test('operation-pinned profile does not follow a changed global selection on ret
     const { ctx, calls } = fixture('fast');
     const route = { profileId: 'fast' };
     await dispatchScannerRequest(ctx, payload, { route });
-    ctx.extensionSettings.npc_state_delta.scannerConnectionProfile = '';
+    ctx.extensionSettings.npc_codex.scannerConnectionProfile = '';
     await dispatchScannerRequest(ctx, { ...payload, responseLength: 5200 }, { route, label: 'scanner JSON retry' });
     assert.deepEqual(calls.profile.map(args => args[0]), ['fast', 'fast']);
     assert.equal(calls.profile[1][2], 5200);

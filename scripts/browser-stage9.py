@@ -12,8 +12,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-VIEWPORTS = [('desktop', 1440, 900), ('tablet', 820, 1180),
-             ('mobile', 390, 720), ('reduced-height', 390, 430)]
+VIEWPORTS = [('desktop', 1440, 900)]
 IMAGE = bytes.fromhex(
     '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489'
     '0000000b49444154789c636000020000050001a5f645400000000049454e44ae426082'
@@ -110,11 +109,11 @@ def check_relationship_map(page, name, width, output):
     page.locator('.delta-map-open').click()
     page.wait_for_timeout(50)
     assert page.locator('.delta-document').is_visible() and page.locator('.delta-map-pane').is_hidden()
-    page.evaluate("document.getElementById('npc_state_delta_map_enabled').click()")
+    page.evaluate("document.getElementById('npc_codex_map_enabled').click()")
     page.wait_for_timeout(50)
-    assert page.evaluate('settings.npc_state_delta.relationshipMap.enabled') is False
+    assert page.evaluate('settings.npc_codex.relationshipMap.enabled') is False
     assert page.locator('.delta-map-switch').count() == 0 and page.locator('.delta-map-see').count() == 0, name + ' map not removed'
-    page.evaluate("document.getElementById('npc_state_delta_map_enabled').click()")
+    page.evaluate("document.getElementById('npc_codex_map_enabled').click()")
     page.wait_for_timeout(50)
     assert page.locator('.delta-map-switch').count() == 1
     page.evaluate("state.npcs.forEach(n => { n.present = true; n.worldActive = false; }); refreshUi()")
@@ -122,7 +121,7 @@ def check_relationship_map(page, name, width, output):
 
 
 def run_viewport(browser, name, width, height, output):
-    context = browser.new_context(viewport={'width': width, 'height': height}, has_touch=name != 'desktop')
+    context = browser.new_context(viewport={'width': width, 'height': height}, has_touch=False)
     page = context.new_page()
     page.set_default_timeout(5000)
     print('Checking', name, flush=True)
@@ -130,12 +129,12 @@ def run_viewport(browser, name, width, height, output):
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.on('dialog', lambda dialog: dialog.accept())
     mount_fixture(page)
-    assert page.locator('[data-delta-settings-group="calendar"] #npc_state_delta_calendar_settings').count() == 1
+    assert page.locator('[data-delta-settings-group="calendar"] #npc_codex_calendar_settings').count() == 1
     page.locator('[data-delta-settings-group="calendar"] > summary').click()
-    page.locator('#npc_state_delta_calendar_months').fill('Redleaf:30\nSunwane:31')
-    page.locator('#npc_state_delta_save_calendar').click()
-    assert page.evaluate('settings.npc_state_delta.calendarConfig.currentYear') is None
-    page.evaluate("document.getElementById('npc_state_delta_dossier_root').__npcStateDeltaStage1Ui.open()")
+    page.locator('#npc_codex_calendar_months').fill('Redleaf:30\nSunwane:31')
+    page.locator('#npc_codex_save_calendar').click()
+    assert page.evaluate('settings.npc_codex.calendarConfig.currentYear') is None
+    page.evaluate("document.getElementById('npc_codex_dossier_root').__npcStateDeltaStage1Ui.open()")
     page.wait_for_selector('.delta-library-heading')
     # The library opens collapsed; its heading expands it.
     assert not page.locator('.delta-cast-list').is_visible(), name + ' library not collapsed by default'
@@ -184,18 +183,18 @@ def run_viewport(browser, name, width, height, output):
     assert page.evaluate('savedDocument.scrollTop === savedScroll')
 
     page.evaluate('tools.openPortraitTools("npc-0")')
-    page.locator('#npc_state_delta_tools_positive').fill('Manual golden-blue hair prompt')
+    page.locator('#npc_codex_tools_positive').fill('Manual golden-blue hair prompt')
     page.evaluate('state.npcs[0].mood = "Updated again"; refreshUi()')
     page.wait_for_timeout(100)
-    assert page.locator('#npc_state_delta_tools_positive').input_value() == 'Manual golden-blue hair prompt'
-    reachable(page.locator('#npc_state_delta_tools_overlay [data-delta-tools-close]').first, height)
+    assert page.locator('#npc_codex_tools_positive').input_value() == 'Manual golden-blue hair prompt'
+    reachable(page.locator('#npc_codex_tools_overlay [data-delta-tools-close]').first, height)
     page.screenshot(path=str(output / (name + '-portrait.png')))
     page.keyboard.press('Escape')
-    page.wait_for_selector('#npc_state_delta_tools_overlay', state='detached')
+    page.wait_for_selector('#npc_codex_tools_overlay', state='detached')
     page.evaluate('tools.openPortraitTools("npc-0")')
-    assert page.locator('#npc_state_delta_tools_positive').input_value() == 'Manual golden-blue hair prompt'
+    assert page.locator('#npc_codex_tools_positive').input_value() == 'Manual golden-blue hair prompt'
     page.locator('input.delta-tools-portrait-file').set_input_files({'name': 'synthetic.png', 'mimeType': 'image/png', 'buffer': IMAGE})
-    page.wait_for_selector('#npc_state_delta_tools_overlay', state='detached')
+    page.wait_for_selector('#npc_codex_tools_overlay', state='detached')
     page.wait_for_timeout(100)
     assert page.evaluate('counts.applied') == 1
     assert page.locator('.delta-hero img').count() >= 1
@@ -213,7 +212,7 @@ def run_viewport(browser, name, width, height, output):
     assert page.locator('.delta-tools-diagnostics').count() == 1
     assert page.evaluate('toasts.length === toastCount')
     page.keyboard.press('Escape')
-    page.wait_for_selector('#npc_state_delta_tools_overlay', state='detached')
+    page.wait_for_selector('#npc_codex_tools_overlay', state='detached')
 
     page.evaluate('NPCStateDelta.openEditor("npc-0")')
     page.wait_for_selector('.delta-editor-appearance-forms')
@@ -221,7 +220,7 @@ def run_viewport(browser, name, width, height, output):
     page.locator('[data-delta-appearance-forms]').fill(
         'Human | Golden-blue hair, ordinary human ears.\nRaven | Black feathers, beak and wings.\nMist | Pale mist.')
     assert page.locator('[data-delta-current-form] option[value="Mist"]').count() == 1
-    page.locator('#npc_state_delta_edit_goal').fill('Unsaved unrelated goal')
+    page.locator('#npc_codex_edit_goal').fill('Unsaved unrelated goal')
     page.locator('[data-delta-current-form]').select_option('Mist')
     page.evaluate('() => { window.flushGate = new Promise(resolve => window.releaseFlush = resolve); }')
     page.locator('[data-delta-apply-appearance]').click()
@@ -229,7 +228,7 @@ def run_viewport(browser, name, width, height, output):
     page.evaluate('releaseFlush(); window.flushGate = null')
     page.wait_for_timeout(100)
     assert page.evaluate('state.npcs[0].currentForm') == 'Mist'
-    assert page.locator('#npc_state_delta_edit_goal').input_value() == 'Unsaved unrelated goal'
+    assert page.locator('#npc_codex_edit_goal').input_value() == 'Unsaved unrelated goal'
     assert page.locator('[data-delta-overall-appearance]').input_value() == 'Newer unsaved appearance draft'
 
     # Life-state apply shares the canonical API and must not clobber a newer selected choice.
@@ -242,7 +241,7 @@ def run_viewport(browser, name, width, height, output):
     page.wait_for_timeout(100)
     assert page.evaluate('state.npcs[0].lifeState') == 'alive'
     assert page.locator('[data-delta-life-state]').input_value() == 'unknown'
-    assert page.locator('#npc_state_delta_edit_goal').input_value() == 'Unsaved unrelated goal'
+    assert page.locator('#npc_codex_edit_goal').input_value() == 'Unsaved unrelated goal'
     page.screenshot(path=str(output / (name + '-editor.png')))
     reachable(page.locator('[data-test-close]'), height)
     page.locator('[data-test-close]').click()
@@ -253,10 +252,10 @@ def run_viewport(browser, name, width, height, output):
     after = page.evaluate('({...counts})')
     assert after['getState'] == before['getState'] and after['scan'] == before['scan']
     page.keyboard.press('Escape')
-    page.wait_for_selector('#npc_state_delta_tools_overlay', state='detached')
+    page.wait_for_selector('#npc_codex_tools_overlay', state='detached')
     page.evaluate("""window.domWrites = 0;
         window.qaObserver = new MutationObserver(records => domWrites += records.length);
-        qaObserver.observe(document.getElementById('npc_state_delta_dossier_root'),
+        qaObserver.observe(document.getElementById('npc_codex_dossier_root'),
             {subtree:true, childList:true, characterData:true});""")
     page.wait_for_timeout(500)
     idle = page.evaluate('domWrites')

@@ -75,8 +75,8 @@ jobs:
           if (manifest.js !== 'bootstrap.js' || !fs.readFileSync('bootstrap.js', 'utf8').includes("await import('./index.js')")) throw new Error('entrypoint mismatch');
           console.log(`Delta ${manifest.version}; ${configured.length} canonical active runtime modules`);
           NODE
-          test -f "dist/npc_state_delta-$(node -p "require('./manifest.json').version").zip"
-          unzip -l "dist/npc_state_delta-$(node -p "require('./manifest.json').version").zip"
+          test -f "dist/npc_codex-$(node -p "require('./manifest.json').version").zip"
+          unzip -l "dist/npc_codex-$(node -p "require('./manifest.json').version").zip"
 
       - name: Record reproducible verification source
         if: always()
@@ -95,6 +95,6 @@ jobs:
           path: |
             dist/verification-commit.txt
             dist/verification-source.bundle
-            dist/npc_state_delta-*.zip
+            dist/npc_codex-*.zip
           retention-days: 3
           if-no-files-found: error

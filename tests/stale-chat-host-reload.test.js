@@ -54,7 +54,7 @@ async function hostReloadChecks(mockState, eventSource, manualAddNpc, sleep, uiH
     if (runtime.getState().lineage.length !== 2) fail('the reloaded chat did not become the dossier lineage');
     warnings.length = 0;
     if (await clickRefresh(lenaId) !== 1) fail(`Refresh did not dispatch after a reload: ${warnings.join(' | ')}`);
-    const scanButton = uiHandlers.get('click.npcStateDelta|#npc_state_delta_scan_now');
+    const scanButton = uiHandlers.get('click.npcStateDelta|#npc_codex_scan_now');
     if (typeof scanButton !== 'function') fail('the Scan button is not connected');
     const beforeScan = mockState.rawCalls.length;
     await scanButton();

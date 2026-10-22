@@ -1,3 +1,4 @@
+import { codexSettings } from './settings-identity.js';
 /* NPC Codex fantasy-calendar settings adapter over the canonical Delta settings object. */
 import { extension_settings, getContext } from '../../../extensions.js';
 import {
@@ -7,9 +8,9 @@ import {
     setActiveCalendarConfig,
 } from './calendar.js';
 
-const EXTENSION_NAME = 'npc_state_delta';
-const ROOT_ID = 'npc_state_delta_calendar_settings';
-const SETTINGS_ID = 'npc_state_delta_settings';
+const EXTENSION_NAME = 'npc_codex';
+const ROOT_ID = 'npc_codex_calendar_settings';
+const SETTINGS_ID = 'npc_codex_settings';
 let observer = null;
 
 function escapeHtml(value) {
@@ -22,7 +23,7 @@ function escapeHtml(value) {
 }
 
 function settingsObject({ create = false } = {}) {
-    const current = extension_settings[EXTENSION_NAME];
+    const current = codexSettings(extension_settings);
     if (current && typeof current === 'object') return current;
     if (!create) return null;
     extension_settings[EXTENSION_NAME] = {};
@@ -66,30 +67,30 @@ function shellHtml() {
     const draft = savedDraft();
     return `<div id="${ROOT_ID}" class="npc-state-delta-calendar-settings">
         <p class="npc-state-delta-calendar-heading npc-state-delta-muted">Month:days rows are required; era and the manual campaign clock are optional. Structured World State dates override the manual clock for matching scans.</p>
-        ${settingRow('npc_state_delta_calendar_era', 'Era / year prefix', `<input id="npc_state_delta_calendar_era" class="text_pole" maxlength="40" placeholder="Optional, e.g. CR" value="${escapeHtml(draft.era)}">`, 'Optional label. Era CR + year 821 displays as CR821.')}
-        ${settingRow('npc_state_delta_calendar_months', 'Months', `<textarea id="npc_state_delta_calendar_months" class="text_pole" rows="6" spellcheck="false" placeholder="Redleaf:30&#10;Sunwane:31&#10;Frostwane:30">${escapeHtml(draft.monthsText)}</textarea>`, 'One Month name:days row per month, in calendar order.')}
-        ${settingRow('npc_state_delta_calendar_year', 'Manual current year', `<input id="npc_state_delta_calendar_year" class="text_pole npc-state-delta-number" type="number" step="1" value="${escapeHtml(draft.currentYear)}">`, 'Optional fallback clock. Leave year, month and day blank when World State supplies the date or birthdays are month/day only.')}
-        ${settingRow('npc_state_delta_calendar_current_month', 'Manual current month', '<select id="npc_state_delta_calendar_current_month" class="text_pole"></select>', 'If any manual date field is set, all three are required.')}
-        ${settingRow('npc_state_delta_calendar_current_day', 'Manual current day', `<input id="npc_state_delta_calendar_current_day" class="text_pole npc-state-delta-number" type="number" min="1" step="1" value="${escapeHtml(draft.currentDay)}">`, 'Validated against the selected month length.')}
+        ${settingRow('npc_codex_calendar_era', 'Era / year prefix', `<input id="npc_codex_calendar_era" class="text_pole" maxlength="40" placeholder="Optional, e.g. CR" value="${escapeHtml(draft.era)}">`, 'Optional label. Era CR + year 821 displays as CR821.')}
+        ${settingRow('npc_codex_calendar_months', 'Months', `<textarea id="npc_codex_calendar_months" class="text_pole" rows="6" spellcheck="false" placeholder="Redleaf:30&#10;Sunwane:31&#10;Frostwane:30">${escapeHtml(draft.monthsText)}</textarea>`, 'One Month name:days row per month, in calendar order.')}
+        ${settingRow('npc_codex_calendar_year', 'Manual current year', `<input id="npc_codex_calendar_year" class="text_pole npc-state-delta-number" type="number" step="1" value="${escapeHtml(draft.currentYear)}">`, 'Optional fallback clock. Leave year, month and day blank when World State supplies the date or birthdays are month/day only.')}
+        ${settingRow('npc_codex_calendar_current_month', 'Manual current month', '<select id="npc_codex_calendar_current_month" class="text_pole"></select>', 'If any manual date field is set, all three are required.')}
+        ${settingRow('npc_codex_calendar_current_day', 'Manual current day', `<input id="npc_codex_calendar_current_day" class="text_pole npc-state-delta-number" type="number" min="1" step="1" value="${escapeHtml(draft.currentDay)}">`, 'Validated against the selected month length.')}
         <div class="npc-state-delta-calendar-actions">
-            <button type="button" id="npc_state_delta_save_calendar" class="menu_button">Save calendar</button>
-            <button type="button" id="npc_state_delta_reset_calendar" class="menu_button">Use numeric fallback</button>
-            <small id="npc_state_delta_calendar_status" aria-live="polite"></small>
+            <button type="button" id="npc_codex_save_calendar" class="menu_button">Save calendar</button>
+            <button type="button" id="npc_codex_reset_calendar" class="menu_button">Use numeric fallback</button>
+            <small id="npc_codex_calendar_status" aria-live="polite"></small>
         </div>
     </div>`;
 }
 
 function status(root, message, error = false) {
-    const target = root?.querySelector?.('#npc_state_delta_calendar_status');
+    const target = root?.querySelector?.('#npc_codex_calendar_status');
     if (!target) return;
     target.textContent = message;
     target.dataset.error = error ? '1' : '0';
 }
 
 function updateMonthOptions(root, preferred = undefined) {
-    const textarea = root.querySelector('#npc_state_delta_calendar_months');
-    const select = root.querySelector('#npc_state_delta_calendar_current_month');
-    const dayInput = root.querySelector('#npc_state_delta_calendar_current_day');
+    const textarea = root.querySelector('#npc_codex_calendar_months');
+    const select = root.querySelector('#npc_codex_calendar_current_month');
+    const dayInput = root.querySelector('#npc_codex_calendar_current_day');
     if (!textarea || !select || !dayInput) return;
     const parsed = parseMonthDefinitions(textarea.value);
     const existing = preferred !== undefined ? preferred : select.value;
@@ -117,11 +118,11 @@ function updateMonthOptions(root, preferred = undefined) {
 
 function draftFromUi(root) {
     return {
-        era: root.querySelector('#npc_state_delta_calendar_era')?.value ?? '',
-        currentYear: root.querySelector('#npc_state_delta_calendar_year')?.value ?? '',
-        currentMonth: root.querySelector('#npc_state_delta_calendar_current_month')?.value ?? '',
-        currentDay: root.querySelector('#npc_state_delta_calendar_current_day')?.value ?? '',
-        monthsText: root.querySelector('#npc_state_delta_calendar_months')?.value ?? '',
+        era: root.querySelector('#npc_codex_calendar_era')?.value ?? '',
+        currentYear: root.querySelector('#npc_codex_calendar_year')?.value ?? '',
+        currentMonth: root.querySelector('#npc_codex_calendar_current_month')?.value ?? '',
+        currentDay: root.querySelector('#npc_codex_calendar_current_day')?.value ?? '',
+        monthsText: root.querySelector('#npc_codex_calendar_months')?.value ?? '',
     };
 }
 
@@ -152,10 +153,10 @@ function resetCalendar(root) {
     delete settings.calendarConfig;
     setActiveCalendarConfig(null);
     persistHostSettings();
-    const era = root.querySelector('#npc_state_delta_calendar_era');
-    const year = root.querySelector('#npc_state_delta_calendar_year');
-    const months = root.querySelector('#npc_state_delta_calendar_months');
-    const day = root.querySelector('#npc_state_delta_calendar_current_day');
+    const era = root.querySelector('#npc_codex_calendar_era');
+    const year = root.querySelector('#npc_codex_calendar_year');
+    const months = root.querySelector('#npc_codex_calendar_months');
+    const day = root.querySelector('#npc_codex_calendar_current_day');
     if (era) era.value = '';
     if (year) year.value = '';
     if (months) months.value = '';
@@ -167,10 +168,10 @@ function resetCalendar(root) {
 function bind(root) {
     const draft = savedDraft();
     updateMonthOptions(root, draft.currentMonth);
-    root.querySelector('#npc_state_delta_calendar_months')?.addEventListener('input', () => updateMonthOptions(root));
-    root.querySelector('#npc_state_delta_calendar_current_month')?.addEventListener('change', () => updateMonthOptions(root));
-    root.querySelector('#npc_state_delta_save_calendar')?.addEventListener('click', () => saveCalendar(root));
-    root.querySelector('#npc_state_delta_reset_calendar')?.addEventListener('click', () => resetCalendar(root));
+    root.querySelector('#npc_codex_calendar_months')?.addEventListener('input', () => updateMonthOptions(root));
+    root.querySelector('#npc_codex_calendar_current_month')?.addEventListener('change', () => updateMonthOptions(root));
+    root.querySelector('#npc_codex_save_calendar')?.addEventListener('click', () => saveCalendar(root));
+    root.querySelector('#npc_codex_reset_calendar')?.addEventListener('click', () => resetCalendar(root));
 }
 
 export function mountCalendarSettings() {

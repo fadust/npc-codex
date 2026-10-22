@@ -8,7 +8,7 @@ test('supporting tools mount on body and prefer a native modal dialog top layer'
     globalThis.document = {
         body,
         createElement: tag => tag === 'dialog' ? { showModal() {} } : {},
-        getElementById: () => ({ id: 'npc_state_delta_dossier_root', isConnected: true, appendChild() {} }),
+        getElementById: () => ({ id: 'npc_codex_dossier_root', isConnected: true, appendChild() {} }),
     };
     try {
         assert.equal(overlayMountHost(), body, 'top-layer dialogs should not inherit the dossier stacking context');

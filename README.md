@@ -1,5 +1,8 @@
 # NPC Codex v2.0.2
 
+This fork targets desktop browsers. Dedicated phone/tablet layouts and touch-specific UI are removed; normal desktop panel resizing remains supported.
+
+
 **NPC Codex is a fork of [NPC State Delta](https://github.com/kohz87/npc_state_delta) by kohz87**, extended by fadust. It keeps NPC State Delta's dossiers, evidence rules and swipe-safe rollback, and adds:
 
 - **Knowledge ledger and gating.** Each NPC records what they know, keep secret, or must not know. The injection starts each NPC's line with a hard knowledge gate.
@@ -13,7 +16,7 @@
 - **Codex panel.** NPC list on the left, one header (portrait, faction / location / race / occupation / rank chips, your tags and a quote), then Dossier, Stat and Social Map tabs.
 - **Lean scanning.** One cast pass per turn carries cast, sheet changes, events, stances, canon seeds and builds.
 
-Licensed under GPL-3.0, like the original. Storage keys and data files keep the original `npc_state_delta` / `npc-state-delta-*` names, so existing dossiers carry over.
+Licensed under GPL-3.0, like the original. Storage keys and data files keep the original `npc_codex` / `npc-state-delta-*` names, so existing dossiers carry over.
 
 The original documentation follows.
 
@@ -64,7 +67,7 @@ A SillyTavern extension that keeps a living dossier for every NPC in your rolepl
 ## Install and update
 
 1. In SillyTavern, open **Extensions → Install extension** and paste this repository's URL.
-   Or unpack `npc_state_delta-2.0.2.zip` so that a single `npc_state_delta` folder contains `manifest.json` directly.
+   Or unpack `npc_codex-2.0.2.zip` so that a single `npc_codex` folder contains `manifest.json` directly.
 2. Reload SillyTavern.
 3. **Before updating an existing install,** export a backup from **Data & maintenance → Backup / Export**.
 
@@ -218,7 +221,7 @@ npm test                        # unit, compatibility and synthetic-host tests
 npm run validate                # inventory, isolation, version and ownership checks
 npm run measure:prompts         # prompt size measurements
 node scripts/measure-stage9.mjs # prompt/request budget baseline
-npm run package                 # builds dist/npc_state_delta-2.0.2.zip and its SHA-256
+npm run package                 # builds dist/npc_codex-2.0.2.zip and its SHA-256
 git diff --check
 ```
 
@@ -234,3 +237,5 @@ GPL-3.0. See [LICENSE](LICENSE). The seed and history records in `docs/` are pre
 ### Main card actors and narrator-only cards
 
 The main character card is eligible for a dossier under the same evidence and admission safeguards as other actors. The player remains excluded. For a narrator-only card, put `[NPC Codex: narrator]` on its own line in the card **description**. The directive is case-insensitive; mentions of narration in ordinary prose do not activate it. Scenario, chat text, and lorebook text cannot designate a narrator. Existing dossiers are retained when the directive changes, but excluded narrator dossiers are not injected or exposed as owned actors. Removing the directive makes the character eligible again.
+
+The maintained install folder and settings namespace are `npc_codex`. Existing `npc_state_delta` settings and data are read automatically; new settings serialize only under `npc_codex`. The old settings accessor remains an in-memory alias for stack integrations. When renaming an existing installation, move the folder rather than loading both copies.

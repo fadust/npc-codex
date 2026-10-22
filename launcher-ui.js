@@ -1,9 +1,9 @@
-/* NPC Codex Stage 1 launcher refinement: movable, mobile-safe, UI-only position state. */
+/* NPC Codex Stage 1 launcher refinement: movable, desktop, UI-only position state. */
 
-const ROOT_ID = 'npc_state_delta_dossier_root';
-const LAUNCHER_ID = 'npc_state_delta_dossier_launcher';
-const STYLE_ID = 'npc_state_delta_launcher_refinement_styles';
-const STORAGE_KEY = 'npc_state_delta_launcher_position_v1';
+const ROOT_ID = 'npc_codex_dossier_root';
+const LAUNCHER_ID = 'npc_codex_dossier_launcher';
+const STYLE_ID = 'npc_codex_launcher_refinement_styles';
+const STORAGE_KEY = 'npc_codex_launcher_position_v1';
 const DRAG_THRESHOLD_PX = 5;
 const VIEWPORT_MARGIN_PX = 8;
 const START_RETRY_MS = 100;
@@ -84,7 +84,7 @@ class DeltaLauncherRefinement {
         this.launcher.setAttribute('aria-label', 'NPC dossiers. Drag to move; activate to open.');
         this.decorateLauncher();
 
-        // Keep the floating launcher outside the dossier root so host/mobile stacking
+        // Keep the floating launcher outside the dossier root so host stacking
         // contexts cannot bury it. The refinement owns its open bridge explicitly.
         if (this.launcher.parentElement !== document.body) document.body.appendChild(this.launcher);
 
@@ -233,79 +233,9 @@ class DeltaLauncherRefinement {
   opacity: 0 !important;
   pointer-events: none !important;
 }
-@media (max-width: 1100px) {
-  #${LAUNCHER_ID}:not([data-positioned="true"]) {
-    right: max(12px, env(safe-area-inset-right)) !important;
-    top: 50% !important;
-    bottom: auto !important;
-    transform: translateY(-50%) !important;
-  }
-  #${ROOT_ID} .delta-panel {
-    left: 0 !important;
-    top: 0 !important;
-    right: auto !important;
-    bottom: auto !important;
-    transform: none !important;
-    width: 100vw !important;
-    max-width: none !important;
-    height: 100vh !important;
-    height: 100dvh !important;
-    max-height: none !important;
-    border-radius: 0 !important;
-    border-left: 0 !important;
-    border-right: 0 !important;
-    overscroll-behavior: contain;
-  }
-  #${ROOT_ID} .delta-topbar {
-    position: sticky;
-    top: 0;
-    z-index: 20;
-    min-height: 56px;
-    padding-top: max(8px, env(safe-area-inset-top));
-    padding-right: max(10px, env(safe-area-inset-right));
-    padding-left: max(10px, env(safe-area-inset-left));
-  }
-  #${ROOT_ID} .delta-close {
-    flex: 0 0 auto;
-    min-width: 44px;
-    min-height: 44px;
-  }
-  #${ROOT_ID} .delta-cast {
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
-  }
-}
-@media (min-width: 651px) and (max-width: 900px) {
-  #${ROOT_ID} .delta-library {
-    grid-template-rows: minmax(0, 1fr) 178px;
-  }
-  #${ROOT_ID} .delta-cast-tools {
-    align-items: center;
-    flex-direction: row;
-  }
-  #${ROOT_ID} .delta-search-label {
-    flex: 1 1 0;
-    min-width: 0;
-    max-width: none;
-  }
-  #${ROOT_ID} .delta-filters {
-    flex: 0 0 auto;
-    flex-wrap: nowrap;
-  }
-  #${ROOT_ID} .delta-cast-list {
-    min-height: 92px;
-  }
-}
-@media (max-width: 650px) {
-  #${ROOT_ID} .delta-library {
-    grid-template-rows: minmax(0, 1fr) clamp(224px, 30dvh, 260px);
-  }
-  #${ROOT_ID} .delta-cast {
-    padding-bottom: max(10px, env(safe-area-inset-bottom));
-  }
-  #${ROOT_ID} .delta-cast-list {
-    min-height: 94px;
-  }
-}
+
+
+
 `;
         document.head.appendChild(style);
     }

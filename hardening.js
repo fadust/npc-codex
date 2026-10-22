@@ -1,3 +1,4 @@
+import { codexSettings } from './settings-identity.js';
 import { extension_settings, getContext } from '../../../extensions.js';
 import { getRequestHeaders, saveSettings as saveHostSettings } from '../../../../script.js';
 import { NPC_STATE_VERSION } from './core.js';
@@ -20,7 +21,7 @@ import {
     qualifiedKeysForOwner,
 } from './hardening-core.js';
 
-const EXTENSION_NAME = 'npc_state_delta';
+const EXTENSION_NAME = 'npc_codex';
 const RECOVERY_HISTORY_LIMIT = 80;
 const LIFECYCLE_EVENT_WAIT_MS = 12_000;
 const LIFECYCLE_RETRY_DELAY_MS = 30_000;
@@ -30,6 +31,9 @@ let installed = false;
 let lifecycleEventSequence = 0;
 
 function settings() {
+    const renamed = !extension_settings[EXTENSION_NAME] && !!extension_settings.npc_state_delta;
+    codexSettings(extension_settings);
+    if (renamed) getContext()?.saveSettingsDebounced?.();
     const value = extension_settings[EXTENSION_NAME] && typeof extension_settings[EXTENSION_NAME] === 'object'
         ? extension_settings[EXTENSION_NAME]
         : (extension_settings[EXTENSION_NAME] = {});

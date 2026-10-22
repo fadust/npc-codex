@@ -1,4 +1,4 @@
-export const NPC_STATE_FILE_FORMAT = 'npc_state_delta_chat_data';
+export const NPC_STATE_FILE_FORMAT = 'npc_codex_chat_data';
 export const NPC_STATE_FILE_FORMAT_VERSION = 1;
 export const NPC_STATE_WRITE_RETRY_DELAYS_MS = Object.freeze([0, 1000, 2000, 5000, 15000, 30000]);
 export const NPC_STATE_DURABILITY_RETRY_CAP_MS = 30000;
@@ -248,7 +248,7 @@ export function decodeStateFilePayload(text) {
     let payload;
     try { payload = JSON.parse(String(text ?? '')); }
     catch { throw new Error('NPC Codex data file contains invalid JSON.'); }
-    if (!payload || payload.format !== NPC_STATE_FILE_FORMAT) throw new Error('Not an NPC Codex chat data file.');
+    if (!payload || ![NPC_STATE_FILE_FORMAT, 'npc_state_delta_chat_data'].includes(payload.format)) throw new Error('Not an NPC Codex chat data file.');
     if (payload.formatVersion !== NPC_STATE_FILE_FORMAT_VERSION) throw new Error(`Unsupported NPC Codex data file version: ${payload.formatVersion}.`);
     if (!payload.state || typeof payload.state !== 'object' || Array.isArray(payload.state)) throw new Error('NPC Codex data file is missing its state object.');
     payload.retired = payload.retired === true;

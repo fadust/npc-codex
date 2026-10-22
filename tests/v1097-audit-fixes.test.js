@@ -151,7 +151,7 @@ async function runtimeChecks(mockState, eventSource, manualAddNpc, sleep, uiHand
     const runtime = globalThis.NPCStateDelta;
     const baseFetch = globalThis.fetch;
     const fail = message => { throw new Error(message); };
-    const settings = mockState.extensionSettings.npc_state_delta;
+    const settings = mockState.extensionSettings.npc_codex;
     const open = async (id, lines) => {
         mockState.context.groupId = null;
         mockState.context.chatId = id;
@@ -210,7 +210,7 @@ async function runtimeChecks(mockState, eventSource, manualAddNpc, sleep, uiHand
     // Another session detaches first: its backup and the marker naming it.
     const backup = '/user/files/other-session-unreadable.json';
     mockState.files.set(backup, '{"format": not json');
-    mockState.files.set(detachPath, JSON.stringify({ format: 'npc_state_delta_chat_data', formatVersion: 1, chatKey: key, revision: 1, writerId: 'other',
+    mockState.files.set(detachPath, JSON.stringify({ format: 'npc_codex_chat_data', formatVersion: 1, chatKey: key, revision: 1, writerId: 'other',
         retired: true, retiredAt: new Date().toISOString(), retireReason: 'manual-detach', recoveryPath: backup, recoveryName: 'other-session-unreadable.json', state: {} }));
     const previousConfirm = globalThis.confirm;
     globalThis.confirm = () => true;

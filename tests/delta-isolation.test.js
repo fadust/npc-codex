@@ -6,7 +6,7 @@ import { encodeNpcStateBundle, decodeNpcStateBundle } from '../bundle.js';
 test('Delta sidecars round-trip their own namespace and reject legacy data', () => {
   const own = encodeStateFilePayload('chat:test.png:seed', { npcs: [] }, '0.1.0');
   const payload = decodeStateFilePayload(own);
-  assert.equal(payload.format, 'npc_state_delta_chat_data');
+  assert.equal(payload.format, 'npc_codex_chat_data');
   assert.equal(payload.chatKey, 'chat:test.png:seed');
   assert.equal(payload.appVersion, '0.1.0');
   assert.match(makeNpcStateDataFileName(payload.chatKey), /^npc-state-delta-/);

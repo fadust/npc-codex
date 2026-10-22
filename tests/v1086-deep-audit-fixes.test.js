@@ -231,7 +231,7 @@ async function deepAuditRuntimeChecks(mockState, eventSource, manualAddNpc, slee
     await runtime.updateAppearance(sela.id, { overallAppearance: 'long silver hair, violet eyes', currentAppearance: 'black cloak' }, { chatKey: key });
     await runtime.flush();
     const previousGetElementById = document.getElementById;
-    document.getElementById = id => (id === 'npc_state_delta_edit_birthday' ? { value: '' } : null);
+    document.getElementById = id => (id === 'npc_codex_edit_birthday' ? { value: '' } : null);
     await runtime.openEditor(sela.id);
     await sleep(30);
     remoteAdvance(state => {
@@ -289,7 +289,7 @@ async function deepAuditRuntimeChecks(mockState, eventSource, manualAddNpc, slee
     releaseRead();
     await lateFresh;
     await sleep(100);
-    const settings = mockState.extensionSettings.npc_state_delta;
+    const settings = mockState.extensionSettings.npc_codex;
     if (!settings.sidecarTombstones?.[deletedKey]) fail('RB84-05: the deletion tombstone was cleared by a late read');
     if (settings.dataFiles?.[deletedKey]?.path) fail('RB84-05: the deleted chat pointer was restored');
 

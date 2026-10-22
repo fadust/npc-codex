@@ -9,19 +9,17 @@ import {
     MAP_SPAN,
     mapRadius,
     normalizeRelationshipMapSettings,
-    PHONE_NODE_CAP,
     plain,
     signed,
 } from './relationship-map-core.js';
 import { statPaneHtml, statSheetStyles, applyStatEdit, addStatRow, removeStatRow } from './stat-sheet-ui.js';
 import { codexHeaderHtml, codexLayoutStyles } from './codex-header.js';
 
-const EXTENSION_NAME = 'npc_state_delta';
-const DOSSIER_ROOT_ID = 'npc_state_delta_dossier_root';
-const SETTINGS_ID = 'npc_state_delta_settings';
-const SETTINGS_ROOT_ID = 'npc_state_delta_relationship_map_settings';
-const STYLE_ID = 'npc_state_delta_relationship_map_style';
-const PHONE_QUERY = '(max-width: 650px)';
+const EXTENSION_NAME = 'npc_codex';
+const DOSSIER_ROOT_ID = 'npc_codex_dossier_root';
+const SETTINGS_ID = 'npc_codex_settings';
+const SETTINGS_ROOT_ID = 'npc_codex_relationship_map_settings';
+const STYLE_ID = 'npc_codex_relationship_map_style';
 const RING_VALUES = Object.freeze([75, 25, 0, -50]);
 
 // Session-only view state: the last mode and the map's own buttons last until the page reloads.
@@ -50,10 +48,6 @@ function writeMapSettings(patch) {
 function personaName() {
     try { return plain(getContext()?.name1) || 'You'; }
     catch { return 'You'; }
-}
-
-function isPhone() {
-    return typeof globalThis.matchMedia === 'function' && globalThis.matchMedia(PHONE_QUERY).matches;
 }
 
 function dossierUi() {
@@ -109,10 +103,10 @@ function stripHtml(model, persona) {
     </section>`;
 }
 
-function paneHtml(model, { phone, persona }) {
+function paneHtml(model, { persona }) {
     const lens = MAP_LENSES.find(item => item.key === model.lens) || MAP_LENSES[0];
     const lenses = MAP_LENSES.map(item => `<button type="button" class="delta-map-lens" data-map-lens="${item.key}" aria-pressed="${item.key === model.lens}">${item.label}</button>`).join('');
-    const toggles = `<button type="button" class="delta-map-toggle" data-map-toggle="bonds" aria-pressed="${view.allBonds}">${phone ? 'Bonds' : 'All bonds'}</button>`;
+    const toggles = `<button type="button" class="delta-map-toggle" data-map-toggle="bonds" aria-pressed="${view.allBonds}">All bonds</button>`;
     const hint = model.allZero
         ? `<div class="delta-map-hint">Turn ${model.turn}: nobody has moved yet. Everyone starts on the neutral ring and drifts in or out as the story changes how they feel about ${escapeHtml(persona)}.</div>` : '';
     const more = model.total > model.shownCount ? ` · Showing ${model.shownCount} of ${model.total}; the rest are in the library` : '';
@@ -144,19 +138,18 @@ function renderMap(ui, { force = false } = {}) {
     const pane = ui?.root?.querySelector('.delta-map-pane');
     if (!pane || view.mode !== 'map') return;
     const settings = readMapSettings();
-    const phone = isPhone();
     const persona = personaName();
     const model = buildMapModel(ui.projection || {}, {
         selectedId: ui.selectedNpcId,
         lens: sessionLens(settings),
         allBonds: view.allBonds,
-        cap: phone ? PHONE_NODE_CAP : DESKTOP_NODE_CAP,
+        cap: DESKTOP_NODE_CAP,
     });
-    const signature = JSON.stringify([model, phone, persona, view.allBonds]);
+    const signature = JSON.stringify([model, persona, view.allBonds]);
     if (!force && signature === view.signature) return;
     view.signature = signature;
     const refocus = focusKey();
-    pane.innerHTML = paneHtml(model, { phone, persona });
+    pane.innerHTML = paneHtml(model, { persona });
     if (refocus) pane.querySelector(refocus)?.focus?.({ preventScroll: true });
 }
 
@@ -372,12 +365,12 @@ export function mountRelationshipMapSettings() {
     const root = document.createElement('div');
     root.id = SETTINGS_ROOT_ID;
     root.innerHTML = `<h4 class="delta-settings-subhead">Relationship map</h4>
-        ${settingRow('npc_state_delta_map_enabled', 'Relationship map', `<input id="npc_state_delta_map_enabled" type="checkbox"${settings.enabled ? ' checked' : ''}>`, 'Adds a Map view to the dossier panel. Read-only; turning it off removes the switch and the See on map link.')}
-        ${settingRow('npc_state_delta_map_lens', 'Default distance', `<select id="npc_state_delta_map_lens" class="text_pole">${MAP_LENSES.map(lens => `<option value="${lens.key}"${lens.key === settings.defaultLens ? ' selected' : ''}>${lens.label}</option>`).join('')}</select>`, "What the map's distance shows when it opens. The buttons on the map change it for this session only.")}`;
+        ${settingRow('npc_codex_map_enabled', 'Relationship map', `<input id="npc_codex_map_enabled" type="checkbox"${settings.enabled ? ' checked' : ''}>`, 'Adds a Map view to the dossier panel. Read-only; turning it off removes the switch and the See on map link.')}
+        ${settingRow('npc_codex_map_lens', 'Default distance', `<select id="npc_codex_map_lens" class="text_pole">${MAP_LENSES.map(lens => `<option value="${lens.key}"${lens.key === settings.defaultLens ? ' selected' : ''}>${lens.label}</option>`).join('')}</select>`, "What the map's distance shows when it opens. The buttons on the map change it for this session only.")}`;
     root.addEventListener('change', () => {
         writeMapSettings({
-            enabled: root.querySelector('#npc_state_delta_map_enabled')?.checked === true,
-            defaultLens: root.querySelector('#npc_state_delta_map_lens')?.value,
+            enabled: root.querySelector('#npc_codex_map_enabled')?.checked === true,
+            defaultLens: root.querySelector('#npc_codex_map_lens')?.value,
         });
         // A changed default applies the next time the map is drawn.
         view.lens = '';
@@ -459,25 +452,8 @@ const STYLES = `
   #${DOSSIER_ROOT_ID} .delta-map-label .delta-map-name, #${DOSSIER_ROOT_ID} .delta-map-label small, #${DOSSIER_ROOT_ID} .delta-map-ring-label { display:none; }
   #${DOSSIER_ROOT_ID} .delta-map-label .delta-map-short { display:block; }
 }
-@media (max-width: 900px) {
-  #${DOSSIER_ROOT_ID} .delta-spread.delta-map-mode { display:block; overflow:auto; }
-  #${DOSSIER_ROOT_ID} .delta-spread.delta-map-mode > .delta-hero { border-right:0; border-bottom:1px solid var(--delta-line); }
-  #${DOSSIER_ROOT_ID} .delta-spread.delta-map-mode .delta-hero-media { height:380px; min-height:380px; }
-  #${DOSSIER_ROOT_ID} .delta-map-pane { overflow:visible; }
-  #${DOSSIER_ROOT_ID} .delta-map-body { display:grid; grid-template-columns:minmax(0,520px) minmax(0,1fr); align-items:start; gap:14px; }
-  #${DOSSIER_ROOT_ID} .delta-map-frame { container-type:normal; }
-  #${DOSSIER_ROOT_ID} .delta-map { width:100%; }
-  #${DOSSIER_ROOT_ID} .delta-map-strip { grid-template-columns:1fr; align-self:start; }
-  #${DOSSIER_ROOT_ID} .delta-map-bars { grid-template-columns:1fr; }
-  #${DOSSIER_ROOT_ID} .delta-map-open { grid-row:auto; grid-column:auto; }
-}
-@media (max-width: 650px) {
-  #${DOSSIER_ROOT_ID} .delta-map-switch button { padding:0 10px; }
-  #${DOSSIER_ROOT_ID} .delta-map-pane { padding:10px; }
-  #${DOSSIER_ROOT_ID} .delta-map-toggles { margin-left:0; }
-  #${DOSSIER_ROOT_ID} .delta-map-body { display:flex; }
-  #${DOSSIER_ROOT_ID} .delta-map-bars { grid-template-columns:repeat(2,minmax(0,1fr)); }
-}
+
+
 `;
 
 function installStyles() {
@@ -494,7 +470,6 @@ function start() {
     document.addEventListener('npc-state-delta:dossier-rendered', onDossierRendered);
     document.addEventListener('npc-state-delta:settings-mounted', mountRelationshipMapSettings);
     mountRelationshipMapSettings();
-    globalThis.matchMedia?.(PHONE_QUERY)?.addEventListener?.('change', () => renderMap(dossierUi(), { force: true }));
     onDossierRendered();
 }
 

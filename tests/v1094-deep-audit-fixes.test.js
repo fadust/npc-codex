@@ -316,7 +316,7 @@ async function deepAuditRuntimeChecks(mockState, eventSource, manualAddNpc, slee
     const runtime = globalThis.NPCStateDelta;
     const baseFetch = globalThis.fetch;
     const fail = message => { throw new Error(message); };
-    const settings = mockState.extensionSettings.npc_state_delta;
+    const settings = mockState.extensionSettings.npc_codex;
     const open = async (id, lines) => {
         mockState.context.groupId = null;
         mockState.context.chatId = id;
