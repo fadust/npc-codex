@@ -10,7 +10,7 @@ test('BaiBai portrait uses explicit accepted prompt, existing backend, original 
         return { dataUrl: 'data:image/png;base64,AAAA', path: '/user/images/Ari/original.png', seed: 42 };
     } };
     assert.deepEqual(await generateBaiBaiPortrait({ positive: 'full body, copper hair', negative: 'blur', seed: 0, name: 'Ari' }, bridge), { url: '/user/images/Ari/original.png', seed: 42 });
-    assert.deepEqual(request, { prompt: 'full body, copper hair', negative: 'blur', seed: 0, size: 'portrait', character: 'Ari', save: true });
+    assert.deepEqual(request, { prompt: 'full body, copper hair', nl: 'full body, copper hair', negative: 'blur', seed: 0, size: 'portrait', character: 'Ari', save: true });
 });
 
 test('BaiBai unavailability and invalid output fail without fallback or dossier mutation', async () => {

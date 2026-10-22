@@ -4,6 +4,7 @@ import {
     keepPromptDraft, makeSession, mountOverlay, npcById, promptDrafts,
     recordToolEvent, selectedNpcId, setBusy, stage1Refresh, validatePortraitFile, openPortraitImage, originalPortraitSource,
 } from './dossier-tools-core.js';
+import { isTerminalNpcDeath } from './core.js';
 
 function toast(kind, message) { globalThis.toastr?.[kind]?.(message); }
 
@@ -12,7 +13,7 @@ export async function generateBaiBaiPortrait({ positive, negative, seed, name },
     const status = bridge.getBackendStatus();
     if (!status.configured) throw new Error(status.reason || 'Configure BaiBai Image first.');
     if (!String(positive || '').trim()) throw new Error('Positive portrait prompt is empty.');
-    const result = await bridge.generate({ prompt: positive, negative, seed, size: 'portrait', character: name, save: true });
+    const result = await bridge.generate({ prompt: positive, nl: positive, negative, seed, size: 'portrait', character: name, save: true });
     if (!/^data:image\/(?:png|jpeg|webp);base64,/i.test(result?.dataUrl || '')) throw new Error('BaiBai Image returned no supported image.');
     return { url: originalPortraitSource({ generatedFrom: result.path, dataUrl: result.dataUrl }), seed: result.seed };
 }
@@ -282,6 +283,47 @@ function randomPortraitSeed() {
         return ((words[0] & 0x1fffff) * 0x100000000) + words[1];
     }
     return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+}
+
+let newNpcImageQueue = Promise.resolve();
+
+/** Explicitly enabled creation automation; manual generation keeps its preview/apply workflow. */
+export function generateNewNpcImages(npcId, { chatKey } = {}) {
+    const task = newNpcImageQueue.then(async () => {
+        const runtime = api();
+        const initial = runtime?.getNpc?.(npcId);
+        if (!initial || initial.archived || isTerminalNpcDeath(initial)) return false;
+        const base = portraitGenerationBase(npcId);
+        let expectedSeed = initial.portraitSeed ?? null;
+        let seed = Number.isSafeInteger(expectedSeed) && expectedSeed >= 0 ? expectedSeed : randomPortraitSeed();
+        const current = () => activeChatKey() === chatKey && runtime === api()
+            && runtime.portraitSettings?.().autoNewNpcImages === true
+            && runtime.portraitSettings?.().portraitGenerationEnabled !== false
+            && portraitGenerationBase(npcId) === base
+            && (runtime.getNpc(npcId)?.portraitSeed ?? null) === expectedSeed
+            && !runtime.getNpc(npcId)?.archived && !isTerminalNpcDeath(runtime.getNpc(npcId));
+        for (const slot of ['face', 'fullBody']) {
+            if (!current()) return false;
+            const empty = () => current() && !targetPortrait(runtime.getNpc(npcId), '', slot);
+            if (!empty()) continue;
+            const prompts = runtime.portraitPrompts(npcId, { slot });
+            const result = await generateBaiBaiPortrait({ ...prompts, seed, name: initial.name });
+            if (!empty()) return false;
+            const file = await generatedPortraitFile(result.url, npcId);
+            if (!await runtime.setPortrait(npcId, file, { chatKey, slot, isCurrent: empty, generatedFrom: result.url })) return false;
+            if (slot === 'face') {
+                seed = result.seed ?? seed;
+                if (!await runtime.setPortraitSeed(npcId, seed, { chatKey, isCurrent: current })) return false;
+                expectedSeed = seed;
+            }
+            if (!current()) return false;
+            await runtime.flush();
+            stage1Refresh();
+        }
+        return true;
+    });
+    newNpcImageQueue = task.catch(() => {});
+    return task;
 }
 
 function resetGeneratedSeed(session, overlay) {

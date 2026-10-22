@@ -1,4 +1,5 @@
 import { codexSettings } from './settings-identity.js';
+import { resolveNpcAppearance } from './appearance.js';
 import { ACTOR_OWNERS, resolveActor, actorProfiles, readStoryContinuity, withBaiBaiPresence } from './actor-stack.js';
 import { PORTRAYAL_REFERENCES, acceptPortrayal, renderPortrayal } from './actor-portrayal.js';
 /* NPC Codex - standalone SillyTavern extension */
@@ -140,6 +141,7 @@ import {
     bestAncestorState,
     chatLineage,
     fingerprintMessage,
+    imageNpcsAtFloor,
     firstLineageDivergence,
     lineageCheckpointKey,
     addUserDismissedGroup,
@@ -497,6 +499,7 @@ const DEFAULTS = Object.freeze({
     fullScanEveryTurn: false,
     scannerConnectionProfile: '',
     portraitGenerationEnabled: true,
+    autoNewNpcImages: false,
     portraitThemePreset: 'fantasy_anime',
     portraitCustomPresetId: DEFAULT_CUSTOM_PORTRAIT_PRESET_ID,
     portraitCustomPresets: [portraitCustomPreset({ id: DEFAULT_CUSTOM_PORTRAIT_PRESET_ID, name: 'Custom 1' })],
@@ -610,6 +613,7 @@ function getSettings() {
     assign('fullScanEveryTurn', settings.fullScanEveryTurn === true);
     assign('scannerConnectionProfile', typeof settings.scannerConnectionProfile === 'string' ? settings.scannerConnectionProfile.trim() : '');
     assign('portraitGenerationEnabled', settings.portraitGenerationEnabled !== false);
+    assign('autoNewNpcImages', settings.autoNewNpcImages === true);
     assign('portraitThemePreset', PORTRAIT_THEME_PRESETS[settings.portraitThemePreset] ? settings.portraitThemePreset : 'custom');
     const portraitCustomPresets = portraitCustomPresetLibrary(settings.portraitCustomPresets);
     assign('portraitCustomPresets', portraitCustomPresets, sameJson);
@@ -1438,9 +1442,36 @@ async function ensureChatStateLoaded(key = getChatKey()) {
     return task;
 }
 
+// shortcut: pending image jobs are session-local; use Portrait tools after reload or failure.
+const pendingNewNpcImages = new Map();
+
+function queueNewNpcImages(key, ids = []) {
+    const settings = getSettings();
+    if (!settings.enabled || !settings.autoNewNpcImages || !settings.portraitGenerationEnabled) {
+        pendingNewNpcImages.delete(key);
+        return;
+    }
+    if (key !== getChatKey() || chatHydrationStatus(key) !== 'ready') return;
+    const pending = pendingNewNpcImages.get(key) || new Set();
+    for (const id of ids) pending.add(id);
+    if (!pending.size) return;
+    pendingNewNpcImages.set(key, pending);
+    for (const id of pending) {
+        const npc = getChatState(key).npcs.find(item => item.id === id);
+        if (!npc || npc.archived || isTerminalNpcDeath(npc)) { pending.delete(id); continue; }
+        if (!resolveNpcAppearance(npc)) continue;
+        if (getChatState(key).pendingBackfills?.some(item => item.npcId === id)) continue;
+        pending.delete(id);
+        void import('./portrait-tools.js').then(tools => tools.generateNewNpcImages(id, { chatKey: key }))
+            .catch(error => globalThis.toastr?.warning?.(`NPC Codex images for ${npc.name}: ${error?.message || error}`));
+    }
+    if (!pending.size) pendingNewNpcImages.delete(key);
+}
+
 function markStateDirty(key = getChatKey()) {
     if (!key || key === 'no-chat') return;
     stateVersions.set(key, Number(stateVersions.get(key) || 0) + 1);
+    if (pendingNewNpcImages.get(key)?.size) queueMicrotask(() => queueNewNpcImages(key));
 }
 
 function queueStateFileWrite(key = getChatKey(), delay = STATE_WRITE_DELAY) {
@@ -4420,6 +4451,7 @@ async function scanNow({ manual = false, messageId = null, allowDuringSwipe = fa
         persist();
         renderDossier();
         updateInjection();
+        queueNewNpcImages(chatKey, newlyAdmittedIds);
         if (manual) {
             const { created, updated, candidates, promoted, skipped, staleArchived = [], stalePruned = [] } = merged.report;
             globalThis.toastr?.success?.(`NPC Codex scan complete: ${created.length} new, ${updated.length} updated${promoted.length ? `, ${promoted.length} promoted` : ''}${candidates.length ? `, ${candidates.length} candidate${candidates.length === 1 ? '' : 's'} held` : ''}${staleArchived.length ? `, ${staleArchived.length} stale archived` : ''}${stalePruned.length ? `, ${stalePruned.length} stale deleted` : ''}${skipped.length ? `, ${skipped.length} skipped` : ''}.`);
@@ -4515,6 +4547,7 @@ function buildSettingsHtml() {
     const portrait = `
         <p class="npc-state-delta-muted">Builds positive and negative prompts from the dossier for the native SillyTavern Image Generation handoff. The configured image backend (including ComfyUI) stays host-owned.</p>
         ${settingRow('npc_codex_portrait_generation_enabled', 'Enable Generate Portrait', '<input id="npc_codex_portrait_generation_enabled" type="checkbox">', 'Enables Generate Portrait in the dossier Portrait tool. Fails safely without changing the dossier if Image Generation is unavailable.')}
+        ${settingRow('npc_codex_auto_new_images', 'Images for new NPCs', '<input id="npc_codex_auto_new_images" type="checkbox">', 'Automatically generate and save a face portrait and full-body render with BaiBai Image once a newly created dossier has accepted appearance. Fill empty slots only; save the actual face seed. Each new NPC uses up to two image generations. Applies to future creations, not the existing roster.')}
         <label class="npc-state-delta-rubric-label" for="npc_codex_portrait_theme_preset"><b>Theme preset</b><small>Built-ins are fixed starting points. Custom Library uses one of your saved presets.</small></label>
         <select id="npc_codex_portrait_theme_preset" class="text_pole">${Object.entries(PORTRAIT_THEME_PRESETS).map(([key, item]) => `<option value="${key}">${escapeHtml(item.label)}</option>`).join('')}</select>
         <div class="npc-state-delta-custom-preset-library">
@@ -4711,6 +4744,7 @@ function syncSettingsControls() {
     const s = getSettings();
     $('#npc_codex_enabled').prop('checked', !!s.enabled);
     $('#npc_codex_auto').prop('checked', !!s.autoScan);
+    $('#npc_codex_auto_new_images').prop('checked', !!s.autoNewNpcImages);
     syncScannerProfileControl();
     $('#npc_codex_full_scan_every_turn').prop('checked', !!s.fullScanEveryTurn);
     $('#npc_codex_scan_every').val(s.scanEvery);
@@ -6494,6 +6528,7 @@ function portraitSettingsSnapshot(source = getSettings()) {
     const builtIn = theme !== 'custom' ? PORTRAIT_THEME_PRESETS[theme] : null;
     return {
         portraitGenerationEnabled: source.portraitGenerationEnabled !== false,
+        autoNewNpcImages: source.enabled !== false && source.autoNewNpcImages === true,
         portraitThemePreset: theme,
         portraitCustomPresetId: customPresetId,
         portraitCustomPresets: structuredClone(customPresets),
@@ -6731,6 +6766,7 @@ function bindUi() {
     $(document).off('.npcStateDelta');
     bindSettingsCheckbox('#npc_codex_enabled', 'enabled', () => { updateInjection(); renderDossier(); });
     bindSettingsCheckbox('#npc_codex_auto', 'autoScan');
+    bindSettingsCheckbox('#npc_codex_auto_new_images', 'autoNewNpcImages');
     $(document).on('change.npcStateDelta', '#npc_codex_scanner_connection_profile', function () {
         getSettings().scannerConnectionProfile = String(this.value || '').trim();
         persistSettings();
@@ -7005,6 +7041,7 @@ function bindUi() {
         if (targetMessageId >= 0) commitBranchCheckpoint(result.state, targetMessageId, 'manual-add');
         setChatState(getChatKey(), result.state);
         persistCritical(); renderDossier(); updateInjection();
+        if (result.report.status === 'added' && result.report.npcId) queueNewNpcImages(getChatKey(), [result.report.npcId]);
         const addedNpc = result.report.npcId ? result.state.npcs.find(npc => npc.id === result.report.npcId) : null;
         if (addedNpc) globalThis.toastr?.success?.(`NPC Codex: ${addedNpc.name} created. Use the wand beside the dossier to Scan dossier and populate it.`);
     });
@@ -7504,7 +7541,9 @@ window.NPCCodex = Object.freeze({
         const npc = findNpcByIdOrName(value);
         if (!npc) return null;
         const formName = form ? npcFormName(npc, form) : '';
-        return buildNpcPortraitPrompts(formName ? { ...npc, currentForm: formName, currentFormUnknown: false } : npc, { ...portraitPromptOptions(), composition: slot === 'fullBody' ? 'full body render, head to toe, entire figure and feet visible, uncropped' : 'face-focused portrait, head and shoulders, close-up face, clear facial features' });
+        return buildNpcPortraitPrompts(formName ? { ...npc, currentForm: formName, currentFormUnknown: false } : npc, { ...portraitPromptOptions(), composition: slot === 'fullBody'
+            ? 'Show one character in a full-length view from the top of the head to the soles of the feet. Keep the entire figure inside the frame, with space above the head and below the feet. Do not crop the head, limbs, or feet'
+            : 'Show one character in a close-up face portrait framed from the top of the head to the shoulders. Keep the entire head and hairstyle inside the frame. Make the facial features clearly visible; do not include the waist or legs' });
     },
     formPortraits: value => {
         const npc = findNpcByIdOrName(value);
@@ -7620,6 +7659,23 @@ window.NPCCodex = Object.freeze({
     actorOwnership: () => ({ ...ACTOR_OWNERS, enabled: getSettings().enabled && getSettings().inject, revision: Number(stateVersions.get(getChatKey()) || 0) }),
     ownsActor: name => getSettings().enabled && getSettings().inject && chatHydrationStatus(getChatKey()) === 'ready' && !!resolveActor(eligibleActors(getChatState().npcs), name),
     actorProfiles: () => chatHydrationStatus(getChatKey()) === 'ready' ? actorProfiles(eligibleActors(getChatState().npcs), Number(stateVersions.get(getChatKey()) || 0)) : [],
+    imageActors: ({ chatId, groupId = null, floor, sourceText } = {}) => {
+        const ctx = getContext();
+        const key = getChatKey();
+        const message = ctx.chat?.[floor];
+        if (!getSettings().enabled || chatHydrationStatus(key) !== 'ready'
+            || chatId !== ctx.getCurrentChatId?.() || groupId !== (ctx.groupId || null)
+            || !message || message.is_user || typeof sourceText !== 'string'
+            || fingerprintMessage({ ...message, mes: sourceText }) !== fingerprintMessage(message)) return null;
+        const npcs = imageNpcsAtFloor(getChatState(), ctx.chat, floor);
+        if (!npcs) return null;
+        return { apiVersion: 1, chatId, groupId, floor, revision: Number(stateVersions.get(key) || 0),
+            actors: npcs.map(npc => ({ id: npc.id, name: npc.name, aliases: [...(npc.aliases || [])],
+                archived: !!npc.archived, appearance: resolveNpcAppearance(npc) ? buildNpcPortraitPrompts({ ...npc,
+                    portraitPromptPositive: '', portraitPromptNegative: '', portraitPromptReplace: false }, {
+                    format: 'natural', composition: '', stylePositive: '', styleNegative: '', useMood: false, useLocation: false,
+                }).positive : '' })) };
+    },
     getNpc: npcId => {
         const npc = getChatState().npcs.find(item => item.id === String(npcId || ''));
         return npc ? structuredClone(npc) : null;

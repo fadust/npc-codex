@@ -4,6 +4,12 @@ This file tracks our maintained fork's changes and its relationship to [NPC Stat
 
 ## Current fork version — 2.0.2
 
+23 October: added the read-only `imageActors` appearance API for BaiBai Image, with matching chat/source/lineage checks and exact-checkpoint historical fallback. Portrait prose is also sent as `nl` for semantic-only ComfyUI workflows. No scanner prompts, request budgets, state formats or numerical mechanics changed.
+
+User-requested creation automation adds an opt-in Images for new NPCs control: after accepted appearance/backfill, generate and save face/full-body into empty slots, retain the returned face seed and reuse it for the body. No existing-roster sweep or image retry loop; manual generation still previews before applying.
+
+Face and full-body prompts now use explicit uncropped framing instructions in prose. Natural prompts retain accepted gender, visual age group, race/species and physical appearance (face, hair, skin and outfit); absent traits remain unspecified. Visual age bands use apparent age or known human age, never a nonhuman lifespan guess.
+
 Version bumped on 18 October 2026 to package the integration and fixes below. 2.0.2 adds unique nickname recall; persisted formats are unchanged. No GitHub release or tag is implied.
 
 ## Comparison checkpoint — 18 October 2026

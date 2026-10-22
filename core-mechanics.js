@@ -3734,6 +3734,12 @@ export function buildNpcPortraitPrompts(rawNpc = {}, options = {}) {
     } else if (format === 'natural') {
         const sentences = [];
         if (identity.length) sentences.push('Subject: ' + identity.join(', ') + '.');
+        const humanScale = Boolean(cleanText(npc.apparentAge, 80)) || /^human$/i.test(species);
+        const ageNumber = /^~?\d{1,3}$/.test(visualAge) ? Number(visualAge.replace('~', '')) : null;
+        if (humanScale && ageNumber !== null) {
+            const ageGroup = ageNumber < 13 ? 'child' : ageNumber < 18 ? 'teenager' : ageNumber < 30 ? 'young adult' : ageNumber < 45 ? 'adult' : ageNumber < 65 ? 'middle-aged adult' : ageNumber < 80 ? 'older adult' : 'very old adult';
+            sentences.push('Visual age group: ' + ageGroup + '.');
+        }
         if (appearanceGroups.core.length) sentences.push('Appearance: ' + appearanceGroups.core.join('; ') + '.');
         if (roleTag) sentences.push('Role: ' + roleTag + '.');
         if (appearanceGroups.clothing.length) sentences.push('Clothing: ' + appearanceGroups.clothing.join('; ') + '.');
