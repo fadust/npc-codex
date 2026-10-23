@@ -226,7 +226,8 @@ export function buildNpcPortraitPrompts(rawNpc = {}, options = {}) {
         || (model.currentForm && String(model.currentForm).trim().toLocaleLowerCase() !== 'base'));
     return mechanics.buildNpcPortraitPrompts({
         ...rawNpc,
-        ...(formSpecific ? { species: '', race: '' } : {}),
+        // A named or unknown form's anatomy is in its appearance; the base species must not be assumed.
+        ...(formSpecific ? { species: '', race: '', portraitSpeciesWithheld: true } : {}),
         appearance: resolveNpcAppearance(rawNpc),
     }, options);
 }

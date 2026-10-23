@@ -1345,7 +1345,7 @@ test('scanner prompt separates chronological/apparent age and requests grounded 
     const prompt = buildScannerPrompt({ transcript: 'Yunyun changes into a formal crimson dress.', existingNpcs: [npc], userName: 'Kazuma', charName: 'Megumin' });
     assert.match(prompt, /age=chronology only/i);
     assert.match(prompt, /apparentAge=visual cue/i);
-    assert.match(prompt, /species literal/i);
+    assert.match(prompt, /species=stated race, else "human"/);
     assert.match(prompt, /DURABLE PROFILE CHANNEL/i);
     assert.match(prompt, /vague time skip insufficient/i);
     assert.match(prompt, /Stable profile context/i);
@@ -1647,7 +1647,8 @@ test('scanner context includes mentioned/recent NPC details but not the whole ro
     assert.match(prompt, /MARRIS_VISUAL/);
     assert.doesNotMatch(prompt, /UNIQUE_VISUAL_1_/);
     // fadust fork: +~500 chars for the knowledge-ledger rule and its JSON example.
-    assert.ok(prompt.length < 11300, `scanner prompt should stay compact, got ${prompt.length} chars`);
+    // +150 for the shared species rule.
+    assert.ok(prompt.length < 11450, `scanner prompt should stay compact, got ${prompt.length} chars`);
 });
 
 test('existing scanner deltas may use dossier id without repeating name or unchanged profile fields', () => {
@@ -1829,7 +1830,8 @@ test('routine scanner prompt has bounded overhead and delta/profile tiers', () =
     const overhead = prompt.length - transcript.length;
     // 1.0.99 adds the user-authorized "if no named forms" qualifier to the Appearance rule.
     // fadust fork: +~460 chars for the knowledge-ledger rule and its JSON example.
-    assert.ok(overhead < 8150, `routine scanner overhead should stay below 8150 chars after the bounded Appearance clarifications and knowledge rule, got ${overhead}`);
+    // +150 for the shared species rule (unstated => human; abilities are tropes, not species).
+    assert.ok(overhead < 8300, `routine scanner overhead should stay below 8300 chars after the bounded Appearance clarifications, knowledge rule and species rule, got ${overhead}`);
     assert.match(prompt, /Return compact JSON deltas/i);
     assert.match(prompt, /Existing relationship delta example/i);
     assert.match(prompt, /Relevant live context \(dynamic fields only\)/i);
@@ -2157,11 +2159,20 @@ test('species/race is a first-class stable field and legacy thoughts are discard
     assert.equal(merged.state.npcs[0].species, 'Dwarf');
 });
 
+test('every species-capturing prompt defaults unstated species to human and treats abilities as tropes, not species', async () => {
+    const mechanics = await import('../core-mechanics.js');
+    const source = (await import('node:fs')).readFileSync(new URL('../core-mechanics.js', import.meta.url), 'utf8');
+    // Main scan, targeted Refresh, dossier import and backfill each carry the one shared rule.
+    assert.equal((source.match(/\$\{SPECIES_RULE\}/g) || []).length, 4);
+    assert.doesNotMatch(source, /species literal|Preserve literal Species/);
+    assert.match(mechanics.buildScannerPrompt({ transcript: 'Mira turns into a wolf under the full moon.' }), /transformation=>named form/);
+});
+
 test('scanner keeps species/race separate from appearance and does not persist Inner Chatter thoughts', () => {
     const prompt = buildScannerPrompt({ transcript: 'Brokk is a dwarf. NPC Inner Chatter: I hope nobody notices.' });
-    assert.match(prompt, /species literal/i);
+    assert.match(prompt, /species=stated race, else "human"/);
     assert.match(prompt, /Never invent\./i);
-    assert.match(prompt, /species literal/i);
+    assert.match(prompt, /powers\/curses\/magic\/transformations are tropes, not species/);
     assert.match(prompt, /species-aging inference/i);
     assert.doesNotMatch(prompt, /\"thoughts\"\s*:/i);
 });

@@ -62,6 +62,10 @@ export function normalizePortraitSeed(value) {
     return Number.isSafeInteger(seed) && seed >= 0 && seed <= PORTRAIT_SEED_MAX ? seed : null;
 }
 
+// Species is the race the card, lorebook or story states. Most fiction leaves human unsaid, so unstated
+// means human; abilities are tropes on top of a species, never a species of their own.
+export const SPECIES_RULE = 'species=stated race, else "human"; powers/curses/magic/transformations are tropes, not species (transformation=>named form).';
+
 export function normalizePortraitPromptFormat(value) {
     const mode = String(value ?? '').trim().toLowerCase();
     return PORTRAIT_PROMPT_FORMATS.includes(mode) ? mode : 'hybrid';
@@ -3634,6 +3638,95 @@ function splitPortraitAppearance(value) {
     };
 }
 
+// BaiBai Image caption rules for semantic encoders: name every sentence, put "Name (source) is
+// [age] [race] [gender] with ..." first, order looks face/hair/skin/body, and keep adulthood visible.
+// Only accepted dossier facts are worded; a missing race, skin tone or face shape is never invented.
+const PORTRAIT_SENTENCE_ORDER = [
+    /\b(?:face|eyes?|brows?|lashes?|nose|lips?|mouth|cheeks?|cheekbones?|jaw|jawline|chin|freckles?|beard|moustache|mustache|stubble)\b/i,
+    /\b(?:hair|braids?|ponytail|bangs|fringe|bun|locks|curls)\b/i,
+    /\b(?:skin|complexion|tan|tanned)\b/i,
+    /\b(?:build|figure|frame|tall|short|slender|slim|lean|muscular|broad|stocky|petite|height|shoulders?|proportions)\b/i,
+];
+const PORTRAIT_DECADES = ['', 'teens', 'twenties', 'thirties', 'forties', 'fifties', 'sixties', 'seventies', 'eighties', 'nineties'];
+
+// The user-defined "Class" dossier field (Settings → custom fields) is a visible archetype: it
+// steers outfit and gear, so image prompts carry it. Other custom fields (Level, etc.) do not.
+function portraitClass(npc) {
+    const fields = normalizeCustomFields(npc?.customFields);
+    const key = Object.keys(fields).find(name => name.toLowerCase() === 'class');
+    return key ? portraitSentenceText(fields[key]) : '';
+}
+
+function portraitSentenceName(npc) {
+    const name = cleanText(npc.name, 120);
+    return name && name !== 'Unnamed NPC' ? name : '';
+}
+
+function portraitSentenceClause(value) {
+    const text = String(value || '').trim().replace(/[.;,]+$/, '');
+    const first = text.match(/^\S+/)?.[0] || '';
+    return /^[A-Z][a-z'’-]*$/.test(first) ? text[0].toLowerCase() + text.slice(1) : text;
+}
+
+function portraitSentenceText(value) {
+    return String(value || '').trim().replace(/[.;,]+$/, '');
+}
+
+function portraitSentenceArticle(word) {
+    return /^[aeiou]/i.test(String(word || '')) ? 'an' : 'a';
+}
+
+function portraitAgeWords(npc, species, gender) {
+    const apparent = cleanText(npc.apparentAge, 80);
+    const visual = apparent || cleanText(npc.age, 80);
+    const humanScale = Boolean(apparent) || /^human$/i.test(species);
+    const match = visual.match(/^~?(\d{1,3})$/);
+    const female = gender === 'female';
+    const male = gender === 'male';
+    if (humanScale && match) {
+        const years = Number(match[1]);
+        if (years > 120) return { lead: '', noun: female ? 'woman' : male ? 'man' : 'person', tail: '', adult: false };
+        if (years < 13) return { lead: '', noun: female ? 'girl' : male ? 'boy' : 'child', tail: '', adult: false };
+        if (years < 18) return { lead: 'teenage', noun: female ? 'girl' : male ? 'boy' : 'person', tail: '', adult: false };
+        const decade = Math.min(9, Math.floor(years / 10));
+        const part = years % 10 <= 3 ? 'early' : years % 10 <= 6 ? 'mid' : 'late';
+        const possessive = female ? 'her' : male ? 'his' : 'their';
+        return { lead: 'adult', noun: female ? 'woman' : male ? 'man' : 'person', tail: ` in ${possessive} ${part} ${PORTRAIT_DECADES[decade]}`, adult: true };
+    }
+    // Words such as "middle-aged" are already a look; a bare chronological age of a long-lived
+    // species is not, so it adds nothing rather than a misleading human age.
+    const lead = apparent && !match ? portraitSentenceClause(apparent) : '';
+    return { lead, noun: female ? 'woman' : male ? 'man' : 'person', tail: '', adult: false };
+}
+
+function buildPortraitIdentitySentence(npc, species, gender, groups, npcClass = '') {
+    const name = portraitSentenceName(npc);
+    const age = portraitAgeWords(npc, species, gender);
+    const race = species ? portraitSentenceClause(species) : '';
+    // Accepted wording stays verbatim (BaiBai copies library text unchanged); only end punctuation goes.
+    const looks = groups.core.map(portraitSentenceText)
+        .map((clause, index) => ({ clause, index, rank: PORTRAIT_SENTENCE_ORDER.findIndex(rule => rule.test(clause)) }))
+        .sort((a, b) => (a.rank < 0 ? 9 : a.rank) - (b.rank < 0 ? 9 : b.rank) || a.index - b.index)
+        .map(item => item.clause);
+    // Anime styles pull faces younger; age words alone do not hold, so adults carry one visible cue.
+    if (age.adult && !looks.some(clause => /\b(?:adult|mature|middle-aged|elderly|stubble|beard|wrinkles?|wrinkled|(?:grey|gray|greying|graying|silvering)\s+(?:hair|beard|temples))\b/i.test(clause))) looks.unshift('adult proportions and a mature face');
+    const clothing = groups.clothing.map(portraitSentenceText);
+    // The assumed "human" alone is not evidence of anything worth drawing.
+    const hasIdentity = Boolean((race && !npc.portraitSpeciesAssumed) || gender || age.lead || age.tail || npcClass);
+    if (!hasIdentity && !looks.length && !clothing.length) return '';
+    // Without a stated gender the class, else the race word, is the noun ("a human Ranger", "an elf").
+    const classIsNoun = !gender && Boolean(npcClass);
+    const noun = classIsNoun ? npcClass : (!gender && age.noun === 'person' && race ? '' : age.noun);
+    const descriptor = [age.lead, race, noun].filter(Boolean).join(' ');
+    const subject = name ? `${name} (original character)` : 'The character';
+    let sentence = descriptor
+        ? `${subject} is ${portraitSentenceArticle(descriptor)} ${descriptor}${age.tail}${npcClass && !classIsNoun ? `, ${portraitSentenceArticle(npcClass)} ${npcClass},` : ''}`
+        : `${subject} is ${portraitSentenceArticle(npcClass)} ${npcClass}`;
+    if (looks.length) sentence += ` with ${looks.join(', ')}`;
+    if (clothing.length) sentence += `${looks.length ? ',' : ''} wearing ${clothing.join(', ')}`;
+    return (sentence + '.').replace(/,\s*,/g, ',').replace(/,\.$/, '.');
+}
+
 function addHairColorsFromContext(context, found) {
     for (const rule of PORTRAIT_HAIR_COLOR_RULES) {
         const matcher = new RegExp(rule.pattern.source, 'ig');
@@ -3712,10 +3805,13 @@ export function buildNpcPortraitPrompts(rawNpc = {}, options = {}) {
     const replaceAutomatic = Boolean(npc.portraitPromptReplace ?? npc.portrait_prompt_replace);
 
     const visualAge = cleanText(npc.apparentAge, 80) || cleanText(npc.age, 80);
-    const species = cleanText(npc.species ?? npc.race, 160);
+    // Image prompts assume human when no race is recorded, except for a form whose species is withheld.
+    const statedSpecies = cleanText(npc.species ?? npc.race, 160);
+    const species = statedSpecies || (npc.portraitSpeciesWithheld ? '' : 'human');
     const gender = normalizeGender(npc.gender ?? npc.sex);
     const role = cleanText(npc.role, 240);
     const appearance = cleanText(npc.appearance, 1800);
+    const npcClass = portraitClass(npc);
     const mood = useMood ? cleanText(npc.mood, 240) : '';
     const location = useLocation ? cleanText(npc.location, 300) : '';
     const appearanceGroups = splitPortraitAppearance(appearance);
@@ -3732,23 +3828,18 @@ export function buildNpcPortraitPrompts(rawNpc = {}, options = {}) {
     if (replaceAutomatic && extraPositive) {
         positive = extraPositive;
     } else if (format === 'natural') {
-        const sentences = [];
-        if (identity.length) sentences.push('Subject: ' + identity.join(', ') + '.');
-        const humanScale = Boolean(cleanText(npc.apparentAge, 80)) || /^human$/i.test(species);
-        const ageNumber = /^~?\d{1,3}$/.test(visualAge) ? Number(visualAge.replace('~', '')) : null;
-        if (humanScale && ageNumber !== null) {
-            const ageGroup = ageNumber < 13 ? 'child' : ageNumber < 18 ? 'teenager' : ageNumber < 30 ? 'young adult' : ageNumber < 45 ? 'adult' : ageNumber < 65 ? 'middle-aged adult' : ageNumber < 80 ? 'older adult' : 'very old adult';
-            sentences.push('Visual age group: ' + ageGroup + '.');
-        }
-        if (appearanceGroups.core.length) sentences.push('Appearance: ' + appearanceGroups.core.join('; ') + '.');
-        if (roleTag) sentences.push('Role: ' + roleTag + '.');
-        if (appearanceGroups.clothing.length) sentences.push('Clothing: ' + appearanceGroups.clothing.join('; ') + '.');
-        if (moodTag) sentences.push('Expression and bearing: ' + moodTag + '.');
-        if (locationTag) sentences.push('Background: ' + locationTag + '.');
-        if (composition) sentences.push('Composition: ' + composition + '.');
-        if (extraPositive) sentences.push('Additional character instructions: ' + extraPositive + '.');
-        if (stylePositive) sentences.push('Visual style: ' + stylePositive + '.');
-        positive = sentences.join(' ');
+        const name = portraitSentenceName(npc);
+        const label = name || 'The character';
+        const sentences = [buildPortraitIdentitySentence({ ...npc, portraitSpeciesAssumed: !statedSpecies }, species, gender, appearanceGroups, npcClass)];
+        if (moodTag) sentences.push(`${name ? name + '’s' : 'The character’s'} expression is ${portraitSentenceClause(moodTag)}.`);
+        if (extraPositive) sentences.push(extraPositive[0].toUpperCase() + extraPositive.slice(1).replace(/[.\s]+$/, '') + '.');
+        const scene = [
+            composition ? `appears alone in ${portraitSentenceClause(composition).replace(/[.\s]+$/, '')}` : '',
+            locationTag ? `at ${portraitSentenceClause(locationTag)}` : '',
+            stylePositive ? `drawn as ${portraitSentenceClause(stylePositive).replace(/[.\s]+$/, '')}` : '',
+        ].filter(Boolean);
+        if (scene.length) sentences.push(`${label} ${scene.join(', ')}.`);
+        positive = sentences.filter(Boolean).join(' ');
     } else {
         const visualAnchors = format === 'tags' ? extractPortraitVisualAnchorTags(appearance) : [];
         const coreAppearance = format === 'tags'
@@ -3756,6 +3847,7 @@ export function buildNpcPortraitPrompts(rawNpc = {}, options = {}) {
             : appearanceGroups.core;
         const subjectParts = uniquePortraitParts([
             ...identity,
+            npcClass,
             ...visualAnchors,
             ...coreAppearance,
             roleTag,
@@ -6494,7 +6586,7 @@ Rules:
 1. Search the ENTIRE supplied history for the requested NPC. Match the requested personal name, an expanded full name, a known alias, or an unmistakable role reference tied to that same individual.
 2. World State and NPC Inner Chatter are valid identity/evidence sections. A proper name established there can link nearby prose that calls the same person only by role, such as receptionist, guard, merchant, or clerk.
 3. If the requested NPC is found, RETURN EXACTLY ONE NPC object. Do not return other NPCs. If the target genuinely does not occur and cannot be linked to a role/alias in this history, return {"npcs":[]}.
-4. Preserve literal Species / Race. GENDER=male|female only if explicitly/unambiguously established; never infer. AGE is chronology only. APPARENT AGE is visual presentation and should be a compact approximate number like ~6 or ~24 when inferable; never prose such as "around six/twenties". Never infer fantasy lifespan from species.
+4. ${SPECIES_RULE} GENDER=male|female only if explicitly/unambiguously established; never infer. AGE is chronology only. APPARENT AGE is visual presentation and should be a compact approximate number like ~6 or ~24 when inferable; never prose such as "around six/twenties". Never infer fantasy lifespan from species.
 5. overallAppearance=enduring body (height/build/hair/eyes/ears/skin/marks) if no named forms; appearance=current outfit/gear/visible condition. A newer explicit correction/reveal beats an obscured prior impression. Apparent Age owns visual age; invent nothing.
 6. Recover CURRENT COMPACT SUMMARIES, not notes. Important Memories are capped at 5. Key relationships=max5, ONE unambiguous entry/counterpart; never use dangling "(deceased)" that could modify the wrong person. Mannerisms=max4 DISTINCT recurring patterns, not separate animations of the same habit. behaviorProfile=max6 "Label: level - effect" levers: how they generally respond/decide (labels only: Disposition, Care/Warmth, Expressiveness, Independence/Agency, Conflict/Assertiveness, Threat Sensitivity, Analytical Style, Social Presentation, Cruelty/Mercy, Loyalty, Drive/Ambition, Honesty/Candor). Actions are evidence; routines, duties, house rules and habits are not levers (habits=>mannerisms). Route player-specific patterns to relationshipSummary, one-off states to live fields, and consequential incidents to Memories. Memories=max5 distinct events; if crowded return memoryRetention=top5 most consequential/durable.
 7. NPC Inner Chatter may support durable personality, goals, attitude, or relationship-summary evidence, but do not store the moment-to-moment internal monologue itself.
@@ -6543,7 +6635,7 @@ Existing NPC Codex record: ${JSON.stringify(existing)}
 
 Mapping/rules:
 1. Inner Circle / family / close allies / rivals / mentors / partners => keyRelationships, max ${KEY_RELATIONSHIP_LIMIT}, one "Name — their role to this NPC | durable dynamic" entry each. Never dangling "(deceased)"; state who is late/surviving. Never put ${userName} there; player stance belongs relationshipSummary.
-2. Voice=>speech; Personality=>personality; Appearance=>overallAppearance (enduring body)+appearance (outfit); named forms=>each form complete; Background=>background; Role=>role; explicit chronological Age=>age. Explicit/unambiguous Gender/Sex=>gender=male|female; never infer. Apparent Age should be compact ~N when inferable; Appearance must not duplicate an explicit age. behaviorProfile=max6 "Label: level - effect" levers: how they generally respond/decide (labels only: Disposition, Care/Warmth, Expressiveness, Independence/Agency, Conflict/Assertiveness, Threat Sensitivity, Analytical Style, Social Presentation, Cruelty/Mercy, Loyalty, Drive/Ambition, Honesty/Candor). Actions are evidence; routines, duties, house rules and habits are not levers (habits=>mannerisms). Player-specific/one-scene behavior does not belong there. Do not infer species/age from stereotypes.
+2. Voice=>speech; Personality=>personality; Appearance=>overallAppearance (enduring body)+appearance (outfit); named forms=>each form complete; Background=>background; Role=>role; explicit chronological Age=>age. Explicit/unambiguous Gender/Sex=>gender=male|female; never infer. Apparent Age should be compact ~N when inferable; Appearance must not duplicate an explicit age. behaviorProfile=max6 "Label: level - effect" levers: how they generally respond/decide (labels only: Disposition, Care/Warmth, Expressiveness, Independence/Agency, Conflict/Assertiveness, Threat Sensitivity, Analytical Style, Social Presentation, Cruelty/Mercy, Loyalty, Drive/Ambition, Honesty/Candor). Actions are evidence; routines, duties, house rules and habits are not levers (habits=>mannerisms). Player-specific/one-scene behavior does not belong there. ${SPECIES_RULE} Do not infer age from stereotypes.
 3. Read on the PC/current stance toward ${userName} may initialize relationshipSummary, but relationshipImpact="none" and every relationshipDelta key MUST be 0. Never invent numeric Trust/Affection/Desire/Tension from prose.
 4. Agenda may initialize goal only when the dossier presents it as the NPC's current ongoing agenda. "Where to Find Them", home, workplace, headquarters, or regular haunt => homeBase, NOT current Location. Changing an established homeBase requires homeBaseState:"update"+homeBaseReason. Do not map home/work/hangout into live location unless the dossier explicitly says they are there now. Do not invent Mood/Status/current presence.
 5. A durable Tell may become a mannerism. One-scene/emotional/stress/player-specific behavior does not. Merge multiple animations of one recurring pattern into one mannerism. Important memories only from explicit consequential past events, max3 new in npcs[] (existing NPCs too), added to stored ones. ${KNOWLEDGE_SCANNER_RULE}
@@ -6645,7 +6737,7 @@ Rules:
 6. IDENTITY FIREWALL: temporary mood, fear, stress, intoxication, intimacy, or behavior unique to ${userName} must not become global Personality, Speech, Mannerisms, or behaviorProfile. A generally kind NPC remains generally kind toward other people unless narration establishes a broader change. Necessary force is not cruelty by itself.
 7. DEVELOPMENT SPEED: assistant/main-speaker=gradual; Player explicit/batch only for declarative canon, not quotes/questions/speculation/requests/conditionals/wishes. [mN]=source. One scene may support multiple fields; emit each grounded item independently (speech+behaviorProfile allowed). Gradual Personality/Speech: up to 4 tagged observations; reuse a concept label when obvious, wording may vary. Speech evidence/candidate=voice behavior, not personality; evidence names the style (quote optional), never a bare quote. If evidence makes Personality/Speech stale, return changed FULL CURRENT candidate; never claim refine/evolve with a copied field. Reinforcement=>omit/keep. Time-compressed development MUST include developmentReason, even when state is refine. Mere passage of time does nothing.
 8. ROLE/SPECIES/GENDER/BACKGROUND may update when established/clarified. Gender=male|female only if explicit/unambiguous; never infer; established change=>genderState:"correct"+genderReason. HOME BASE / USUAL LOCATION is durable home, workplace, headquarters, or regular haunt, never the temporary current scene location; establish only from grounded ongoing-life evidence, and changing an established value requires homeBaseState:"update"+homeBaseReason. Species is literal only. Background is durable history, not current mood/status.
-9. AGE=chronology only. Birthday/exact elapsed years=>advance+reason; correction=>correct+reason. apparentAge=visual and should be compact ~N, not prose; visual aging/growth/rejuvenation=>evolve+reason. No species-lifespan inference.
+9. AGE=chronology only. Birthday/exact elapsed years=>advance+reason; correction=>correct+reason. apparentAge=visual and should be compact ~N, not prose; visual aging/growth/rejuvenation=>evolve+reason. No species-lifespan inference. ${SPECIES_RULE}
 10. KEY RELATIONSHIPS: one "Name — their role to this NPC | durable dynamic" entry/non-player counterpart; edges aToB=b's role to a; use "late husband"/"surviving widow" rather than dangling "(deceased)". update/keyRelationshipEdges for discovery; evolve+reason for lasting social change. Omission NEVER erases unrelated ties. Never put ${userName} there.
 11. RELATIONSHIP SUMMARY toward ${userName}: replace only when clearly stale/incomplete; keep intensity proportional to evidence/currentRelationship and avoid absolute devotion/dependence language unless truly established. This prose reconciliation does NOT change numeric stats.
 12. LIVE FIELDS Mood/Goal/Status/Location: use the latest reliable evidence in the window. Replace when changed. Use matching *State:"clear" only when the old state/place/goal is explicitly ended or obsolete and no replacement is known. Absence alone never clears Location.
@@ -6813,7 +6905,7 @@ Rules:
 8. IDENTITY FIREWALL: mood/stress/intimacy/injury/relationship-specific behavior never becomes global Personality/Speech/Mannerisms/behaviorProfile. Grounded Appearance exempt; fleeting pose/expression is not identity. Kindness stays general unless broader change; necessary force != cruelty. Scores don't create tropes.
 9. DEVELOPMENT SPEED: developmentScale=gradual|explicit|batch. assistant/main-speaker=gradual; Player explicit/batch only for declarative canon, not quotes/questions/speculation/requests/conditionals/wishes. Speech evidence/candidate=voice style, not bare quote/personality. Time-compressed refine/evolve/change MUST include developmentReason + changed FULL candidate; unchanged/reinforcing=>omit/keep. Time skip alone invents nothing.
 10. SOCIAL: grounded non-player kin/friend/rival/mentor/partner => ALWAYS top-level keyRelationshipEdges {aId,a,bId,b,aToB=b's role to a,bToA,reason}; one entry/counterpart. Use late/surviving, never dangling "(deceased)". Social change may evolve+reason; omission NEVER erases other bonds.
-11. Age/ApparentAge separate: age=chronology only; apparentAge=visual cue, compact ~N, never prose; species literal; no species-aging inference. gender=male|female only if explicit/unambiguous; never guess; change=>genderState:"correct"+reason. Birthday/exact elapsed=>ageState:"advance"+reason; correction=>ageState:"correct"+reason; visual aging/growth/rejuvenation=>apparentAgeState:"evolve"+reason. Appearance must not repeat explicit age. Vague time skip insufficient.
+11. Age/ApparentAge separate: age=chronology only; apparentAge=visual cue, compact ~N, never prose; ${SPECIES_RULE} No species-aging inference. gender=male|female only if explicit/unambiguous; never guess; change=>genderState:"correct"+reason. Birthday/exact elapsed=>ageState:"advance"+reason; correction=>ageState:"correct"+reason; visual aging/growth/rejuvenation=>apparentAgeState:"evolve"+reason. Appearance must not repeat explicit age. Vague time skip insufficient.
 12. RELATIONSHIP -100..+100 DELTA-ONLY; currentRelationship read-only. Return relationshipDelta+relationshipEvidence (all 4 keys). NEW only; continuation/aftermath=>0. Raw max 1/2/5/10; axis max 1/2/3/4. EVERY non-zero axis needs grounded CURRENT-exchange evidence. Desire needs explicit attraction/intimacy narration; rescue/gratitude/affection/trust/proximity=>0. Trust!=obedience; Affection!=devotion; Tension!=jealousy.
 13. lifeState unknown|alive|deceased; deceased+explicit=death; explicit alive=reactivate.
 14. Memories: max3 NEW in npcs[] (existing NPCs too), added to cap5 stored; no duplicate/paraphrased memories. If crowded use memoryRetention=top5 consequential/durable; recency=tiebreak only. homeBase=durable home/workplace/HQ/haunt, never current scene location; keep-by-default; change needs homeBaseState:"update"+homeBaseReason. CAPS homeBase300/appearance500/personality280/speech240/behaviorProfile180/background320/relationshipSummary280/mannerism140/keyRelationship-memory180. COMPACT; never invent.

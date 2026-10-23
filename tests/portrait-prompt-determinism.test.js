@@ -8,14 +8,23 @@ function indexOfOrFail(text, fragment) {
     return index;
 }
 
-test('semantic portraits retain accepted visual identity and age group without inventing missing traits', () => {
+test('semantic portraits use the BaiBai identity sentence without inventing missing traits', () => {
     const options = { format: 'natural', stylePositive: '', styleNegative: '', composition: '', useMood: false };
-    const prompt = buildNpcPortraitPrompts({ species: 'Human', gender: 'male', age: '80', apparentAge: '35',
+    const prompt = buildNpcPortraitPrompts({ name: 'Toma', species: 'Human', gender: 'male', age: '80', apparentAge: '35',
         appearance: 'deep brown skin; an angular face with a scar across the nose; short curly black hair; green eyes' }, options).positive;
-    for (const trait of ['Human', 'male', 'apparent age 35', 'Visual age group: adult', 'deep brown skin', 'angular face', 'scar across the nose', 'short curly black hair', 'green eyes']) assert.ok(prompt.includes(trait), trait);
-    assert.doesNotMatch(prompt, /age 80/);
+    assert.ok(prompt.startsWith('Toma (original character) is an adult human man in his mid thirties with '), prompt);
+    // Looks follow face, hair, skin, body order; one visible adult cue is added because age words alone do not hold.
+    for (const [a, b] of [['angular face', 'short curly black hair'], ['short curly black hair', 'deep brown skin']]) assert.ok(prompt.indexOf(a) < prompt.indexOf(b), `${a} before ${b}`);
+    assert.match(prompt, /adult proportions and a mature face/);
+    assert.doesNotMatch(prompt, /\b80\b|eighties/);
     assert.equal(buildNpcPortraitPrompts({}, options).positive, '');
-    assert.doesNotMatch(buildNpcPortraitPrompts({ species: 'Elf', age: '300', appearance: 'silver hair' }, options).positive, /Visual age group:/);
+    // A long-lived species with only a chronological age gets no human age words, and no race is invented.
+    assert.equal(buildNpcPortraitPrompts({ name: 'Elowen', species: 'Elf', age: '300', appearance: 'silver hair' }, options).positive,
+        'Elowen (original character) is an elf with silver hair.');
+    assert.equal(buildNpcPortraitPrompts({ name: 'Mara', gender: 'female', appearance: 'red hair' }, options).positive,
+        'Mara (original character) is a human woman with red hair.');
+    assert.doesNotMatch(buildNpcPortraitPrompts({ name: 'Bram', species: 'Human', gender: 'male', apparentAge: '~40', appearance: 'grey beard' }, options).positive, /mature face/);
+    assert.match(buildNpcPortraitPrompts({ name: 'Pip', gender: 'male', apparentAge: '15', appearance: 'brown hair' }, options).positive, /^Pip \(original character\) is a teenage human boy with brown hair\.$/);
 });
 
 test('portrait prompt assembly is deterministic, subject-first, label-free in tag formats, and style-last', () => {
@@ -175,21 +184,49 @@ test('comma tags retain unparsed appearance fragments instead of dropping them w
     assert.doesNotMatch(prompts.positive, /long black hair, freckles/i);
 });
 
-test('natural portrait format keeps subject evidence ahead of style while retaining readable labels', () => {
+test('image prompts assume human when no race is recorded, but never for a withheld form species', () => {
+    const options = { stylePositive: '', styleNegative: '', composition: '', useMood: false, format: 'natural' };
+    assert.equal(buildNpcPortraitPrompts({ name: 'Old', age: '300', appearance: 'silver hair' }, options).positive, 'Old (original character) is a human with silver hair.');
+    assert.equal(buildNpcPortraitPrompts({ name: 'Rook', gender: 'male', apparentAge: '~45', appearance: 'grey beard' }, options).positive, 'Rook (original character) is an adult human man in his mid forties with grey beard.');
+    assert.match(buildNpcPortraitPrompts({ gender: 'female', appearance: 'red hair' }, { ...options, format: 'tags' }).positive, /^human, female, /);
+    const dragon = buildNpcPortraitPrompts({ name: 'Ari', species: 'Dragon', gender: 'female', currentForm: 'Dragon',
+        appearanceForms: [{ name: 'Dragon', appearance: 'silver scales and huge wings' }] }, options).positive;
+    assert.equal(dragon, 'Ari (original character) is a woman with silver scales and huge wings.');
+});
+
+test('image prompts carry the Class custom field verbatim and no other custom field', () => {
+    const options = { stylePositive: '', styleNegative: '', composition: '', useMood: false };
+    const npc = { name: 'Sigrid', species: 'Human', gender: 'female', apparentAge: '~32', customFields: { Class: 'Arcane Archer', Level: '12' }, appearance: 'grey eyes' };
+    const natural = buildNpcPortraitPrompts(npc, { ...options, format: 'natural' }).positive;
+    assert.equal(natural, 'Sigrid (original character) is an adult human woman in her early thirties, an Arcane Archer, with adult proportions and a mature face, grey eyes.');
+    assert.equal(buildNpcPortraitPrompts({ name: 'Vex', customFields: { class: 'Ranger' } }, { ...options, format: 'natural' }).positive, 'Vex (original character) is a human Ranger.');
+    assert.equal(buildNpcPortraitPrompts({ name: 'Vex', customFields: { class: 'Ranger' }, appearance: 'Wears a green cloak.' }, { ...options, format: 'natural' }).positive, 'Vex (original character) is a human Ranger wearing green cloak.');
+    for (const format of ['hybrid', 'tags']) {
+        const prompt = buildNpcPortraitPrompts(npc, { ...options, format }).positive;
+        assert.match(prompt, /Arcane Archer/);
+        assert.ok(prompt.indexOf('Arcane Archer') < prompt.indexOf('grey eyes'), format);
+        assert.doesNotMatch(prompt, /\b12\b|Level/);
+    }
+});
+
+test('natural portrait format names the character in every sentence and ends with framing, place and style', () => {
     const prompts = buildNpcPortraitPrompts({
+        name: 'Kael',
         species: 'Half-elf',
         apparentAge: '24',
         role: 'Knight',
+        mood: 'wary',
+        location: 'the north gate',
         appearance: 'long black hair; gray eyes. Wears a dark leather coat.',
+        portraitPromptPositive: 'holding a lantern',
     }, {
         stylePositive: 'STYLE_SENTINEL',
         styleNegative: '',
         composition: 'waist-up portrait',
         format: 'natural',
+        useLocation: true,
     });
-
-    assert.ok(indexOfOrFail(prompts.positive, 'Subject:') < indexOfOrFail(prompts.positive, 'Appearance:'));
-    assert.ok(indexOfOrFail(prompts.positive, 'Appearance:') < indexOfOrFail(prompts.positive, 'Role:'));
-    assert.ok(indexOfOrFail(prompts.positive, 'Role:') < indexOfOrFail(prompts.positive, 'Clothing:'));
-    assert.ok(indexOfOrFail(prompts.positive, 'Composition:') < indexOfOrFail(prompts.positive, 'Visual style: STYLE_SENTINEL'));
+    assert.equal(prompts.positive, 'Kael (original character) is an adult half-elf in their mid twenties with adult proportions and a mature face, gray eyes, long black hair, wearing dark leather coat. '
+        + 'Kael’s expression is wary. Holding a lantern. Kael appears alone in waist-up portrait, at the north gate, drawn as STYLE_SENTINEL.');
+    assert.doesNotMatch(prompts.positive, /Knight|Subject:|Role:/, 'role is not visible and labels are not captions');
 });

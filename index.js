@@ -5660,6 +5660,25 @@ function portraitPromptOptions() {
     };
 }
 
+// Slot framing replaces the general composition: a caption for sentence prompts, tags for tag prompts.
+const PORTRAIT_SLOT_COMPOSITION = Object.freeze({
+    fullBody: {
+        natural: 'a full-length view from the top of the head to the soles of the feet, with the entire figure in frame and space above the head and below the feet',
+        hybrid: 'Show one character in a full-length view from the top of the head to the soles of the feet. Keep the entire figure inside the frame, with space above the head and below the feet. Do not crop the head, limbs, or feet',
+        tags: 'solo, full body, standing, head to toe, feet visible, uncropped',
+    },
+    face: {
+        natural: 'a close-up portrait framed from the top of the head to the shoulders, with the whole head and hairstyle in frame and the facial features clearly visible',
+        hybrid: 'Show one character in a close-up face portrait framed from the top of the head to the shoulders. Keep the entire head and hairstyle inside the frame. Make the facial features clearly visible; do not include the waist or legs',
+        tags: 'solo, portrait, close-up, head and shoulders, face focus',
+    },
+});
+
+function portraitSlotComposition(slot, format) {
+    const framing = PORTRAIT_SLOT_COMPOSITION[slot === 'fullBody' ? 'fullBody' : 'face'];
+    return framing[format] || framing.hybrid;
+}
+
 function npcImagePromptPair(npc) {
     return buildNpcPortraitPrompts(npc || {}, portraitPromptOptions());
 }
@@ -7541,9 +7560,8 @@ window.NPCCodex = Object.freeze({
         const npc = findNpcByIdOrName(value);
         if (!npc) return null;
         const formName = form ? npcFormName(npc, form) : '';
-        return buildNpcPortraitPrompts(formName ? { ...npc, currentForm: formName, currentFormUnknown: false } : npc, { ...portraitPromptOptions(), composition: slot === 'fullBody'
-            ? 'Show one character in a full-length view from the top of the head to the soles of the feet. Keep the entire figure inside the frame, with space above the head and below the feet. Do not crop the head, limbs, or feet'
-            : 'Show one character in a close-up face portrait framed from the top of the head to the shoulders. Keep the entire head and hairstyle inside the frame. Make the facial features clearly visible; do not include the waist or legs' });
+        const options = portraitPromptOptions();
+        return buildNpcPortraitPrompts(formName ? { ...npc, currentForm: formName, currentFormUnknown: false } : npc, { ...options, composition: portraitSlotComposition(slot, options.format) });
     },
     formPortraits: value => {
         const npc = findNpcByIdOrName(value);
