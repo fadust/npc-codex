@@ -78,7 +78,7 @@ export function codexLayoutStyles(rootId) {
 ${r} .delta-stage { display:grid; grid-template-rows:auto minmax(0,1fr); min-height:0; }
 ${r} .delta-spread { grid-template-columns:minmax(0,1fr) !important; min-height:0; }
 ${r} .delta-hero, ${r} .delta-document-head, ${r} .delta-stat-head { display:none !important; }
-${r} .codex-head { position:relative; z-index:2; background:var(--delta-bg, #1d2128); display:grid; grid-template-columns:auto minmax(0,1fr) minmax(180px,30%); grid-template-areas:"pic ident quote" "pic ident actions" "tabs tabs tabs"; gap:6px 18px; padding:14px 18px 0; border-bottom:1px solid var(--delta-line, rgba(91,201,189,.16)); }
+${r} .codex-head { position:relative; z-index:4; background:var(--delta-bg, #1d2128); display:grid; grid-template-columns:auto minmax(0,1fr) minmax(180px,30%); grid-template-areas:"pic ident quote" "pic ident actions" "tabs tabs tabs"; gap:6px 18px; padding:14px 18px 0; border-bottom:1px solid var(--delta-line, rgba(91,201,189,.16)); }
 ${r} .codex-portrait { position:static; inset:auto; grid-area:pic; width:118px; height:118px; padding:0; border:1px solid var(--delta-line, rgba(91,201,189,.22)); border-radius:10px; overflow:hidden; background:rgba(0,0,0,.3); cursor:zoom-in; }
 ${r} .codex-portrait[aria-hidden] { cursor:default; }
 ${r} .codex-portrait img { width:100%; height:100%; object-fit:cover; object-position:center 18%; display:block; }
